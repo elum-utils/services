@@ -1,0 +1,32 @@
+package user
+
+import (
+	"context"
+	"time"
+)
+
+type NextParams struct {
+	Identity    Identity
+	CalendarRef string
+	Locale      string
+	Now         time.Time
+}
+
+func (u *User) Next(ctx context.Context, params NextParams) (RecordResult, error) {
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	value, err := u.repository.Next(
+		mergedCtx, repositoryIdentity(params.Identity), params.CalendarRef, params.Locale, params.Now,
+	)
+	if err != nil {
+		return RecordResult{}, err
+	}
+	result := mapRecord(value)
+	if result.Calendar.HideFutureRewards && !result.Granted {
+		result.Rewards = nil
+		for index := range result.Calendar.Steps {
+			result.Calendar.Steps[index].Rewards = nil
+		}
+	}
+	return result, nil
+}

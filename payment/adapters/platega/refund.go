@@ -1,0 +1,34 @@
+package platega
+
+import (
+	"context"
+	"errors"
+)
+
+var ErrRefundUnsupported = errors.New("platega: refund API is not configured")
+
+type RefundParams struct {
+	Executor       RefundExecutor
+	TransactionID  string
+	AmountMinor    uint64
+	AssetCode      string
+	Reason         string
+	IdempotencyKey string
+}
+
+type RefundResult struct {
+	ProviderRefundID string `json:"provider_refund_id,omitempty"`
+	Status           string `json:"status"`
+}
+
+type RefundExecutor func(context.Context, RefundParams) (RefundResult, error)
+
+func (a *Platega) Execute(ctx context.Context, params RefundParams) (RefundResult, error) {
+	mergedCtx, paymentRequestCancel := a.withContext(ctx)
+	defer paymentRequestCancel()
+	ctx = mergedCtx
+	if params.Executor != nil {
+		return params.Executor(ctx, params)
+	}
+	return RefundResult{}, ErrRefundUnsupported
+}

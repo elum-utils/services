@@ -1,0 +1,71 @@
+package user
+
+import (
+	"context"
+	"time"
+)
+
+func (u *User) ListActive(ctx context.Context, workspaceID, locale string, now time.Time) ([]ActiveCalendarModel, error) {
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	values, err := u.repository.ListActive(mergedCtx, workspaceID, locale, now)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ActiveCalendarModel, 0, len(values))
+	for _, value := range values {
+		item := ActiveCalendarModel{
+			ID: value.ID, Type: value.Type, Mode: value.Mode, IsActive: value.IsActive,
+			StartAt: value.StartAt, EndAt: value.EndAt,
+		}
+		if value.Localization != nil {
+			item.Title = value.Localization.Title
+			item.Description = value.Localization.Description
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func (u *User) GetCalendar(ctx context.Context, identity Identity, ref, locale string) (CalendarModel, error) {
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	value, err := u.repository.GetCalendar(mergedCtx, identity.WorkspaceID, ref, locale)
+	if err != nil {
+		return CalendarModel{}, err
+	}
+	result := mapCalendar(value)
+	if !value.HideFutureRewards || value.ID == "" {
+		return result, nil
+	}
+	progress, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(identity), value.ID)
+	if err != nil {
+		return CalendarModel{}, err
+	}
+	maxPosition := uint32(1)
+	if progress != nil {
+		maxPosition = progress.CurrentPosition + 1
+	}
+	filtered := result.Steps[:0]
+	for _, step := range result.Steps {
+		if step.Position <= maxPosition {
+			filtered = append(filtered, step)
+		}
+	}
+	result.Steps = filtered
+	return result, nil
+}
+
+func (u *User) GetProgress(ctx context.Context, identity Identity, calendarID string) (*ProgressModel, error) {
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	value, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(identity), calendarID)
+	if err != nil || value == nil {
+		return nil, err
+	}
+	result := mapProgress(*value)
+	return &result, nil
+}

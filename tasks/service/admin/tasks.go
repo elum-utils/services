@@ -1,0 +1,130 @@
+package admin
+
+import (
+	"context"
+	"errors"
+
+	"github.com/elum-utils/services/tasks/repository"
+)
+
+func (a *Admin) UpsertGroup(ctx context.Context, workspaceID, key string, position int32, active bool) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.UpsertGroup(mergedCtx, workspaceID, key, position, active)
+}
+
+func (a *Admin) UpsertGroupLocalization(ctx context.Context, workspaceID, key, locale, title, description string) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.UpsertGroupLocalization(mergedCtx, workspaceID, key, locale, title, description)
+}
+
+func (a *Admin) UpsertSequence(ctx context.Context, workspaceID, key string, position int32, active bool) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.UpsertSequence(mergedCtx, workspaceID, key, position, active)
+}
+
+func (a *Admin) SaveTask(ctx context.Context, params SaveTaskParams) (uint64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.SaveTask(mergedCtx, repository.SaveTaskParams(params))
+}
+
+func (a *Admin) DeleteTask(ctx context.Context, workspaceID string, id uint64) (int64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.DeleteTask(mergedCtx, workspaceID, id)
+}
+
+func (a *Admin) GetTask(ctx context.Context, workspaceID string, id uint64) (TaskModel, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	task, err := a.repository.GetTask(mergedCtx, workspaceID, id)
+	if err != nil {
+		return TaskModel{}, err
+	}
+	return mapTask(task), nil
+}
+
+func (a *Admin) ListTasks(ctx context.Context, workspaceID, groupKey string, limit, offset int32) ([]TaskModel, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	tasks, err := a.repository.ListTasks(mergedCtx, workspaceID, groupKey, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]TaskModel, 0, len(tasks))
+	for _, task := range tasks {
+		result = append(result, mapTask(task))
+	}
+	return result, nil
+}
+
+func (a *Admin) UpsertTaskLocalization(ctx context.Context, workspaceID string, taskID uint64, locale, title, description string) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.UpsertTaskLocalization(mergedCtx, workspaceID, taskID, locale, title, description)
+}
+
+func (a *Admin) UpsertReward(ctx context.Context, workspaceID string, taskID uint64, reward RewardModel, position int32) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	rewardType, err := validateReward(reward)
+	if err != nil {
+		return err
+	}
+	return a.repository.UpsertReward(mergedCtx, workspaceID, taskID, repository.Reward{
+		Key: reward.Key, Type: rewardType, Quantity: reward.Quantity, Unit: reward.Unit,
+	}, position)
+}
+
+func validateReward(reward RewardModel) (string, error) {
+	if reward.Key == "" || reward.Quantity <= 0 {
+		return "", errors.New("tasks admin: reward key and positive quantity are required")
+	}
+	rewardType := reward.Type
+	if rewardType == "" {
+		rewardType = "quantity"
+	}
+	switch rewardType {
+	case "quantity":
+		if reward.Unit != nil {
+			return "", errors.New("tasks admin: quantity reward must not have duration unit")
+		}
+	case "duration":
+		if reward.Unit == nil || !validDurationUnit(*reward.Unit) {
+			return "", errors.New("tasks admin: duration reward requires a valid duration unit")
+		}
+	default:
+		return "", errors.New("tasks admin: reward type must be quantity or duration")
+	}
+	return rewardType, nil
+}
+
+func validDurationUnit(unit string) bool {
+	switch unit {
+	case "second", "minute", "hour", "day", "week", "month", "year":
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *Admin) DeleteReward(ctx context.Context, workspaceID string, taskID uint64, key string) (int64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.DeleteReward(mergedCtx, workspaceID, taskID, key)
+}
+
+func mapTask(task repository.Task) TaskModel {
+	return TaskModel{
+		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey,
+		SequenceKey: task.SequenceKey, SequencePosition: task.SequencePosition,
+		ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
+		TargetCount: task.TargetCount, ResetUnit: task.ResetUnit, ResetEvery: task.ResetEvery,
+		Position: task.Position, Payload: task.Payload, ImageURL: task.ImageURL,
+		IsVisible: task.IsVisible, IsActive: task.IsActive, StartAt: task.StartAt,
+		EndAt: task.EndAt, DeletedAt: task.DeletedAt,
+	}
+}

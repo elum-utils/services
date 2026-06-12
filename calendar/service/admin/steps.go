@@ -1,0 +1,39 @@
+package admin
+
+import (
+	"context"
+	"errors"
+)
+
+type SaveStepParams struct {
+	WorkspaceID string
+	CalendarID  string
+	ID          uint64
+	Position    uint32
+}
+
+func (a *Admin) CreateStep(ctx context.Context, params SaveStepParams) (uint64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	if params.WorkspaceID == "" || params.CalendarID == "" || params.Position == 0 {
+		return 0, errors.New("calendar admin: step scope and positive position are required")
+	}
+	return a.repository.CreateStep(mergedCtx, params.WorkspaceID, params.CalendarID, params.Position)
+}
+
+func (a *Admin) UpdateStep(ctx context.Context, params SaveStepParams) (int64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	if params.ID == 0 || params.Position == 0 {
+		return 0, errors.New("calendar admin: step id and positive position are required")
+	}
+	return a.repository.UpdateStep(
+		mergedCtx, params.WorkspaceID, params.CalendarID, params.ID, params.Position,
+	)
+}
+
+func (a *Admin) DeleteStep(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.DeleteStep(mergedCtx, workspaceID, calendarID, id)
+}
