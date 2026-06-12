@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	promosqlc "github.com/elum-utils/services/promo/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	promosqlc "github.com/elum-utils/services/promo/sqlc"
 )
 
 type SavePromoParams struct {

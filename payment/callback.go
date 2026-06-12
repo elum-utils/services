@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
@@ -66,6 +67,12 @@ type Context struct {
 type CallbackHandler func(Context) error
 type CallbackOption = callbackutil.Option
 
+type callbackRegistration struct {
+	ctx     context.Context
+	handler CallbackHandler
+	options []CallbackOption
+}
+
 var ErrCallbackAlreadyMarked = callbackutil.ErrAlreadyMarked
 
 func WithCallbackWorkerID(workerID string) CallbackOption {
@@ -85,17 +92,34 @@ func WithCallbackIdleDelay(delay time.Duration) CallbackOption {
 }
 
 func (a *Payment) OnCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
+	if handler == nil {
+		return errors.New("payment: callback handler is nil")
+	}
+	if a == nil {
+		return errors.New("payment: nil service")
+	}
+	a.lifecycleMu.Lock()
+	if a.running {
+		a.lifecycleMu.Unlock()
+		return errors.New("payment: callbacks must be registered before Run")
+	}
+	if a.callbacks != nil {
+		a.lifecycleMu.Unlock()
+		return a.runCallback(ctx, handler, opts...)
+	}
+	a.callbacksToRun = append(a.callbacksToRun, callbackRegistration{
+		ctx: ctx, handler: handler, options: append([]CallbackOption(nil), opts...),
+	})
+	a.lifecycleMu.Unlock()
+	return nil
+}
+
+func (a *Payment) runCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if a == nil || a.callbacks == nil {
 		return callbackutil.ErrStoreNotConfigured
 	}
-	if handler == nil {
-		return a.callbacks.On(ctx, nil, opts...)
-	}
 	runCtx, cancel := a.bindContext(ctx)
 	defer cancel()
-
-	a.background.Add(1)
-	defer a.background.Done()
 
 	opts = append(opts, callbackutil.WithSourceService("payment"))
 	return a.callbacks.On(runCtx, func(callbackCtx callbackutil.Context) error {

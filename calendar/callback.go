@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
@@ -35,6 +36,11 @@ type Context struct {
 
 type CallbackHandler func(Context) error
 type CallbackOption = callbackutil.Option
+type callbackRegistration struct {
+	ctx     context.Context
+	handler CallbackHandler
+	options []CallbackOption
+}
 
 func WithCallbackWorkerID(value string) CallbackOption { return callbackutil.WithWorkerID(value) }
 func WithCallbackBatchSize(value int32) CallbackOption { return callbackutil.WithBatchSize(value) }
@@ -46,16 +52,34 @@ func WithCallbackIdleDelay(value time.Duration) CallbackOption {
 }
 
 func (c *Calendar) OnCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
+	if handler == nil {
+		return errors.New("calendar: callback handler is nil")
+	}
+	if c == nil {
+		return errors.New("calendar: nil service")
+	}
+	c.lifecycleMu.Lock()
+	if c.running {
+		c.lifecycleMu.Unlock()
+		return errors.New("calendar: callbacks must be registered before Run")
+	}
+	if c.callbacks != nil {
+		c.lifecycleMu.Unlock()
+		return c.runCallback(ctx, handler, opts...)
+	}
+	c.callbacksToRun = append(c.callbacksToRun, callbackRegistration{
+		ctx: ctx, handler: handler, options: append([]CallbackOption(nil), opts...),
+	})
+	c.lifecycleMu.Unlock()
+	return nil
+}
+
+func (c *Calendar) runCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if c == nil || c.callbacks == nil {
 		return callbackutil.ErrStoreNotConfigured
 	}
-	if handler == nil {
-		return c.callbacks.On(ctx, nil, opts...)
-	}
 	runCtx, cancel := c.bindContext(ctx)
 	defer cancel()
-	c.background.Add(1)
-	defer c.background.Done()
 	opts = append(opts, callbackutil.WithSourceService("calendar"))
 	return c.callbacks.On(runCtx, func(callbackCtx callbackutil.Context) error {
 		var payload RewardGrantedPayload

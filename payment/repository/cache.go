@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
 const paymentGlobalCacheScope = "*"

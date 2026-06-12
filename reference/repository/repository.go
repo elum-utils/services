@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	refsqlc "github.com/elum-utils/services/reference/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	refsqlc "github.com/elum-utils/services/reference/sqlc"
 )
 
 var (

@@ -27,16 +27,18 @@ type CPA struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	background sync.WaitGroup
+
+	lifecycleMu    sync.Mutex
+	params         DatabaseParams
+	callbacksToRun []callbackRegistration
+	running        bool
 }
 
-func New(ctx context.Context, db *sql.DB) (*CPA, error) {
-	return NewWithOptions(ctx, db, Options{
-		CacheL1Delay: defaultCacheDelay,
-		CacheL2Delay: defaultCacheDelay,
-	})
+func New(params DatabaseParams) *CPA {
+	return &CPA{params: params}
 }
 
-func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*CPA, error) {
+func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*CPA, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, err
@@ -44,7 +46,51 @@ func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*CPA, err
 	return newCPA(ctx, client, false, options), nil
 }
 
-func Open(ctx context.Context, params DatabaseParams) (*CPA, error) {
+func (c *CPA) Run(ctx context.Context) error {
+	if c == nil {
+		return errors.New("cpa: nil service")
+	}
+	c.lifecycleMu.Lock()
+	if c.running {
+		c.lifecycleMu.Unlock()
+		return errors.New("cpa: service is already running")
+	}
+	c.running = true
+	params := c.params
+	registrations := append([]callbackRegistration(nil), c.callbacksToRun...)
+	c.lifecycleMu.Unlock()
+
+	running, err := open(ctx, params)
+	if err != nil {
+		c.lifecycleMu.Lock()
+		c.running = false
+		c.lifecycleMu.Unlock()
+		return err
+	}
+	c.adopt(running)
+	defer c.Close()
+
+	errCh := make(chan error, len(registrations))
+	c.background.Add(len(registrations))
+	for _, registration := range registrations {
+		registration := registration
+		go func() {
+			defer c.background.Done()
+			errCh <- c.runCallback(registration.ctx, registration.handler, registration.options...)
+		}()
+	}
+	select {
+	case <-c.rootCtx.Done():
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, context.Canceled) && c.rootCtx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+}
+
+func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 	if params.User == "" {
 		return nil, errors.New("cpa: database user is required")
 	}
@@ -78,6 +124,12 @@ func Open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 		return nil, err
 	}
 	return newCPA(ctx, client, true, params.Options), nil
+}
+
+func (c *CPA) adopt(running *CPA) {
+	c.Admin, c.User = running.Admin, running.User
+	c.callbacks, c.client, c.ownsClient = running.callbacks, running.client, running.ownsClient
+	c.rootCtx, c.rootCancel = running.rootCtx, running.rootCancel
 }
 
 func newCPA(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *CPA {

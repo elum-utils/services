@@ -10,8 +10,8 @@ import (
 
 	utils "github.com/elum-utils/services/internal/utils"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
-	"github.com/elum-utils/services/payment/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/payment/sqlc"
 
 	"github.com/google/uuid"
 )

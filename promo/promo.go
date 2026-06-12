@@ -26,16 +26,18 @@ type Promo struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	background sync.WaitGroup
+
+	lifecycleMu    sync.Mutex
+	params         DatabaseParams
+	callbacksToRun []callbackRegistration
+	running        bool
 }
 
-func New(ctx context.Context, db *sql.DB) (*Promo, error) {
-	return NewWithOptions(ctx, db, Options{
-		CacheL1Delay: defaultCacheDelay,
-		CacheL2Delay: defaultCacheDelay,
-	})
+func New(params DatabaseParams) *Promo {
+	return &Promo{params: params}
 }
 
-func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Promo, error) {
+func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Promo, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, err
@@ -43,7 +45,51 @@ func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Promo, e
 	return newPromo(ctx, client, false, options), nil
 }
 
-func Open(ctx context.Context, params DatabaseParams) (*Promo, error) {
+func (p *Promo) Run(ctx context.Context) error {
+	if p == nil {
+		return errors.New("promo: nil service")
+	}
+	p.lifecycleMu.Lock()
+	if p.running {
+		p.lifecycleMu.Unlock()
+		return errors.New("promo: service is already running")
+	}
+	p.running = true
+	params := p.params
+	registrations := append([]callbackRegistration(nil), p.callbacksToRun...)
+	p.lifecycleMu.Unlock()
+
+	running, err := open(ctx, params)
+	if err != nil {
+		p.lifecycleMu.Lock()
+		p.running = false
+		p.lifecycleMu.Unlock()
+		return err
+	}
+	p.adopt(running)
+	defer p.Close()
+
+	errCh := make(chan error, len(registrations))
+	p.background.Add(len(registrations))
+	for _, registration := range registrations {
+		registration := registration
+		go func() {
+			defer p.background.Done()
+			errCh <- p.runCallback(registration.ctx, registration.handler, registration.options...)
+		}()
+	}
+	select {
+	case <-p.rootCtx.Done():
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, context.Canceled) && p.rootCtx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+}
+
+func open(ctx context.Context, params DatabaseParams) (*Promo, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, errors.New("promo: database user and name are required")
 	}
@@ -70,6 +116,12 @@ func Open(ctx context.Context, params DatabaseParams) (*Promo, error) {
 		return nil, err
 	}
 	return newPromo(ctx, client, true, params.Options), nil
+}
+
+func (p *Promo) adopt(running *Promo) {
+	p.Admin, p.User = running.Admin, running.User
+	p.callbacks, p.client, p.ownsClient = running.callbacks, running.client, running.ownsClient
+	p.rootCtx, p.rootCancel = running.rootCtx, running.rootCancel
 }
 
 func newPromo(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Promo {

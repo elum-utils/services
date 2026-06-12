@@ -42,6 +42,11 @@ type Payment struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	background sync.WaitGroup
+
+	lifecycleMu    sync.Mutex
+	params         DatabaseParams
+	callbacksToRun []callbackRegistration
+	running        bool
 }
 
 type Adapters struct {
@@ -52,14 +57,11 @@ type Adapters struct {
 	YooKassa      *yookassa.YooKassa
 }
 
-func New(ctx context.Context, db *sql.DB) (*Payment, error) {
-	return NewWithOptions(ctx, db, Options{
-		CacheL1Delay: defaultCacheDelay,
-		CacheL2Delay: defaultCacheDelay,
-	})
+func New(params DatabaseParams) *Payment {
+	return &Payment{params: params}
 }
 
-func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Payment, error) {
+func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Payment, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, err
@@ -67,7 +69,52 @@ func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Payment,
 	return newAPI(ctx, client, false, options), nil
 }
 
-func Open(ctx context.Context, params DatabaseParams) (*Payment, error) {
+func (a *Payment) Run(ctx context.Context) error {
+	if a == nil {
+		return errors.New("payment: nil service")
+	}
+	a.lifecycleMu.Lock()
+	if a.running {
+		a.lifecycleMu.Unlock()
+		return errors.New("payment: service is already running")
+	}
+	a.running = true
+	params := a.params
+	registrations := append([]callbackRegistration(nil), a.callbacksToRun...)
+	a.lifecycleMu.Unlock()
+
+	running, err := open(ctx, params)
+	if err != nil {
+		a.lifecycleMu.Lock()
+		a.running = false
+		a.lifecycleMu.Unlock()
+		return err
+	}
+	a.adopt(running)
+	defer a.Close()
+
+	errCh := make(chan error, len(registrations))
+	a.background.Add(len(registrations))
+	for _, registration := range registrations {
+		registration := registration
+		go func() {
+			defer a.background.Done()
+			errCh <- a.runCallback(registration.ctx, registration.handler, registration.options...)
+		}()
+	}
+
+	select {
+	case <-a.rootCtx.Done():
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, context.Canceled) && a.rootCtx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+}
+
+func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 	if params.User == "" {
 		return nil, errors.New("payment: database user is required")
 	}
@@ -103,6 +150,21 @@ func Open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 		return nil, err
 	}
 	return newAPI(ctx, client, true, params.Options), nil
+}
+
+func (a *Payment) adopt(running *Payment) {
+	a.Admin = running.Admin
+	a.Asset = running.Asset
+	a.Product = running.Product
+	a.Checkout = running.Checkout
+	a.Refund = running.Refund
+	a.Subscription = running.Subscription
+	a.Adapters = running.Adapters
+	a.callbacks = running.callbacks
+	a.client = running.client
+	a.ownsClient = running.ownsClient
+	a.rootCtx = running.rootCtx
+	a.rootCancel = running.rootCancel
 }
 
 func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Payment {

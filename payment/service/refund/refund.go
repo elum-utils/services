@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
-	"github.com/elum-utils/services/payment/repository"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/payment/repository"
 )
 
 var (

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -22,16 +23,17 @@ type Reference struct {
 	ownsClient bool
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
+
+	lifecycleMu sync.Mutex
+	params      DatabaseParams
+	running     bool
 }
 
-func New(ctx context.Context, db *sql.DB) (*Reference, error) {
-	return NewWithOptions(ctx, db, Options{
-		CacheL1Delay: defaultCacheDelay,
-		CacheL2Delay: defaultCacheDelay,
-	})
+func New(params DatabaseParams) *Reference {
+	return &Reference{params: params}
 }
 
-func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Reference, error) {
+func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Reference, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, err
@@ -39,7 +41,33 @@ func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Referenc
 	return newReference(ctx, client, false, options), nil
 }
 
-func Open(ctx context.Context, params DatabaseParams) (*Reference, error) {
+func (r *Reference) Run(ctx context.Context) error {
+	if r == nil {
+		return errors.New("reference: nil service")
+	}
+	r.lifecycleMu.Lock()
+	if r.running {
+		r.lifecycleMu.Unlock()
+		return errors.New("reference: service is already running")
+	}
+	r.running = true
+	params := r.params
+	r.lifecycleMu.Unlock()
+
+	running, err := open(ctx, params)
+	if err != nil {
+		r.lifecycleMu.Lock()
+		r.running = false
+		r.lifecycleMu.Unlock()
+		return err
+	}
+	r.adopt(running)
+	defer r.Close()
+	<-r.rootCtx.Done()
+	return nil
+}
+
+func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, errors.New("reference: database user and name are required")
 	}
@@ -73,6 +101,12 @@ func Open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 	}
 	_ = bootstrap.Close()
 	return newReference(ctx, client, true, params.Options), nil
+}
+
+func (r *Reference) adopt(running *Reference) {
+	r.Admin, r.User = running.Admin, running.User
+	r.client, r.ownsClient = running.client, running.ownsClient
+	r.rootCtx, r.rootCancel = running.rootCtx, running.rootCancel
 }
 
 func newReference(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Reference {

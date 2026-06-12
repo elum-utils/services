@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	refsqlc "github.com/elum-utils/services/reference/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	refsqlc "github.com/elum-utils/services/reference/sqlc"
 )
 
 func (r *Repository) Get(ctx context.Context, workspaceID, key, locale string) (Item, error) {

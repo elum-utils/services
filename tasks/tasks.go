@@ -28,16 +28,18 @@ type Tasks struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 	background sync.WaitGroup
+
+	lifecycleMu    sync.Mutex
+	params         DatabaseParams
+	callbacksToRun []callbackRegistration
+	running        bool
 }
 
-func New(ctx context.Context, db *sql.DB) (*Tasks, error) {
-	return NewWithOptions(ctx, db, Options{
-		CacheL1Delay: defaultCacheDelay,
-		CacheL2Delay: defaultCacheDelay,
-	})
+func New(params DatabaseParams) *Tasks {
+	return &Tasks{params: params}
 }
 
-func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Tasks, error) {
+func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Tasks, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, err
@@ -45,7 +47,51 @@ func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Tasks, e
 	return newTasks(ctx, client, false, options), nil
 }
 
-func Open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
+func (t *Tasks) Run(ctx context.Context) error {
+	if t == nil {
+		return errors.New("tasks: nil service")
+	}
+	t.lifecycleMu.Lock()
+	if t.running {
+		t.lifecycleMu.Unlock()
+		return errors.New("tasks: service is already running")
+	}
+	t.running = true
+	params := t.params
+	registrations := append([]callbackRegistration(nil), t.callbacksToRun...)
+	t.lifecycleMu.Unlock()
+
+	running, err := open(ctx, params)
+	if err != nil {
+		t.lifecycleMu.Lock()
+		t.running = false
+		t.lifecycleMu.Unlock()
+		return err
+	}
+	t.adopt(running)
+	defer t.Close()
+
+	errCh := make(chan error, len(registrations))
+	t.background.Add(len(registrations))
+	for _, registration := range registrations {
+		registration := registration
+		go func() {
+			defer t.background.Done()
+			errCh <- t.runCallback(registration.ctx, registration.handler, registration.options...)
+		}()
+	}
+	select {
+	case <-t.rootCtx.Done():
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, context.Canceled) && t.rootCtx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+}
+
+func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, errors.New("tasks: database user and name are required")
 	}
@@ -72,6 +118,12 @@ func Open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 		return nil, err
 	}
 	return newTasks(ctx, client, true, params.Options), nil
+}
+
+func (t *Tasks) adopt(running *Tasks) {
+	t.Admin, t.Internal, t.User = running.Admin, running.Internal, running.User
+	t.callbacks, t.client, t.ownsClient = running.callbacks, running.client, running.ownsClient
+	t.rootCtx, t.rootCancel = running.rootCtx, running.rootCancel
 }
 
 func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Tasks {
