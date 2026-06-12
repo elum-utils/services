@@ -25,9 +25,9 @@ type OfferModel struct {
 }
 
 type RewardModel struct {
-	Key      string `json:"key"`
-	Type     string `json:"type"`
-	Quantity int64  `json:"quantity"`
+	Key      string  `json:"key"`
+	Type     string  `json:"type"`
+	Quantity int64   `json:"quantity"`
 	Unit     *string `json:"unit,omitempty"`
 }
 

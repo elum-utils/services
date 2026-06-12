@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/payment/repository"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 func (a *Admin) ListProductGroups(ctx context.Context, params ProductGroupListParams) ([]paymentsqlc.PaymentProductGroup, error) {

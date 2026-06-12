@@ -29,15 +29,19 @@ type CPA struct {
 	background sync.WaitGroup
 }
 
-func New(ctx context.Context, db *sqlwrap.Client) *CPA {
+func New(ctx context.Context, db *sql.DB) (*CPA, error) {
 	return NewWithOptions(ctx, db, Options{
 		CacheL1Delay: defaultCacheDelay,
 		CacheL2Delay: defaultCacheDelay,
 	})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *CPA {
-	return newCPA(ctx, db, false, options)
+func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*CPA, error) {
+	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
+	if err != nil {
+		return nil, err
+	}
+	return newCPA(ctx, client, false, options), nil
 }
 
 func Open(ctx context.Context, params DatabaseParams) (*CPA, error) {

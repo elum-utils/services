@@ -7,8 +7,8 @@ import (
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/promo/repository"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type Admin struct {

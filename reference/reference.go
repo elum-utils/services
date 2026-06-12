@@ -24,15 +24,19 @@ type Reference struct {
 	rootCancel context.CancelFunc
 }
 
-func New(ctx context.Context, db *sqlwrap.Client) *Reference {
+func New(ctx context.Context, db *sql.DB) (*Reference, error) {
 	return NewWithOptions(ctx, db, Options{
 		CacheL1Delay: defaultCacheDelay,
 		CacheL2Delay: defaultCacheDelay,
 	})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *Reference {
-	return newReference(ctx, db, false, options)
+func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Reference, error) {
+	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
+	if err != nil {
+		return nil, err
+	}
+	return newReference(ctx, client, false, options), nil
 }
 
 func Open(ctx context.Context, params DatabaseParams) (*Reference, error) {

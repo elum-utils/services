@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/payment/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type ProductGetParams struct {

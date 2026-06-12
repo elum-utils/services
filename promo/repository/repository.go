@@ -9,8 +9,8 @@ import (
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type Repository struct {

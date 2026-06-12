@@ -28,15 +28,19 @@ type Promo struct {
 	background sync.WaitGroup
 }
 
-func New(ctx context.Context, db *sqlwrap.Client) *Promo {
+func New(ctx context.Context, db *sql.DB) (*Promo, error) {
 	return NewWithOptions(ctx, db, Options{
 		CacheL1Delay: defaultCacheDelay,
 		CacheL2Delay: defaultCacheDelay,
 	})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *Promo {
-	return newPromo(ctx, db, false, options)
+func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Promo, error) {
+	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
+	if err != nil {
+		return nil, err
+	}
+	return newPromo(ctx, client, false, options), nil
 }
 
 func Open(ctx context.Context, params DatabaseParams) (*Promo, error) {

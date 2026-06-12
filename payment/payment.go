@@ -52,15 +52,19 @@ type Adapters struct {
 	YooKassa      *yookassa.YooKassa
 }
 
-func New(ctx context.Context, db *sqlwrap.Client) *Payment {
+func New(ctx context.Context, db *sql.DB) (*Payment, error) {
 	return NewWithOptions(ctx, db, Options{
 		CacheL1Delay: defaultCacheDelay,
 		CacheL2Delay: defaultCacheDelay,
 	})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *Payment {
-	return newAPI(ctx, db, false, options)
+func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Payment, error) {
+	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
+	if err != nil {
+		return nil, err
+	}
+	return newAPI(ctx, client, false, options), nil
 }
 
 func Open(ctx context.Context, params DatabaseParams) (*Payment, error) {

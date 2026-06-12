@@ -30,15 +30,19 @@ type Tasks struct {
 	background sync.WaitGroup
 }
 
-func New(ctx context.Context, db *sqlwrap.Client) *Tasks {
-	return newTasks(ctx, db, false, Options{
+func New(ctx context.Context, db *sql.DB) (*Tasks, error) {
+	return NewWithOptions(ctx, db, Options{
 		CacheL1Delay: defaultCacheDelay,
 		CacheL2Delay: defaultCacheDelay,
 	})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *Tasks {
-	return newTasks(ctx, db, false, options)
+func NewWithOptions(ctx context.Context, db *sql.DB, options Options) (*Tasks, error) {
+	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
+	if err != nil {
+		return nil, err
+	}
+	return newTasks(ctx, client, false, options), nil
 }
 
 func Open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
