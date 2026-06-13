@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	servicecallback "github.com/elum-utils/services/callback"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
@@ -14,12 +15,7 @@ const (
 	CallbackEventPaymentOrderRefunded  = "payment.order.refunded"
 )
 
-type Reward struct {
-	Key      string  `json:"key"`
-	Type     string  `json:"type"`
-	Quantity int64   `json:"quantity"`
-	Unit     *string `json:"unit,omitempty"`
-}
+type Reward = servicecallback.Reward
 
 type PaymentFulfilledCallbackPayload struct {
 	OrderID           uint64   `json:"order_id"`
@@ -60,6 +56,7 @@ type PaymentRefundedCallbackPayload struct {
 type Context struct {
 	callbackutil.Context
 
+	Payload          *servicecallback.RewardPayload
 	PaymentFulfilled *PaymentFulfilledCallbackPayload
 	PaymentRefunded  *PaymentRefundedCallbackPayload
 }
@@ -139,11 +136,27 @@ func newCallbackContext(callbackCtx callbackutil.Context) (Context, error) {
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return Context{}, err
 		}
+		ctx.Payload = &servicecallback.RewardPayload{
+			Identity: servicecallback.Identity{
+				WorkspaceID: payload.WorkspaceID,
+				AppID:       payload.AppID, PlatformID: payload.PlatformID,
+				PlatformUserID: payload.PlatformUserID,
+			},
+			Rewards: payload.Rewards,
+		}
 		ctx.PaymentFulfilled = &payload
 	case CallbackEventPaymentOrderRefunded:
 		var payload PaymentRefundedCallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return Context{}, err
+		}
+		ctx.Payload = &servicecallback.RewardPayload{
+			Identity: servicecallback.Identity{
+				WorkspaceID: payload.WorkspaceID,
+				AppID:       payload.AppID, PlatformID: payload.PlatformID,
+				PlatformUserID: payload.PlatformUserID,
+			},
+			Rewards: payload.Rewards,
 		}
 		ctx.PaymentRefunded = &payload
 	}

@@ -6,15 +6,13 @@ import (
 	"errors"
 	"time"
 
+	servicecallback "github.com/elum-utils/services/callback"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
 const CallbackEventRewardGranted = "calendar.reward_granted"
 
-type CallbackReward struct {
-	Key      string `json:"key"`
-	Quantity int64  `json:"quantity"`
-}
+type CallbackReward = servicecallback.Reward
 
 type RewardGrantedPayload struct {
 	OperationRowID uint64           `json:"operation_row_id"`
@@ -31,6 +29,7 @@ type RewardGrantedPayload struct {
 
 type Context struct {
 	callbackutil.Context
+	Payload       *servicecallback.RewardPayload
 	RewardGranted *RewardGrantedPayload
 }
 
@@ -86,6 +85,17 @@ func (c *Calendar) runCallback(ctx context.Context, handler CallbackHandler, opt
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return err
 		}
-		return handler(Context{Context: callbackCtx, RewardGranted: &payload})
+		return handler(Context{
+			Context: callbackCtx,
+			Payload: &servicecallback.RewardPayload{
+				Identity: servicecallback.Identity{
+					WorkspaceID: payload.WorkspaceID,
+					AppID:       payload.AppID, PlatformID: payload.PlatformID,
+					PlatformUserID: payload.PlatformUserID,
+				},
+				Rewards: payload.Rewards,
+			},
+			RewardGranted: &payload,
+		})
 	}, opts...)
 }

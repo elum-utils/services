@@ -6,13 +6,28 @@ import (
 	"errors"
 	"time"
 
+	servicecallback "github.com/elum-utils/services/callback"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
-	"github.com/elum-utils/services/tasks/repository"
 )
+
+type CallbackPayload struct {
+	WorkspaceID    string                   `json:"workspace_id"`
+	AppID          int64                    `json:"app_id"`
+	PlatformID     int64                    `json:"platform_id"`
+	PlatformUserID string                   `json:"platform_user_id"`
+	TaskID         uint64                   `json:"task_id"`
+	TaskKey        string                   `json:"task_key"`
+	OperationID    string                   `json:"operation_id"`
+	PeriodStartAt  time.Time                `json:"period_start_at"`
+	PeriodEndAt    time.Time                `json:"period_end_at"`
+	Rewards        []servicecallback.Reward `json:"rewards"`
+	Payload        json.RawMessage          `json:"payload"`
+}
 
 type Context struct {
 	callbackutil.Context
-	Claimed *repository.CallbackPayload
+	Payload *servicecallback.RewardPayload
+	Claimed *CallbackPayload
 }
 
 type CallbackHandler func(Context) error
@@ -63,10 +78,21 @@ func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts .
 	defer cancel()
 	opts = append(opts, callbackutil.WithSourceService("tasks"))
 	return t.callbacks.On(runCtx, func(callbackCtx callbackutil.Context) error {
-		var payload repository.CallbackPayload
+		var payload CallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return err
 		}
-		return handler(Context{Context: callbackCtx, Claimed: &payload})
+		return handler(Context{
+			Context: callbackCtx,
+			Payload: &servicecallback.RewardPayload{
+				Identity: servicecallback.Identity{
+					WorkspaceID: payload.WorkspaceID,
+					AppID:       payload.AppID, PlatformID: payload.PlatformID,
+					PlatformUserID: payload.PlatformUserID,
+				},
+				Rewards: payload.Rewards,
+			},
+			Claimed: &payload,
+		})
 	}, opts...)
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	servicecallback "github.com/elum-utils/services/callback"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
@@ -14,10 +15,7 @@ const (
 	CallbackEventCompleted = "cpa.completed"
 )
 
-type CallbackReward struct {
-	Key      string `json:"key"`
-	Quantity int64  `json:"quantity"`
-}
+type CallbackReward = servicecallback.Reward
 
 type CallbackPayload struct {
 	AssignmentID   uint64           `json:"assignment_id"`
@@ -34,6 +32,7 @@ type CallbackPayload struct {
 
 type Context struct {
 	callbackutil.Context
+	Payload   *servicecallback.RewardPayload
 	Issued    *CallbackPayload
 	Completed *CallbackPayload
 }
@@ -96,6 +95,14 @@ func (c *CPA) runCallback(ctx context.Context, handler CallbackHandler, opts ...
 		var payload CallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return err
+		}
+		value.Payload = &servicecallback.RewardPayload{
+			Identity: servicecallback.Identity{
+				WorkspaceID: payload.WorkspaceID,
+				AppID:       payload.AppID, PlatformID: payload.PlatformID,
+				PlatformUserID: payload.PlatformUserID,
+			},
+			Rewards: payload.Rewards,
 		}
 		switch callbackCtx.EventType {
 		case CallbackEventIssued:
