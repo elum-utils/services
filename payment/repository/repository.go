@@ -96,13 +96,17 @@ func (r *PaymentRepository) inTransaction(ctx context.Context, fn func(*PaymentR
 	return r.WithTx(ctx, fn)
 }
 
-func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath string) error {
-	raw, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return err
+func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string) error {
+	raw := paymentsqlc.SchemaSQL
+	if len(schemaPath) > 0 && strings.TrimSpace(schemaPath[0]) != "" {
+		data, err := os.ReadFile(schemaPath[0])
+		if err != nil {
+			return err
+		}
+		raw = string(data)
 	}
 
-	for _, stmt := range splitSQLStatements(string(raw)) {
+	for _, stmt := range splitSQLStatements(raw) {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, stmt)
 			return err

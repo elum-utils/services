@@ -4,15 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/reference/repository"
 	"github.com/elum-utils/services/reference/service/admin"
 	"github.com/elum-utils/services/reference/service/user"
-	"github.com/go-sql-driver/mysql"
 )
 
 type Reference struct {
@@ -59,6 +58,9 @@ func (r *Reference) Run(ctx context.Context) error {
 		r.lifecycleMu.Lock()
 		r.running = false
 		r.lifecycleMu.Unlock()
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			return nil
+		}
 		return err
 	}
 	r.adopt(running)
@@ -71,20 +73,10 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, errors.New("reference: database user and name are required")
 	}
-	host := params.Host
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := params.Port
-	if port <= 0 {
-		port = 3306
-	}
-	cfg := mysql.Config{
-		User: params.User, Passwd: params.Password, Net: "tcp",
-		Addr: fmt.Sprintf("%s:%d", host, port), DBName: params.Database,
-		ParseTime: true, AllowNativePasswords: true,
-	}
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
+		User: params.User, Password: params.Password, Database: params.Database,
+		Host: params.Host, Port: params.Port,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +85,20 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	bootstrap := repository.NewWithOptions(client, repository.Options{QueryTimeout: params.Options.QueryTimeout})
+	bootstrap := repository.NewWithOptions(client, repository.Options{
+		QueryTimeout: params.Options.QueryTimeout,
+		CacheL1Delay: params.Options.CacheL1Delay,
+		CacheL2Delay: params.Options.CacheL2Delay,
+	})
 	if err := bootstrap.Bootstrap(contextutil.Normalize(ctx)); err != nil {
 		_ = bootstrap.Close()
 		_ = client.Close()
 		return nil, err
 	}
-	_ = bootstrap.Close()
+	if err := bootstrap.Close(); err != nil {
+		_ = client.Close()
+		return nil, err
+	}
 	return newReference(ctx, client, true, params.Options), nil
 }
 

@@ -4,17 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sync"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
 	"github.com/elum-utils/services/tasks/service/admin"
 	"github.com/elum-utils/services/tasks/service/internalapi"
 	"github.com/elum-utils/services/tasks/service/user"
-	"github.com/go-sql-driver/mysql"
 )
 
 type Tasks struct {
@@ -66,6 +65,9 @@ func (t *Tasks) Run(ctx context.Context) error {
 		t.lifecycleMu.Lock()
 		t.running = false
 		t.lifecycleMu.Unlock()
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			return nil
+		}
 		return err
 	}
 	t.adopt(running)
@@ -95,26 +97,26 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, errors.New("tasks: database user and name are required")
 	}
-	host := params.Host
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := params.Port
-	if port <= 0 {
-		port = 3306
-	}
-	cfg := mysql.Config{
-		User: params.User, Passwd: params.Password, Net: "tcp",
-		Addr: fmt.Sprintf("%s:%d", host, port), DBName: params.Database,
-		ParseTime: true, AllowNativePasswords: true,
-	}
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
+		User: params.User, Password: params.Password, Database: params.Database,
+		Host: params.Host, Port: params.Port,
+	})
 	if err != nil {
 		return nil, err
 	}
 	client, err := sqlwrap.New(db, toSQLWrapOptions(params.Options))
 	if err != nil {
 		_ = db.Close()
+		return nil, err
+	}
+	bootstrap := repository.NewWithOptions(client, repositoryOptions(params.Options))
+	if err := bootstrap.Bootstrap(ctx); err != nil {
+		_ = bootstrap.Close()
+		_ = client.Close()
+		return nil, err
+	}
+	if err := bootstrap.Close(); err != nil {
+		_ = client.Close()
 		return nil, err
 	}
 	return newTasks(ctx, client, true, params.Options), nil
