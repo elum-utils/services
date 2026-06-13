@@ -1,11 +1,29 @@
 package user
 
-import "github.com/elum-utils/services/payment/service/product"
+import (
+	"github.com/elum-utils/services/payment/service/asset"
+	"github.com/elum-utils/services/payment/service/checkout"
+	"github.com/elum-utils/services/payment/service/product"
+	"github.com/elum-utils/services/payment/service/subscription"
+)
 
 type User struct {
-	products *product.Product
+	assets       *asset.Asset
+	products     *product.Product
+	checkout     *checkout.Checkout
+	subscription *subscription.Subscription
 }
 
-func New(products *product.Product) *User {
-	return &User{products: products}
+func New(
+	assets *asset.Asset,
+	products *product.Product,
+	checkoutAPI *checkout.Checkout,
+	subscriptionAPI *subscription.Subscription,
+) *User {
+	return &User{
+		assets:       assets,
+		products:     products,
+		checkout:     checkoutAPI,
+		subscription: subscriptionAPI,
+	}
 }

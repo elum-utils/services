@@ -28,22 +28,22 @@ import (
 )
 
 type Payment struct {
-	Admin        *admin.Admin
-	User         *user.User
-	Asset        *asset.Asset
-	Product      *product.Product
-	Checkout     *checkout.Checkout
-	Refund       *refund.Refund
-	Subscription *subscription.Subscription
+	Admin *admin.Admin
+	User  *user.User
 
 	Adapters *Adapters
 
-	callbacks  *callbackutil.Store
-	client     *sqlwrap.Client
-	ownsClient bool
-	rootCtx    context.Context
-	rootCancel context.CancelFunc
-	background sync.WaitGroup
+	asset        *asset.Asset
+	product      *product.Product
+	checkout     *checkout.Checkout
+	refund       *refund.Refund
+	subscription *subscription.Subscription
+	callbacks    *callbackutil.Store
+	client       *sqlwrap.Client
+	ownsClient   bool
+	rootCtx      context.Context
+	rootCancel   context.CancelFunc
+	background   sync.WaitGroup
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -158,11 +158,11 @@ func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 func (a *Payment) adopt(running *Payment) {
 	a.Admin = running.Admin
 	a.User = running.User
-	a.Asset = running.Asset
-	a.Product = running.Product
-	a.Checkout = running.Checkout
-	a.Refund = running.Refund
-	a.Subscription = running.Subscription
+	a.asset = running.asset
+	a.product = running.product
+	a.checkout = running.checkout
+	a.refund = running.refund
+	a.subscription = running.subscription
 	a.Adapters = running.Adapters
 	a.callbacks = running.callbacks
 	a.client = running.client
@@ -183,15 +183,19 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 	plategaAPI := platega.NewWithOptions(rootCtx, db, repositoryOptions)
 	vkmaAPI := vkma.NewWithOptions(rootCtx, db, repositoryOptions)
 	yooKassaAPI := yookassa.NewWithOptions(rootCtx, db, repositoryOptions)
+	assetAPI := asset.NewWithOptions(rootCtx, db, repositoryOptions)
 	productAPI := product.NewWithOptions(rootCtx, db, repositoryOptions)
+	checkoutAPI := checkout.NewWithOptions(rootCtx, db, repositoryOptions)
+	subscriptionAPI := subscription.NewWithOptions(rootCtx, db, repositoryOptions)
+	refundAPI := refund.NewWithOptions(rootCtx, db, refundProviders(telegramStarsAPI, tonAPI, plategaAPI, yooKassaAPI), repositoryOptions)
 	return &Payment{
-		Admin:        admin.NewWithOptions(rootCtx, db, repositoryOptions),
-		User:         user.New(productAPI),
-		Asset:        asset.NewWithOptions(rootCtx, db, repositoryOptions),
-		Product:      productAPI,
-		Checkout:     checkout.NewWithOptions(rootCtx, db, repositoryOptions),
-		Refund:       refund.NewWithOptions(rootCtx, db, refundProviders(telegramStarsAPI, tonAPI, plategaAPI, yooKassaAPI), repositoryOptions),
-		Subscription: subscription.NewWithOptions(rootCtx, db, repositoryOptions),
+		Admin:        admin.NewWithServices(rootCtx, db, repositoryOptions, assetAPI, productAPI, checkoutAPI, refundAPI),
+		User:         user.New(assetAPI, productAPI, checkoutAPI, subscriptionAPI),
+		asset:        assetAPI,
+		product:      productAPI,
+		checkout:     checkoutAPI,
+		refund:       refundAPI,
+		subscription: subscriptionAPI,
 		Adapters: &Adapters{
 			TON:           tonAPI,
 			TelegramStars: telegramStarsAPI,
@@ -233,23 +237,23 @@ func (a *Payment) Close() error {
 		}
 	}
 	a.background.Wait()
-	if a.Product != nil {
-		err = errors.Join(err, a.Product.Close())
+	if a.product != nil {
+		err = errors.Join(err, a.product.Close())
 	}
 	if a.Admin != nil {
 		err = errors.Join(err, a.Admin.Close())
 	}
-	if a.Asset != nil {
-		err = errors.Join(err, a.Asset.Close())
+	if a.asset != nil {
+		err = errors.Join(err, a.asset.Close())
 	}
-	if a.Checkout != nil {
-		err = errors.Join(err, a.Checkout.Close())
+	if a.checkout != nil {
+		err = errors.Join(err, a.checkout.Close())
 	}
-	if a.Refund != nil {
-		err = errors.Join(err, a.Refund.Close())
+	if a.refund != nil {
+		err = errors.Join(err, a.refund.Close())
 	}
-	if a.Subscription != nil {
-		err = errors.Join(err, a.Subscription.Close())
+	if a.subscription != nil {
+		err = errors.Join(err, a.subscription.Close())
 	}
 	if a.callbacks != nil {
 		err = errors.Join(err, a.callbacks.Close())
