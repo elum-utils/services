@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS task_reward (
     CONSTRAINT task_reward_definition_fk
         FOREIGN KEY (workspace_id, task_id)
         REFERENCES task_definition (workspace_id, id) ON DELETE RESTRICT,
-    CONSTRAINT task_reward_quantity_chk CHECK (quantity > 0),
+    CONSTRAINT task_reward_positive_quantity_chk CHECK (quantity > 0),
     CONSTRAINT task_reward_type_chk CHECK (
         (reward_type = 'quantity' AND duration_unit IS NULL)
         OR (reward_type = 'duration' AND duration_unit IS NOT NULL)

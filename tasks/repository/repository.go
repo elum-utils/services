@@ -96,6 +96,9 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 }
 
 func (r *Repository) Bootstrap(ctx context.Context) error {
+	if err := r.migrateLegacySchema(ctx); err != nil {
+		return err
+	}
 	if err := r.applySQL(ctx, tasksqlc.SchemaSQL, "schema"); err != nil {
 		return err
 	}
@@ -110,6 +113,72 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	return r.applySQL(ctx, tasksqlc.EventSQL, "event")
 }
 
+func (r *Repository) migrateLegacySchema(ctx context.Context) error {
+	var workspaceColumnCount int
+	if err := r.db.DB().QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'task_group'
+  AND column_name = 'workspace_id'`).Scan(&workspaceColumnCount); err != nil {
+		return fmt.Errorf("tasks: inspect schema version: %w", err)
+	}
+	if workspaceColumnCount > 0 {
+		return nil
+	}
+
+	legacyTables := []string{
+		"task",
+		"task_action_advertisement",
+		"task_action_app",
+		"task_action_channel",
+		"task_group",
+		"task_integration",
+		"task_integration_attempt",
+		"task_integration_field",
+		"task_progress",
+		"task_progress_event",
+		"task_reward",
+		"task_reward_delivery",
+		"task_sequence",
+	}
+	renames := make([]string, 0, len(legacyTables))
+	for _, table := range legacyTables {
+		var sourceExists int
+		if err := r.db.DB().QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name = ?`, table).Scan(&sourceExists); err != nil {
+			return fmt.Errorf("tasks: inspect legacy table %s: %w", table, err)
+		}
+		if sourceExists == 0 {
+			continue
+		}
+
+		target := "legacy_" + table
+		var targetExists int
+		if err := r.db.DB().QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name = ?`, target).Scan(&targetExists); err != nil {
+			return fmt.Errorf("tasks: inspect legacy target %s: %w", target, err)
+		}
+		if targetExists > 0 {
+			return fmt.Errorf("tasks: legacy migration target %s already exists", target)
+		}
+		renames = append(renames, quoteIdentifier(table)+" TO "+quoteIdentifier(target))
+	}
+	if len(renames) == 0 {
+		return nil
+	}
+	if _, err := r.db.DB().ExecContext(ctx, "RENAME TABLE "+strings.Join(renames, ", ")); err != nil {
+		return fmt.Errorf("tasks: rename legacy schema: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 	for _, statement := range splitSQLStatements(raw) {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
@@ -120,6 +189,10 @@ func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 		}
 	}
 	return nil
+}
+
+func quoteIdentifier(value string) string {
+	return "`" + strings.ReplaceAll(value, "`", "``") + "`"
 }
 
 func splitSQLStatements(raw string) []string {
