@@ -696,6 +696,59 @@ ORDER BY
     pc.item_position,
     pc.item_id;
 
+-- name: ListProductsCatalogCacheRows :many
+SELECT
+    pc.product_id,
+    pc.workspace_id,
+    pc.link_url,
+    pc.size_label,
+    pc.group_code,
+    pc.product_title,
+    pc.product_description,
+    pc.image_url,
+    pc.period_seconds,
+    pc.trial_duration_seconds,
+    pc.quantity_mode,
+    pc.product_position,
+    pc.global_limit,
+    pc.global_interval,
+    pc.global_interval_count,
+    pc.user_limit,
+    pc.user_interval,
+    pc.user_interval_count,
+    pc.is_visible,
+    pc.is_closed,
+    pc.available_from,
+    pc.available_until,
+    pc.price_id,
+    pc.asset_code,
+    pc.list_amount_minor,
+    pc.discount_amount_minor,
+    pc.is_promotion,
+    pc.price_starts_at,
+    pc.price_ends_at,
+    pc.item_id,
+    pc.item_quantity,
+    pc.reward_type,
+    pc.duration_unit,
+    pc.item_type,
+    pc.item_title,
+    pc.item_description,
+    pc.item_rarity,
+    pc.item_position
+FROM payment_product_cache pc
+WHERE pc.workspace_id = ?
+  AND pc.asset_code = ?
+  AND pc.locale = ?
+ORDER BY
+    pc.product_position,
+    pc.product_id,
+    pc.is_promotion DESC,
+    pc.price_starts_at DESC,
+    pc.price_id DESC,
+    pc.item_position,
+    pc.item_id;
+
 -- name: GetCheckoutProduct :one
 SELECT
     pc.product_id,
@@ -1070,6 +1123,22 @@ WHERE workspace_id = ?
   AND window_start = ?
   AND window_end = ?
 LIMIT 1;
+
+-- name: ListActiveProductLimitCounters :many
+SELECT
+    product_id,
+    counter_scope,
+    platform_user_id,
+    window_start,
+    window_end,
+    paid_count
+FROM payment_product_limit_counter
+WHERE workspace_id = ?
+  AND platform_id = ?
+  AND platform_user_id IN ('', ?)
+  AND window_start <= ?
+  AND window_end > ?
+ORDER BY product_id, counter_scope, platform_user_id;
 
 -- name: EnsureProductLimitCounter :execrows
 INSERT IGNORE INTO payment_product_limit_counter (

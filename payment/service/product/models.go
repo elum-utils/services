@@ -27,6 +27,15 @@ type UpsertParams struct {
 	IsClosed             bool
 }
 
+type ListParams struct {
+	WorkspaceID    string
+	AppID          int64
+	PlatformID     int64
+	PlatformUserID string
+	AssetCode      string
+	Locale         string
+}
+
 type ProductModel struct {
 	ID                   string        `json:"id"`
 	LinkURL              *string       `json:"link_url,omitempty"`

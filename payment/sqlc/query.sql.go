@@ -5440,6 +5440,76 @@ func (q *Queries) InsertPaidOrderIndexFromOrder(ctx context.Context, id uint64) 
 	return result.RowsAffected()
 }
 
+const listActiveProductLimitCounters = `-- name: ListActiveProductLimitCounters :many
+SELECT
+    product_id,
+    counter_scope,
+    platform_user_id,
+    window_start,
+    window_end,
+    paid_count
+FROM payment_product_limit_counter
+WHERE workspace_id = ?
+  AND platform_id = ?
+  AND platform_user_id IN ('', ?)
+  AND window_start <= ?
+  AND window_end > ?
+ORDER BY product_id, counter_scope, platform_user_id
+`
+
+type ListActiveProductLimitCountersParams struct {
+	WorkspaceID    string    `json:"workspace_id"`
+	PlatformID     int64     `json:"platform_id"`
+	PlatformUserID string    `json:"platform_user_id"`
+	WindowStart    time.Time `json:"window_start"`
+	WindowEnd      time.Time `json:"window_end"`
+}
+
+type ListActiveProductLimitCountersRow struct {
+	ProductID      string                                 `json:"product_id"`
+	CounterScope   PaymentProductLimitCounterCounterScope `json:"counter_scope"`
+	PlatformUserID string                                 `json:"platform_user_id"`
+	WindowStart    time.Time                              `json:"window_start"`
+	WindowEnd      time.Time                              `json:"window_end"`
+	PaidCount      uint64                                 `json:"paid_count"`
+}
+
+func (q *Queries) ListActiveProductLimitCounters(ctx context.Context, arg ListActiveProductLimitCountersParams) ([]ListActiveProductLimitCountersRow, error) {
+	rows, err := q.query(ctx, q.listActiveProductLimitCountersStmt, listActiveProductLimitCounters,
+		arg.WorkspaceID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveProductLimitCountersRow
+	for rows.Next() {
+		var i ListActiveProductLimitCountersRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.CounterScope,
+			&i.PlatformUserID,
+			&i.WindowStart,
+			&i.WindowEnd,
+			&i.PaidCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT
     code,
@@ -6064,6 +6134,169 @@ func (q *Queries) ListProductPriceOptions(ctx context.Context, arg ListProductPr
 			&i.ListAmountMinor,
 			&i.DiscountAmountMinor,
 			&i.ProviderCodes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductsCatalogCacheRows = `-- name: ListProductsCatalogCacheRows :many
+SELECT
+    pc.product_id,
+    pc.workspace_id,
+    pc.link_url,
+    pc.size_label,
+    pc.group_code,
+    pc.product_title,
+    pc.product_description,
+    pc.image_url,
+    pc.period_seconds,
+    pc.trial_duration_seconds,
+    pc.quantity_mode,
+    pc.product_position,
+    pc.global_limit,
+    pc.global_interval,
+    pc.global_interval_count,
+    pc.user_limit,
+    pc.user_interval,
+    pc.user_interval_count,
+    pc.is_visible,
+    pc.is_closed,
+    pc.available_from,
+    pc.available_until,
+    pc.price_id,
+    pc.asset_code,
+    pc.list_amount_minor,
+    pc.discount_amount_minor,
+    pc.is_promotion,
+    pc.price_starts_at,
+    pc.price_ends_at,
+    pc.item_id,
+    pc.item_quantity,
+    pc.reward_type,
+    pc.duration_unit,
+    pc.item_type,
+    pc.item_title,
+    pc.item_description,
+    pc.item_rarity,
+    pc.item_position
+FROM payment_product_cache pc
+WHERE pc.workspace_id = ?
+  AND pc.asset_code = ?
+  AND pc.locale = ?
+ORDER BY
+    pc.product_position,
+    pc.product_id,
+    pc.is_promotion DESC,
+    pc.price_starts_at DESC,
+    pc.price_id DESC,
+    pc.item_position,
+    pc.item_id
+`
+
+type ListProductsCatalogCacheRowsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	AssetCode   string `json:"asset_code"`
+	Locale      string `json:"locale"`
+}
+
+type ListProductsCatalogCacheRowsRow struct {
+	ProductID            string                              `json:"product_id"`
+	WorkspaceID          string                              `json:"workspace_id"`
+	LinkUrl              sql.NullString                      `json:"link_url"`
+	SizeLabel            sql.NullString                      `json:"size_label"`
+	GroupCode            sql.NullString                      `json:"group_code"`
+	ProductTitle         string                              `json:"product_title"`
+	ProductDescription   string                              `json:"product_description"`
+	ImageUrl             sql.NullString                      `json:"image_url"`
+	PeriodSeconds        sql.NullInt64                       `json:"period_seconds"`
+	TrialDurationSeconds sql.NullInt64                       `json:"trial_duration_seconds"`
+	QuantityMode         PaymentProductCacheQuantityMode     `json:"quantity_mode"`
+	ProductPosition      int32                               `json:"product_position"`
+	GlobalLimit          int32                               `json:"global_limit"`
+	GlobalInterval       PaymentProductCacheGlobalInterval   `json:"global_interval"`
+	GlobalIntervalCount  int32                               `json:"global_interval_count"`
+	UserLimit            int32                               `json:"user_limit"`
+	UserInterval         PaymentProductCacheUserInterval     `json:"user_interval"`
+	UserIntervalCount    int32                               `json:"user_interval_count"`
+	IsVisible            bool                                `json:"is_visible"`
+	IsClosed             bool                                `json:"is_closed"`
+	AvailableFrom        time.Time                           `json:"available_from"`
+	AvailableUntil       time.Time                           `json:"available_until"`
+	PriceID              uint64                              `json:"price_id"`
+	AssetCode            string                              `json:"asset_code"`
+	ListAmountMinor      uint64                              `json:"list_amount_minor"`
+	DiscountAmountMinor  uint64                              `json:"discount_amount_minor"`
+	IsPromotion          bool                                `json:"is_promotion"`
+	PriceStartsAt        time.Time                           `json:"price_starts_at"`
+	PriceEndsAt          time.Time                           `json:"price_ends_at"`
+	ItemID               string                              `json:"item_id"`
+	ItemQuantity         int64                               `json:"item_quantity"`
+	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
+	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
+	ItemType             sql.NullString                      `json:"item_type"`
+	ItemTitle            string                              `json:"item_title"`
+	ItemDescription      string                              `json:"item_description"`
+	ItemRarity           sql.NullString                      `json:"item_rarity"`
+	ItemPosition         sql.NullInt32                       `json:"item_position"`
+}
+
+func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProductsCatalogCacheRowsParams) ([]ListProductsCatalogCacheRowsRow, error) {
+	rows, err := q.query(ctx, q.listProductsCatalogCacheRowsStmt, listProductsCatalogCacheRows, arg.WorkspaceID, arg.AssetCode, arg.Locale)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsCatalogCacheRowsRow
+	for rows.Next() {
+		var i ListProductsCatalogCacheRowsRow
+		if err := rows.Scan(
+			&i.ProductID,
+			&i.WorkspaceID,
+			&i.LinkUrl,
+			&i.SizeLabel,
+			&i.GroupCode,
+			&i.ProductTitle,
+			&i.ProductDescription,
+			&i.ImageUrl,
+			&i.PeriodSeconds,
+			&i.TrialDurationSeconds,
+			&i.QuantityMode,
+			&i.ProductPosition,
+			&i.GlobalLimit,
+			&i.GlobalInterval,
+			&i.GlobalIntervalCount,
+			&i.UserLimit,
+			&i.UserInterval,
+			&i.UserIntervalCount,
+			&i.IsVisible,
+			&i.IsClosed,
+			&i.AvailableFrom,
+			&i.AvailableUntil,
+			&i.PriceID,
+			&i.AssetCode,
+			&i.ListAmountMinor,
+			&i.DiscountAmountMinor,
+			&i.IsPromotion,
+			&i.PriceStartsAt,
+			&i.PriceEndsAt,
+			&i.ItemID,
+			&i.ItemQuantity,
+			&i.RewardType,
+			&i.DurationUnit,
+			&i.ItemType,
+			&i.ItemTitle,
+			&i.ItemDescription,
+			&i.ItemRarity,
+			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}

@@ -32,6 +32,16 @@ type ProductGetByKeyParams struct {
 	Now       time.Time
 }
 
+type ProductListParams struct {
+	WorkspaceID    string
+	AppID          int64
+	PlatformID     int64
+	PlatformUserID string
+	AssetCode      string
+	Locale         string
+	Now            time.Time
+}
+
 type ProductCreateKeyParams struct {
 	WorkspaceID    string
 	AppID          int64
@@ -158,6 +168,39 @@ func (r *PaymentRepository) GetProduct(ctx context.Context, params ProductGetPar
 	}
 
 	return product, nil
+}
+
+func (r *PaymentRepository) ListProducts(ctx context.Context, params ProductListParams) ([]Product, error) {
+	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	locale := normalizedLocale(params.Locale)
+	now, err := r.catalogNow(ctx, params.Now)
+	if err != nil {
+		return nil, err
+	}
+
+	key := paymentCacheKey("products_catalog", workspaceID, params.AssetCode, locale)
+	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductsCatalogCacheRowsRow, error) {
+		return r.q.ListProductsCatalogCacheRows(ctx, sqlc.ListProductsCatalogCacheRowsParams{
+			WorkspaceID: workspaceID,
+			AssetCode:   params.AssetCode,
+			Locale:      locale,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	products := mapProductsCatalogRows(rows, now)
+	if len(products) == 0 {
+		return []Product{}, nil
+	}
+	if err := r.attachProductsLimitLocks(ctx, products, workspaceID, params.PlatformID, params.PlatformUserID, now); err != nil {
+		return nil, err
+	}
+	return products, nil
 }
 
 func (r *PaymentRepository) getProductCatalog(
@@ -444,6 +487,144 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 	}
 
 	return product, nil
+}
+
+func mapProductsCatalogRows(rows []sqlc.ListProductsCatalogCacheRowsRow, now time.Time) []Product {
+	products := make([]Product, 0)
+	for start := 0; start < len(rows); {
+		end := start + 1
+		for end < len(rows) && rows[end].ProductID == rows[start].ProductID {
+			end++
+		}
+		if product, ok := mapProductsCatalogGroup(rows[start:end], now); ok {
+			products = append(products, product)
+		}
+		start = end
+	}
+	return products
+}
+
+func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now time.Time) (Product, bool) {
+	var selected sqlc.ListProductsCatalogCacheRowsRow
+	found := false
+	for _, row := range rows {
+		if productCatalogRowActive(row.IsVisible, row.IsClosed, row.AvailableFrom, row.AvailableUntil, row.PriceStartsAt, row.PriceEndsAt, now) {
+			selected = row
+			found = true
+			break
+		}
+	}
+	if !found {
+		return Product{}, false
+	}
+
+	product := Product{
+		WorkspaceID:          selected.WorkspaceID,
+		ID:                   selected.ProductID,
+		LinkURL:              selected.LinkUrl,
+		SizeLabel:            selected.SizeLabel,
+		GroupCode:            selected.GroupCode,
+		Title:                selected.ProductTitle,
+		Description:          selected.ProductDescription,
+		ImageURL:             selected.ImageUrl,
+		PeriodSeconds:        selected.PeriodSeconds,
+		TrialDurationSeconds: selected.TrialDurationSeconds,
+		QuantityMode:         string(selected.QuantityMode),
+		Price: ProductPrice{
+			ID:                  selected.PriceID,
+			AssetCode:           selected.AssetCode,
+			ListAmountMinor:     selected.ListAmountMinor,
+			DiscountAmountMinor: selected.DiscountAmountMinor,
+			PayableAmountMinor:  selected.ListAmountMinor - selected.DiscountAmountMinor,
+		},
+		Limit: ProductLimit{
+			Global: ProductLimitRule{
+				Limit:         selected.GlobalLimit,
+				Interval:      string(selected.GlobalInterval),
+				IntervalCount: selected.GlobalIntervalCount,
+			},
+			User: ProductLimitRule{
+				Limit:         selected.UserLimit,
+				Interval:      string(selected.UserInterval),
+				IntervalCount: selected.UserIntervalCount,
+			},
+		},
+		Items: make([]ProductItem, 0, len(rows)),
+	}
+
+	for _, row := range rows {
+		if row.PriceID != selected.PriceID || row.ItemID == "" {
+			continue
+		}
+		product.Items = append(product.Items, ProductItem{
+			ID:           row.ItemID,
+			Quantity:     row.ItemQuantity,
+			RewardType:   string(row.RewardType),
+			DurationUnit: listProductsDurationUnitPtr(row.DurationUnit),
+			Type:         row.ItemType,
+			Title:        row.ItemTitle,
+			Description:  row.ItemDescription,
+			Rarity:       row.ItemRarity,
+			Position:     row.ItemPosition,
+		})
+	}
+	return product, true
+}
+
+func listProductsDurationUnitPtr(value sqlc.NullPaymentProductCacheDurationUnit) *string {
+	if !value.Valid {
+		return nil
+	}
+	unit := string(value.PaymentProductCacheDurationUnit)
+	return &unit
+}
+
+func (r *PaymentRepository) attachProductsLimitLocks(
+	ctx context.Context,
+	products []Product,
+	workspaceID string,
+	platformID int64,
+	platformUserID string,
+	now time.Time,
+) error {
+	rows, err := r.q.ListActiveProductLimitCounters(ctx, sqlc.ListActiveProductLimitCountersParams{
+		WorkspaceID:    workspaceID,
+		PlatformID:     platformID,
+		PlatformUserID: platformUserID,
+		WindowStart:    now,
+		WindowEnd:      now,
+	})
+	if err != nil {
+		return err
+	}
+
+	counts := make(map[string]uint64, len(rows))
+	for _, row := range rows {
+		counts[productLimitCounterKey(row.ProductID, string(row.CounterScope), row.PlatformUserID, row.WindowStart, row.WindowEnd)] = row.PaidCount
+	}
+
+	for index := range products {
+		attachProductListLimitLock(&products[index].Limit.Global, products[index].ID, "global", "", now, counts)
+		attachProductListLimitLock(&products[index].Limit.User, products[index].ID, "user", platformUserID, now, counts)
+	}
+	return nil
+}
+
+func attachProductListLimitLock(rule *ProductLimitRule, productID string, scope string, platformUserID string, now time.Time, counts map[string]uint64) {
+	if rule.Limit <= 0 || rule.Interval == "UNLIMITED" {
+		return
+	}
+	start, end, ok := limitWindow(rule.Interval, rule.IntervalCount, now)
+	if !ok {
+		return
+	}
+	if counts[productLimitCounterKey(productID, scope, platformUserID, start, end)] >= uint64(rule.Limit) {
+		rule.LockUntil = sql.NullTime{Time: end, Valid: true}
+	}
+}
+
+func productLimitCounterKey(productID string, scope string, platformUserID string, start time.Time, end time.Time) string {
+	return productID + "\x00" + scope + "\x00" + platformUserID + "\x00" + start.Format(time.RFC3339Nano) + "\x00" + end.Format(time.RFC3339Nano)
 }
 
 func selectProductCatalogPrice(rows []sqlc.ListProductCatalogCacheRowsRow, now time.Time) (sqlc.ListProductCatalogCacheRowsRow, bool) {

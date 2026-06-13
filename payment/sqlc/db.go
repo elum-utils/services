@@ -318,6 +318,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.insertPaidOrderIndexFromOrderStmt, err = db.PrepareContext(ctx, insertPaidOrderIndexFromOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertPaidOrderIndexFromOrder: %w", err)
 	}
+	if q.listActiveProductLimitCountersStmt, err = db.PrepareContext(ctx, listActiveProductLimitCounters); err != nil {
+		return nil, fmt.Errorf("error preparing query ListActiveProductLimitCounters: %w", err)
+	}
 	if q.listAssetsStmt, err = db.PrepareContext(ctx, listAssets); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAssets: %w", err)
 	}
@@ -338,6 +341,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listProductPriceOptionsStmt, err = db.PrepareContext(ctx, listProductPriceOptions); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProductPriceOptions: %w", err)
+	}
+	if q.listProductsCatalogCacheRowsStmt, err = db.PrepareContext(ctx, listProductsCatalogCacheRows); err != nil {
+		return nil, fmt.Errorf("error preparing query ListProductsCatalogCacheRows: %w", err)
 	}
 	if q.listProvidersStmt, err = db.PrepareContext(ctx, listProviders); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProviders: %w", err)
@@ -924,6 +930,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing insertPaidOrderIndexFromOrderStmt: %w", cerr)
 		}
 	}
+	if q.listActiveProductLimitCountersStmt != nil {
+		if cerr := q.listActiveProductLimitCountersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listActiveProductLimitCountersStmt: %w", cerr)
+		}
+	}
 	if q.listAssetsStmt != nil {
 		if cerr := q.listAssetsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAssetsStmt: %w", cerr)
@@ -957,6 +968,11 @@ func (q *Queries) Close() error {
 	if q.listProductPriceOptionsStmt != nil {
 		if cerr := q.listProductPriceOptionsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listProductPriceOptionsStmt: %w", cerr)
+		}
+	}
+	if q.listProductsCatalogCacheRowsStmt != nil {
+		if cerr := q.listProductsCatalogCacheRowsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listProductsCatalogCacheRowsStmt: %w", cerr)
 		}
 	}
 	if q.listProvidersStmt != nil {
@@ -1246,6 +1262,7 @@ type Queries struct {
 	incrementProductLimitCounterStmt                      *sql.Stmt
 	incrementPurchaseKeyUsageStmt                         *sql.Stmt
 	insertPaidOrderIndexFromOrderStmt                     *sql.Stmt
+	listActiveProductLimitCountersStmt                    *sql.Stmt
 	listAssetsStmt                                        *sql.Stmt
 	listProductCatalogCacheRowsStmt                       *sql.Stmt
 	listProductIDsForItemStmt                             *sql.Stmt
@@ -1253,6 +1270,7 @@ type Queries struct {
 	listProductPreviewCatalogCacheRowsStmt                *sql.Stmt
 	listProductPriceOptionCatalogRowsStmt                 *sql.Stmt
 	listProductPriceOptionsStmt                           *sql.Stmt
+	listProductsCatalogCacheRowsStmt                      *sql.Stmt
 	listProvidersStmt                                     *sql.Stmt
 	lockPaymentAttemptStmt                                *sql.Stmt
 	lockPaymentAttemptByProviderPaymentIDStmt             *sql.Stmt
@@ -1387,6 +1405,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		incrementProductLimitCounterStmt:                      q.incrementProductLimitCounterStmt,
 		incrementPurchaseKeyUsageStmt:                         q.incrementPurchaseKeyUsageStmt,
 		insertPaidOrderIndexFromOrderStmt:                     q.insertPaidOrderIndexFromOrderStmt,
+		listActiveProductLimitCountersStmt:                    q.listActiveProductLimitCountersStmt,
 		listAssetsStmt:                                        q.listAssetsStmt,
 		listProductCatalogCacheRowsStmt:                       q.listProductCatalogCacheRowsStmt,
 		listProductIDsForItemStmt:                             q.listProductIDsForItemStmt,
@@ -1394,6 +1413,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listProductPreviewCatalogCacheRowsStmt:                q.listProductPreviewCatalogCacheRowsStmt,
 		listProductPriceOptionCatalogRowsStmt:                 q.listProductPriceOptionCatalogRowsStmt,
 		listProductPriceOptionsStmt:                           q.listProductPriceOptionsStmt,
+		listProductsCatalogCacheRowsStmt:                      q.listProductsCatalogCacheRowsStmt,
 		listProvidersStmt:                                     q.listProvidersStmt,
 		lockPaymentAttemptStmt:                                q.lockPaymentAttemptStmt,
 		lockPaymentAttemptByProviderPaymentIDStmt:             q.lockPaymentAttemptByProviderPaymentIDStmt,

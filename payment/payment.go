@@ -24,10 +24,12 @@ import (
 	"github.com/elum-utils/services/payment/service/product"
 	"github.com/elum-utils/services/payment/service/refund"
 	"github.com/elum-utils/services/payment/service/subscription"
+	"github.com/elum-utils/services/payment/service/user"
 )
 
 type Payment struct {
 	Admin        *admin.Admin
+	User         *user.User
 	Asset        *asset.Asset
 	Product      *product.Product
 	Checkout     *checkout.Checkout
@@ -155,6 +157,7 @@ func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 
 func (a *Payment) adopt(running *Payment) {
 	a.Admin = running.Admin
+	a.User = running.User
 	a.Asset = running.Asset
 	a.Product = running.Product
 	a.Checkout = running.Checkout
@@ -180,10 +183,12 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 	plategaAPI := platega.NewWithOptions(rootCtx, db, repositoryOptions)
 	vkmaAPI := vkma.NewWithOptions(rootCtx, db, repositoryOptions)
 	yooKassaAPI := yookassa.NewWithOptions(rootCtx, db, repositoryOptions)
+	productAPI := product.NewWithOptions(rootCtx, db, repositoryOptions)
 	return &Payment{
 		Admin:        admin.NewWithOptions(rootCtx, db, repositoryOptions),
+		User:         user.New(productAPI),
 		Asset:        asset.NewWithOptions(rootCtx, db, repositoryOptions),
-		Product:      product.NewWithOptions(rootCtx, db, repositoryOptions),
+		Product:      productAPI,
 		Checkout:     checkout.NewWithOptions(rootCtx, db, repositoryOptions),
 		Refund:       refund.NewWithOptions(rootCtx, db, refundProviders(telegramStarsAPI, tonAPI, plategaAPI, yooKassaAPI), repositoryOptions),
 		Subscription: subscription.NewWithOptions(rootCtx, db, repositoryOptions),
