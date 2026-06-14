@@ -115,6 +115,10 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 		}
 	}
 
+	if err := r.migrateDynamicPricing(ctx); err != nil {
+		return err
+	}
+
 	if err := r.migrateLegacyTONStorage(ctx); err != nil {
 		return err
 	}

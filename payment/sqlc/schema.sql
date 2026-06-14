@@ -42,6 +42,32 @@ CREATE TABLE IF NOT EXISTS payment_provider_asset (
         FOREIGN KEY (asset_code) REFERENCES payment_asset (code)
 );
 
+CREATE TABLE IF NOT EXISTS payment_asset_rate (
+    asset_code VARCHAR(32) NOT NULL,
+    reference_asset_code VARCHAR(32) NOT NULL,
+    reference_per_asset_minor BIGINT UNSIGNED NOT NULL,
+    source VARCHAR(64) NOT NULL,
+    observed_at DATETIME NOT NULL,
+    auto_update_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    auto_update_source VARCHAR(32) NULL,
+    source_chain_id VARCHAR(32) NULL,
+    source_token_address VARCHAR(128) NULL,
+    last_attempt_at DATETIME NULL,
+    last_error TEXT NULL,
+    lease_owner VARCHAR(64) NULL,
+    lease_until DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (asset_code, reference_asset_code),
+    KEY payment_asset_rate_reference_idx (reference_asset_code, asset_code),
+    KEY payment_asset_rate_auto_lease_idx (auto_update_enabled, lease_until),
+    CONSTRAINT payment_asset_rate_asset_fk
+        FOREIGN KEY (asset_code) REFERENCES payment_asset (code),
+    CONSTRAINT payment_asset_rate_reference_asset_fk
+        FOREIGN KEY (reference_asset_code) REFERENCES payment_asset (code),
+    CONSTRAINT payment_asset_rate_positive_chk CHECK (reference_per_asset_minor > 0)
+);
+
 CREATE TABLE IF NOT EXISTS payment_product_group (
     workspace_id CHAR(36) NOT NULL,
     code VARCHAR(64) NOT NULL,
@@ -143,6 +169,11 @@ CREATE TABLE IF NOT EXISTS payment_price (
     asset_code VARCHAR(32) NOT NULL,
     list_amount_minor BIGINT UNSIGNED NOT NULL,
     discount_amount_minor BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    pricing_mode ENUM('fixed', 'dynamic') NOT NULL DEFAULT 'fixed',
+    reference_asset_code VARCHAR(32) NULL,
+    reference_list_amount_minor BIGINT UNSIGNED NULL,
+    reference_discount_amount_minor BIGINT UNSIGNED NULL,
+    coefficient DECIMAL(24,12) NULL,
     is_promotion TINYINT(1) NOT NULL DEFAULT 0,
     starts_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ends_at DATETIME NOT NULL DEFAULT '2124-01-01 00:00:00',
@@ -150,11 +181,33 @@ CREATE TABLE IF NOT EXISTS payment_price (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY payment_price_window_uq (workspace_id, product_id, asset_code, is_promotion, starts_at, ends_at),
     KEY payment_price_current_idx (workspace_id, product_id, asset_code, starts_at, ends_at, is_promotion, id),
+    KEY payment_price_dynamic_idx (workspace_id, asset_code, reference_asset_code, pricing_mode),
     CONSTRAINT payment_price_product_fk
         FOREIGN KEY (workspace_id, product_id) REFERENCES payment_product (workspace_id, id)
             ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT payment_price_asset_fk
-        FOREIGN KEY (asset_code) REFERENCES payment_asset (code)
+        FOREIGN KEY (asset_code) REFERENCES payment_asset (code),
+    CONSTRAINT payment_price_reference_asset_fk
+        FOREIGN KEY (reference_asset_code) REFERENCES payment_asset (code),
+    CONSTRAINT payment_price_reference_discount_chk CHECK (
+        reference_discount_amount_minor IS NULL
+        OR reference_list_amount_minor IS NULL
+        OR reference_discount_amount_minor <= reference_list_amount_minor
+    ),
+    CONSTRAINT payment_price_dynamic_chk CHECK (
+        (pricing_mode = 'fixed'
+            AND reference_asset_code IS NULL
+            AND reference_list_amount_minor IS NULL
+            AND reference_discount_amount_minor IS NULL
+            AND coefficient IS NULL)
+        OR
+        (pricing_mode = 'dynamic'
+            AND reference_asset_code IS NOT NULL
+            AND reference_list_amount_minor IS NOT NULL
+            AND reference_discount_amount_minor IS NOT NULL
+            AND coefficient IS NOT NULL
+            AND coefficient > 0)
+    )
 );
 
 CREATE TABLE IF NOT EXISTS payment_product_cache (

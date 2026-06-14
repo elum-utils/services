@@ -1,11 +1,14 @@
 package user
 
 import (
+	"github.com/elum-utils/services/payment/service/asset"
 	"github.com/elum-utils/services/payment/service/checkout"
 	"github.com/elum-utils/services/payment/service/product"
 	"github.com/elum-utils/services/payment/service/subscription"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
+
+type USDTPriceModel = asset.USDTPriceModel
 
 type ListProductsParams = product.ListParams
 type GetProductParams = product.GetParams

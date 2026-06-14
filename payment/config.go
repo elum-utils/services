@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"net/http"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -40,6 +41,10 @@ type Options struct {
 
 	Codec Codec
 	Mutex Mutex
+
+	PriceUpdateHTTPClient *http.Client
+	PriceUpdateInterval   time.Duration
+	PriceUpdateBaseURL    string
 }
 
 type DatabaseParams struct {

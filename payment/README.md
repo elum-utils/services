@@ -6,6 +6,7 @@
 
 - Единый каталог товаров для всех платежных провайдеров.
 - Мультивалютные цены в minor units: RUB, VOTE, XTR, TON и TON Jettons.
+- Глобальные курсы активов относительно USDT и автоматический пересчет dynamic-цен.
 - Поддержка fixed-товаров и товаров с покупаемым количеством.
 - Безопасные лимиты покупок по пользователю и глобально.
 - Отдельная модель заказа, платежной попытки, события провайдера и выдачи товара.
@@ -108,11 +109,25 @@ Provider-asset связь задает:
 - asset code;
 - list amount;
 - discount amount;
+- режим `fixed` или `dynamic`;
+- исходная стоимость в опорном активе;
+- коэффициент dynamic-цены;
 - promotion flag;
 - starts at;
 - ends at.
 
 Checkout всегда фиксирует snapshot цены в `payment_order`, чтобы последующие изменения каталога не меняли уже созданный заказ.
+
+Курсы глобальны для всей системы и не привязаны к workspace. Они хранятся целым числом в micro-USDT: `1_730_000` означает `1 TON = 1.73 USDT`. Один вызов `Admin.UpdateAssetRate` пересчитывает связанные dynamic-цены во всех workspace, перестраивает их SQL-кеши и инвалидирует Go-кеш.
+
+Автообновление актива включается через `Admin.ConfigureAssetRateAutoUpdate`. Общая частота задается один раз через `Options.PriceUpdateInterval` и по умолчанию равна 10 минутам. Worker проверяет курсы сразу при запуске, затем через каждый заданный интервал. Он использует DexScreener, объединяет до 30 контрактов в запрос, выбирает наиболее ликвидную пару, защищен DB lease для нескольких нод, восстанавливается после panic и завершается при graceful shutdown.
+
+Курсы доступны через:
+
+- `User.GetUSDTPrice(ctx, assetCode)`;
+- `User.ListUSDTPrices(ctx)`;
+- `Admin.GetAssetRate(ctx, assetCode, referenceAssetCode)`;
+- `Admin.ListAssetRates(ctx, params)`.
 
 ## Purchase Keys
 

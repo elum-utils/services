@@ -8,14 +8,19 @@ import (
 )
 
 type UpdatePriceParams struct {
-	ID                  uint64
-	WorkspaceID         string
-	AssetCode           string
-	ListAmountMinor     uint64
-	DiscountAmountMinor uint64
-	IsPromotion         bool
-	StartsAt            *time.Time
-	EndsAt              *time.Time
+	ID                           uint64
+	WorkspaceID                  string
+	AssetCode                    string
+	ListAmountMinor              uint64
+	DiscountAmountMinor          uint64
+	PricingMode                  string
+	ReferenceAssetCode           *string
+	ReferenceListAmountMinor     *uint64
+	ReferenceDiscountAmountMinor *uint64
+	Coefficient                  *string
+	IsPromotion                  bool
+	StartsAt                     *time.Time
+	EndsAt                       *time.Time
 }
 
 func (a *Product) UpdatePrice(ctx context.Context, params UpdatePriceParams) (int64, error) {
@@ -24,13 +29,18 @@ func (a *Product) UpdatePrice(ctx context.Context, params UpdatePriceParams) (in
 	ctx = mergedCtx
 
 	return a.repository.UpdateProductPrice(ctx, repository.ProductPriceUpdateParams{
-		ID:                  params.ID,
-		WorkspaceID:         params.WorkspaceID,
-		AssetCode:           params.AssetCode,
-		ListAmountMinor:     params.ListAmountMinor,
-		DiscountAmountMinor: params.DiscountAmountMinor,
-		IsPromotion:         params.IsPromotion,
-		StartsAt:            params.StartsAt,
-		EndsAt:              params.EndsAt,
+		ID:                           params.ID,
+		WorkspaceID:                  params.WorkspaceID,
+		AssetCode:                    params.AssetCode,
+		ListAmountMinor:              params.ListAmountMinor,
+		DiscountAmountMinor:          params.DiscountAmountMinor,
+		PricingMode:                  params.PricingMode,
+		ReferenceAssetCode:           params.ReferenceAssetCode,
+		ReferenceListAmountMinor:     params.ReferenceListAmountMinor,
+		ReferenceDiscountAmountMinor: params.ReferenceDiscountAmountMinor,
+		Coefficient:                  params.Coefficient,
+		IsPromotion:                  params.IsPromotion,
+		StartsAt:                     params.StartsAt,
+		EndsAt:                       params.EndsAt,
 	})
 }

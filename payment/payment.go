@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
@@ -33,17 +35,22 @@ type Payment struct {
 
 	Adapters *Adapters
 
-	asset        *asset.Asset
-	product      *product.Product
-	checkout     *checkout.Checkout
-	refund       *refund.Refund
-	subscription *subscription.Subscription
-	callbacks    *callbackutil.Store
-	client       *sqlwrap.Client
-	ownsClient   bool
-	rootCtx      context.Context
-	rootCancel   context.CancelFunc
-	background   sync.WaitGroup
+	asset             *asset.Asset
+	product           *product.Product
+	checkout          *checkout.Checkout
+	refund            *refund.Refund
+	subscription      *subscription.Subscription
+	callbacks         *callbackutil.Store
+	client            *sqlwrap.Client
+	ownsClient        bool
+	rootCtx           context.Context
+	rootCancel        context.CancelFunc
+	background        sync.WaitGroup
+	pricing           *repository.PaymentRepository
+	pricingHTTPClient *http.Client
+	pricingInterval   time.Duration
+	pricingBaseURL    string
+	pricingDone       <-chan struct{}
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -171,6 +178,11 @@ func (a *Payment) adopt(running *Payment) {
 	a.ownsClient = running.ownsClient
 	a.rootCtx = running.rootCtx
 	a.rootCancel = running.rootCancel
+	a.pricing = running.pricing
+	a.pricingHTTPClient = running.pricingHTTPClient
+	a.pricingInterval = running.pricingInterval
+	a.pricingBaseURL = running.pricingBaseURL
+	a.pricingDone = running.pricingDone
 }
 
 func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Payment {
@@ -190,7 +202,7 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 	checkoutAPI := checkout.NewWithOptions(rootCtx, db, repositoryOptions)
 	subscriptionAPI := subscription.NewWithOptions(rootCtx, db, repositoryOptions)
 	refundAPI := refund.NewWithOptions(rootCtx, db, refundProviders(telegramStarsAPI, tonAPI, plategaAPI, yooKassaAPI), repositoryOptions)
-	return &Payment{
+	payments := &Payment{
 		Admin:        admin.NewWithServices(rootCtx, db, repositoryOptions, assetAPI, productAPI, checkoutAPI, refundAPI),
 		User:         user.New(assetAPI, productAPI, checkoutAPI, subscriptionAPI),
 		asset:        assetAPI,
@@ -205,12 +217,18 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 			VKMA:          vkmaAPI,
 			YooKassa:      yooKassaAPI,
 		},
-		client:     db,
-		ownsClient: ownsClient,
-		callbacks:  callbackutil.NewWithTable(db.DB(), callbackutil.PaymentTable),
-		rootCtx:    rootCtx,
-		rootCancel: rootCancel,
+		client:            db,
+		ownsClient:        ownsClient,
+		callbacks:         callbackutil.NewWithTable(db.DB(), callbackutil.PaymentTable),
+		rootCtx:           rootCtx,
+		rootCancel:        rootCancel,
+		pricing:           repository.NewPaymentRepositoryWithOptions(db, repositoryOptions),
+		pricingHTTPClient: options.PriceUpdateHTTPClient,
+		pricingInterval:   options.PriceUpdateInterval,
+		pricingBaseURL:    options.PriceUpdateBaseURL,
 	}
+	payments.startPriceUpdater()
+	return payments
 }
 
 func (a *Payment) Close() error {
@@ -239,6 +257,12 @@ func (a *Payment) Close() error {
 		}
 	}
 	a.background.Wait()
+	if a.pricingDone != nil {
+		<-a.pricingDone
+	}
+	if a.pricing != nil {
+		err = errors.Join(err, a.pricing.Close())
+	}
 	if a.product != nil {
 		err = errors.Join(err, a.product.Close())
 	}

@@ -36,6 +36,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminGetAssetStmt, err = db.PrepareContext(ctx, adminGetAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetAsset: %w", err)
 	}
+	if q.adminGetAssetRateStmt, err = db.PrepareContext(ctx, adminGetAssetRate); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminGetAssetRate: %w", err)
+	}
 	if q.adminGetFulfillmentStmt, err = db.PrepareContext(ctx, adminGetFulfillment); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetFulfillment: %w", err)
 	}
@@ -80,6 +83,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.adminGetSubscriptionStmt, err = db.PrepareContext(ctx, adminGetSubscription); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetSubscription: %w", err)
+	}
+	if q.adminListAssetRatesStmt, err = db.PrepareContext(ctx, adminListAssetRates); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminListAssetRates: %w", err)
 	}
 	if q.adminListFulfillmentItemsStmt, err = db.PrepareContext(ctx, adminListFulfillmentItems); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListFulfillmentItems: %w", err)
@@ -165,6 +171,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminUpsertProviderStmt, err = db.PrepareContext(ctx, adminUpsertProvider); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertProvider: %w", err)
 	}
+	if q.claimAssetRateUpdateStmt, err = db.PrepareContext(ctx, claimAssetRateUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query ClaimAssetRateUpdate: %w", err)
+	}
+	if q.completeAssetRateUpdateStmt, err = db.PrepareContext(ctx, completeAssetRateUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query CompleteAssetRateUpdate: %w", err)
+	}
+	if q.configureAssetRateAutoUpdateStmt, err = db.PrepareContext(ctx, configureAssetRateAutoUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query ConfigureAssetRateAutoUpdate: %w", err)
+	}
 	if q.countActivePaymentSubscriptionsAllStmt, err = db.PrepareContext(ctx, countActivePaymentSubscriptionsAll); err != nil {
 		return nil, fmt.Errorf("error preparing query CountActivePaymentSubscriptionsAll: %w", err)
 	}
@@ -176,6 +191,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.countActivePaymentSubscriptionsForProviderStmt, err = db.PrepareContext(ctx, countActivePaymentSubscriptionsForProvider); err != nil {
 		return nil, fmt.Errorf("error preparing query CountActivePaymentSubscriptionsForProvider: %w", err)
+	}
+	if q.createDynamicProductPriceStmt, err = db.PrepareContext(ctx, createDynamicProductPrice); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateDynamicProductPrice: %w", err)
 	}
 	if q.createFulfillmentStmt, err = db.PrepareContext(ctx, createFulfillment); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateFulfillment: %w", err)
@@ -240,11 +258,20 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.ensureProductLimitCounterStmt, err = db.PrepareContext(ctx, ensureProductLimitCounter); err != nil {
 		return nil, fmt.Errorf("error preparing query EnsureProductLimitCounter: %w", err)
 	}
+	if q.failAssetRateUpdateStmt, err = db.PrepareContext(ctx, failAssetRateUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query FailAssetRateUpdate: %w", err)
+	}
 	if q.getAssetStmt, err = db.PrepareContext(ctx, getAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAsset: %w", err)
 	}
 	if q.getAssetByChainContractStmt, err = db.PrepareContext(ctx, getAssetByChainContract); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAssetByChainContract: %w", err)
+	}
+	if q.getAssetRateForPricingStmt, err = db.PrepareContext(ctx, getAssetRateForPricing); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAssetRateForPricing: %w", err)
+	}
+	if q.getAssetUSDTPriceStmt, err = db.PrepareContext(ctx, getAssetUSDTPrice); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAssetUSDTPrice: %w", err)
 	}
 	if q.getCheckoutProductStmt, err = db.PrepareContext(ctx, getCheckoutProduct); err != nil {
 		return nil, fmt.Errorf("error preparing query GetCheckoutProduct: %w", err)
@@ -321,8 +348,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listActiveProductLimitCountersStmt, err = db.PrepareContext(ctx, listActiveProductLimitCounters); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveProductLimitCounters: %w", err)
 	}
+	if q.listAssetUSDTPricesStmt, err = db.PrepareContext(ctx, listAssetUSDTPrices); err != nil {
+		return nil, fmt.Errorf("error preparing query ListAssetUSDTPrices: %w", err)
+	}
 	if q.listAssetsStmt, err = db.PrepareContext(ctx, listAssets); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAssets: %w", err)
+	}
+	if q.listDueAssetRateUpdatesStmt, err = db.PrepareContext(ctx, listDueAssetRateUpdates); err != nil {
+		return nil, fmt.Errorf("error preparing query ListDueAssetRateUpdates: %w", err)
+	}
+	if q.listDynamicPricesForRateStmt, err = db.PrepareContext(ctx, listDynamicPricesForRate); err != nil {
+		return nil, fmt.Errorf("error preparing query ListDynamicPricesForRate: %w", err)
 	}
 	if q.listProductCatalogCacheRowsStmt, err = db.PrepareContext(ctx, listProductCatalogCacheRows); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProductCatalogCacheRows: %w", err)
@@ -399,6 +435,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.snapshotPaymentOrderItemsStmt, err = db.PrepareContext(ctx, snapshotPaymentOrderItems); err != nil {
 		return nil, fmt.Errorf("error preparing query SnapshotPaymentOrderItems: %w", err)
 	}
+	if q.updateDynamicPriceAmountsStmt, err = db.PrepareContext(ctx, updateDynamicPriceAmounts); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateDynamicPriceAmounts: %w", err)
+	}
+	if q.updateDynamicProductPriceStmt, err = db.PrepareContext(ctx, updateDynamicProductPrice); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateDynamicProductPrice: %w", err)
+	}
 	if q.updatePaymentAttemptStatusStmt, err = db.PrepareContext(ctx, updatePaymentAttemptStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdatePaymentAttemptStatus: %w", err)
 	}
@@ -410,6 +452,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.upsertAssetStmt, err = db.PrepareContext(ctx, upsertAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertAsset: %w", err)
+	}
+	if q.upsertAssetRateStmt, err = db.PrepareContext(ctx, upsertAssetRate); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertAssetRate: %w", err)
 	}
 	if q.upsertItemStmt, err = db.PrepareContext(ctx, upsertItem); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertItem: %w", err)
@@ -458,6 +503,11 @@ func (q *Queries) Close() error {
 	if q.adminGetAssetStmt != nil {
 		if cerr := q.adminGetAssetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminGetAssetStmt: %w", cerr)
+		}
+	}
+	if q.adminGetAssetRateStmt != nil {
+		if cerr := q.adminGetAssetRateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminGetAssetRateStmt: %w", cerr)
 		}
 	}
 	if q.adminGetFulfillmentStmt != nil {
@@ -533,6 +583,11 @@ func (q *Queries) Close() error {
 	if q.adminGetSubscriptionStmt != nil {
 		if cerr := q.adminGetSubscriptionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminGetSubscriptionStmt: %w", cerr)
+		}
+	}
+	if q.adminListAssetRatesStmt != nil {
+		if cerr := q.adminListAssetRatesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminListAssetRatesStmt: %w", cerr)
 		}
 	}
 	if q.adminListFulfillmentItemsStmt != nil {
@@ -675,6 +730,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminUpsertProviderStmt: %w", cerr)
 		}
 	}
+	if q.claimAssetRateUpdateStmt != nil {
+		if cerr := q.claimAssetRateUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing claimAssetRateUpdateStmt: %w", cerr)
+		}
+	}
+	if q.completeAssetRateUpdateStmt != nil {
+		if cerr := q.completeAssetRateUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing completeAssetRateUpdateStmt: %w", cerr)
+		}
+	}
+	if q.configureAssetRateAutoUpdateStmt != nil {
+		if cerr := q.configureAssetRateAutoUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing configureAssetRateAutoUpdateStmt: %w", cerr)
+		}
+	}
 	if q.countActivePaymentSubscriptionsAllStmt != nil {
 		if cerr := q.countActivePaymentSubscriptionsAllStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing countActivePaymentSubscriptionsAllStmt: %w", cerr)
@@ -693,6 +763,11 @@ func (q *Queries) Close() error {
 	if q.countActivePaymentSubscriptionsForProviderStmt != nil {
 		if cerr := q.countActivePaymentSubscriptionsForProviderStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing countActivePaymentSubscriptionsForProviderStmt: %w", cerr)
+		}
+	}
+	if q.createDynamicProductPriceStmt != nil {
+		if cerr := q.createDynamicProductPriceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createDynamicProductPriceStmt: %w", cerr)
 		}
 	}
 	if q.createFulfillmentStmt != nil {
@@ -800,6 +875,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing ensureProductLimitCounterStmt: %w", cerr)
 		}
 	}
+	if q.failAssetRateUpdateStmt != nil {
+		if cerr := q.failAssetRateUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing failAssetRateUpdateStmt: %w", cerr)
+		}
+	}
 	if q.getAssetStmt != nil {
 		if cerr := q.getAssetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAssetStmt: %w", cerr)
@@ -808,6 +888,16 @@ func (q *Queries) Close() error {
 	if q.getAssetByChainContractStmt != nil {
 		if cerr := q.getAssetByChainContractStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAssetByChainContractStmt: %w", cerr)
+		}
+	}
+	if q.getAssetRateForPricingStmt != nil {
+		if cerr := q.getAssetRateForPricingStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAssetRateForPricingStmt: %w", cerr)
+		}
+	}
+	if q.getAssetUSDTPriceStmt != nil {
+		if cerr := q.getAssetUSDTPriceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAssetUSDTPriceStmt: %w", cerr)
 		}
 	}
 	if q.getCheckoutProductStmt != nil {
@@ -935,9 +1025,24 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listActiveProductLimitCountersStmt: %w", cerr)
 		}
 	}
+	if q.listAssetUSDTPricesStmt != nil {
+		if cerr := q.listAssetUSDTPricesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listAssetUSDTPricesStmt: %w", cerr)
+		}
+	}
 	if q.listAssetsStmt != nil {
 		if cerr := q.listAssetsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAssetsStmt: %w", cerr)
+		}
+	}
+	if q.listDueAssetRateUpdatesStmt != nil {
+		if cerr := q.listDueAssetRateUpdatesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listDueAssetRateUpdatesStmt: %w", cerr)
+		}
+	}
+	if q.listDynamicPricesForRateStmt != nil {
+		if cerr := q.listDynamicPricesForRateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listDynamicPricesForRateStmt: %w", cerr)
 		}
 	}
 	if q.listProductCatalogCacheRowsStmt != nil {
@@ -1065,6 +1170,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing snapshotPaymentOrderItemsStmt: %w", cerr)
 		}
 	}
+	if q.updateDynamicPriceAmountsStmt != nil {
+		if cerr := q.updateDynamicPriceAmountsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateDynamicPriceAmountsStmt: %w", cerr)
+		}
+	}
+	if q.updateDynamicProductPriceStmt != nil {
+		if cerr := q.updateDynamicProductPriceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateDynamicProductPriceStmt: %w", cerr)
+		}
+	}
 	if q.updatePaymentAttemptStatusStmt != nil {
 		if cerr := q.updatePaymentAttemptStatusStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updatePaymentAttemptStatusStmt: %w", cerr)
@@ -1083,6 +1198,11 @@ func (q *Queries) Close() error {
 	if q.upsertAssetStmt != nil {
 		if cerr := q.upsertAssetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing upsertAssetStmt: %w", cerr)
+		}
+	}
+	if q.upsertAssetRateStmt != nil {
+		if cerr := q.upsertAssetRateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertAssetRateStmt: %w", cerr)
 		}
 	}
 	if q.upsertItemStmt != nil {
@@ -1168,6 +1288,7 @@ type Queries struct {
 	adminDeleteProductLimitCounterStmt                    *sql.Stmt
 	adminDeleteProviderStmt                               *sql.Stmt
 	adminGetAssetStmt                                     *sql.Stmt
+	adminGetAssetRateStmt                                 *sql.Stmt
 	adminGetFulfillmentStmt                               *sql.Stmt
 	adminGetItemStmt                                      *sql.Stmt
 	adminGetLocalizationStmt                              *sql.Stmt
@@ -1183,6 +1304,7 @@ type Queries struct {
 	adminGetPurchaseKeyStmt                               *sql.Stmt
 	adminGetRefundStmt                                    *sql.Stmt
 	adminGetSubscriptionStmt                              *sql.Stmt
+	adminListAssetRatesStmt                               *sql.Stmt
 	adminListFulfillmentItemsStmt                         *sql.Stmt
 	adminListFulfillmentsStmt                             *sql.Stmt
 	adminListItemsStmt                                    *sql.Stmt
@@ -1211,10 +1333,14 @@ type Queries struct {
 	adminUpdatePurchaseKeyStatusStmt                      *sql.Stmt
 	adminUpdateRefundStatusStmt                           *sql.Stmt
 	adminUpsertProviderStmt                               *sql.Stmt
+	claimAssetRateUpdateStmt                              *sql.Stmt
+	completeAssetRateUpdateStmt                           *sql.Stmt
+	configureAssetRateAutoUpdateStmt                      *sql.Stmt
 	countActivePaymentSubscriptionsAllStmt                *sql.Stmt
 	countActivePaymentSubscriptionsForProductStmt         *sql.Stmt
 	countActivePaymentSubscriptionsForProductProviderStmt *sql.Stmt
 	countActivePaymentSubscriptionsForProviderStmt        *sql.Stmt
+	createDynamicProductPriceStmt                         *sql.Stmt
 	createFulfillmentStmt                                 *sql.Stmt
 	createFulfillmentItemStmt                             *sql.Stmt
 	createPaymentAttemptStmt                              *sql.Stmt
@@ -1236,8 +1362,11 @@ type Queries struct {
 	deleteProviderAssetStmt                               *sql.Stmt
 	deleteWorkspaceProductCacheStmt                       *sql.Stmt
 	ensureProductLimitCounterStmt                         *sql.Stmt
+	failAssetRateUpdateStmt                               *sql.Stmt
 	getAssetStmt                                          *sql.Stmt
 	getAssetByChainContractStmt                           *sql.Stmt
+	getAssetRateForPricingStmt                            *sql.Stmt
+	getAssetUSDTPriceStmt                                 *sql.Stmt
 	getCheckoutProductStmt                                *sql.Stmt
 	getCurrentProductPriceStmt                            *sql.Stmt
 	getFulfilledAttemptResultStmt                         *sql.Stmt
@@ -1263,7 +1392,10 @@ type Queries struct {
 	incrementPurchaseKeyUsageStmt                         *sql.Stmt
 	insertPaidOrderIndexFromOrderStmt                     *sql.Stmt
 	listActiveProductLimitCountersStmt                    *sql.Stmt
+	listAssetUSDTPricesStmt                               *sql.Stmt
 	listAssetsStmt                                        *sql.Stmt
+	listDueAssetRateUpdatesStmt                           *sql.Stmt
+	listDynamicPricesForRateStmt                          *sql.Stmt
 	listProductCatalogCacheRowsStmt                       *sql.Stmt
 	listProductIDsForItemStmt                             *sql.Stmt
 	listProductLocalesStmt                                *sql.Stmt
@@ -1289,10 +1421,13 @@ type Queries struct {
 	refreshPaymentDailyStatsStmt                          *sql.Stmt
 	setPaymentAttemptProviderChargeIDStmt                 *sql.Stmt
 	snapshotPaymentOrderItemsStmt                         *sql.Stmt
+	updateDynamicPriceAmountsStmt                         *sql.Stmt
+	updateDynamicProductPriceStmt                         *sql.Stmt
 	updatePaymentAttemptStatusStmt                        *sql.Stmt
 	updatePaymentSubscriptionStatusStmt                   *sql.Stmt
 	updateProductPriceStmt                                *sql.Stmt
 	upsertAssetStmt                                       *sql.Stmt
+	upsertAssetRateStmt                                   *sql.Stmt
 	upsertItemStmt                                        *sql.Stmt
 	upsertLocalizationStmt                                *sql.Stmt
 	upsertPaymentSubscriptionStmt                         *sql.Stmt
@@ -1311,6 +1446,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminDeleteProductLimitCounterStmt:                    q.adminDeleteProductLimitCounterStmt,
 		adminDeleteProviderStmt:                               q.adminDeleteProviderStmt,
 		adminGetAssetStmt:                                     q.adminGetAssetStmt,
+		adminGetAssetRateStmt:                                 q.adminGetAssetRateStmt,
 		adminGetFulfillmentStmt:                               q.adminGetFulfillmentStmt,
 		adminGetItemStmt:                                      q.adminGetItemStmt,
 		adminGetLocalizationStmt:                              q.adminGetLocalizationStmt,
@@ -1326,6 +1462,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminGetPurchaseKeyStmt:                               q.adminGetPurchaseKeyStmt,
 		adminGetRefundStmt:                                    q.adminGetRefundStmt,
 		adminGetSubscriptionStmt:                              q.adminGetSubscriptionStmt,
+		adminListAssetRatesStmt:                               q.adminListAssetRatesStmt,
 		adminListFulfillmentItemsStmt:                         q.adminListFulfillmentItemsStmt,
 		adminListFulfillmentsStmt:                             q.adminListFulfillmentsStmt,
 		adminListItemsStmt:                                    q.adminListItemsStmt,
@@ -1354,10 +1491,14 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpdatePurchaseKeyStatusStmt:                      q.adminUpdatePurchaseKeyStatusStmt,
 		adminUpdateRefundStatusStmt:                           q.adminUpdateRefundStatusStmt,
 		adminUpsertProviderStmt:                               q.adminUpsertProviderStmt,
+		claimAssetRateUpdateStmt:                              q.claimAssetRateUpdateStmt,
+		completeAssetRateUpdateStmt:                           q.completeAssetRateUpdateStmt,
+		configureAssetRateAutoUpdateStmt:                      q.configureAssetRateAutoUpdateStmt,
 		countActivePaymentSubscriptionsAllStmt:                q.countActivePaymentSubscriptionsAllStmt,
 		countActivePaymentSubscriptionsForProductStmt:         q.countActivePaymentSubscriptionsForProductStmt,
 		countActivePaymentSubscriptionsForProductProviderStmt: q.countActivePaymentSubscriptionsForProductProviderStmt,
 		countActivePaymentSubscriptionsForProviderStmt:        q.countActivePaymentSubscriptionsForProviderStmt,
+		createDynamicProductPriceStmt:                         q.createDynamicProductPriceStmt,
 		createFulfillmentStmt:                                 q.createFulfillmentStmt,
 		createFulfillmentItemStmt:                             q.createFulfillmentItemStmt,
 		createPaymentAttemptStmt:                              q.createPaymentAttemptStmt,
@@ -1379,8 +1520,11 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteProviderAssetStmt:                               q.deleteProviderAssetStmt,
 		deleteWorkspaceProductCacheStmt:                       q.deleteWorkspaceProductCacheStmt,
 		ensureProductLimitCounterStmt:                         q.ensureProductLimitCounterStmt,
+		failAssetRateUpdateStmt:                               q.failAssetRateUpdateStmt,
 		getAssetStmt:                                          q.getAssetStmt,
 		getAssetByChainContractStmt:                           q.getAssetByChainContractStmt,
+		getAssetRateForPricingStmt:                            q.getAssetRateForPricingStmt,
+		getAssetUSDTPriceStmt:                                 q.getAssetUSDTPriceStmt,
 		getCheckoutProductStmt:                                q.getCheckoutProductStmt,
 		getCurrentProductPriceStmt:                            q.getCurrentProductPriceStmt,
 		getFulfilledAttemptResultStmt:                         q.getFulfilledAttemptResultStmt,
@@ -1406,7 +1550,10 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		incrementPurchaseKeyUsageStmt:                         q.incrementPurchaseKeyUsageStmt,
 		insertPaidOrderIndexFromOrderStmt:                     q.insertPaidOrderIndexFromOrderStmt,
 		listActiveProductLimitCountersStmt:                    q.listActiveProductLimitCountersStmt,
+		listAssetUSDTPricesStmt:                               q.listAssetUSDTPricesStmt,
 		listAssetsStmt:                                        q.listAssetsStmt,
+		listDueAssetRateUpdatesStmt:                           q.listDueAssetRateUpdatesStmt,
+		listDynamicPricesForRateStmt:                          q.listDynamicPricesForRateStmt,
 		listProductCatalogCacheRowsStmt:                       q.listProductCatalogCacheRowsStmt,
 		listProductIDsForItemStmt:                             q.listProductIDsForItemStmt,
 		listProductLocalesStmt:                                q.listProductLocalesStmt,
@@ -1432,10 +1579,13 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		refreshPaymentDailyStatsStmt:                          q.refreshPaymentDailyStatsStmt,
 		setPaymentAttemptProviderChargeIDStmt:                 q.setPaymentAttemptProviderChargeIDStmt,
 		snapshotPaymentOrderItemsStmt:                         q.snapshotPaymentOrderItemsStmt,
+		updateDynamicPriceAmountsStmt:                         q.updateDynamicPriceAmountsStmt,
+		updateDynamicProductPriceStmt:                         q.updateDynamicProductPriceStmt,
 		updatePaymentAttemptStatusStmt:                        q.updatePaymentAttemptStatusStmt,
 		updatePaymentSubscriptionStatusStmt:                   q.updatePaymentSubscriptionStatusStmt,
 		updateProductPriceStmt:                                q.updateProductPriceStmt,
 		upsertAssetStmt:                                       q.upsertAssetStmt,
+		upsertAssetRateStmt:                                   q.upsertAssetRateStmt,
 		upsertItemStmt:                                        q.upsertItemStmt,
 		upsertLocalizationStmt:                                q.upsertLocalizationStmt,
 		upsertPaymentSubscriptionStmt:                         q.upsertPaymentSubscriptionStmt,

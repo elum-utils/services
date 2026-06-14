@@ -1,6 +1,13 @@
 package asset
 
-import paymentsqlc "github.com/elum-utils/services/payment/sqlc"
+import (
+	"time"
+
+	"github.com/elum-utils/services/payment/repository"
+	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
+)
+
+const USDTAssetCode = repository.USDTAssetCode
 
 type UpsertParams struct {
 	Code            string
@@ -20,4 +27,15 @@ type ProviderUpsertParams struct {
 	MaxAmountMinor  *int64
 	MerchantAccount *string
 	IsActive        bool
+}
+
+type USDTPriceModel struct {
+	AssetCode          string    `json:"asset_code"`
+	AssetTitle         string    `json:"asset_title"`
+	Scale              uint16    `json:"scale"`
+	ReferenceAssetCode string    `json:"reference_asset_code"`
+	USDTPerAssetMinor  uint64    `json:"usdt_per_asset_minor"`
+	Source             string    `json:"source"`
+	ObservedAt         time.Time `json:"observed_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }

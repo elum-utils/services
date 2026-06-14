@@ -107,6 +107,20 @@ func (r *PaymentRepository) AdminGetPrice(ctx context.Context, params paymentsql
 	return r.q.AdminGetPrice(ctx, params)
 }
 
+func (r *PaymentRepository) AdminGetAssetRate(
+	ctx context.Context,
+	params paymentsqlc.AdminGetAssetRateParams,
+) (paymentsqlc.PaymentAssetRate, error) {
+	return r.q.AdminGetAssetRate(ctx, params)
+}
+
+func (r *PaymentRepository) AdminListAssetRates(
+	ctx context.Context,
+	params paymentsqlc.AdminListAssetRatesParams,
+) ([]paymentsqlc.PaymentAssetRate, error) {
+	return r.q.AdminListAssetRates(ctx, params)
+}
+
 func (r *PaymentRepository) AdminListProductLimitCounters(ctx context.Context, params paymentsqlc.AdminListProductLimitCountersParams) ([]paymentsqlc.PaymentProductLimitCounter, error) {
 	return r.q.AdminListProductLimitCounters(ctx, params)
 }

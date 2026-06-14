@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/elum-utils/services/payment/repository"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
+
+const AssetRateSourceDexScreener = repository.AssetRateSourceDexScreener
 
 type PageParams struct {
 	Limit  int32
@@ -137,6 +140,35 @@ type PriceListParams struct {
 	ProductID   string
 	AssetCode   string
 	Page        PageParams
+}
+
+type UpdateAssetRateParams struct {
+	AssetCode              string
+	ReferenceAssetCode     string
+	ReferencePerAssetMinor uint64
+	Source                 string
+	ObservedAt             time.Time
+}
+
+type UpdateAssetRateResult struct {
+	UpdatedPrices      uint64 `json:"updated_prices"`
+	AffectedProducts   uint64 `json:"affected_products"`
+	AffectedWorkspaces uint64 `json:"affected_workspaces"`
+}
+
+type ConfigureAssetRateAutoUpdateParams struct {
+	AssetCode          string
+	ReferenceAssetCode string
+	Enabled            bool
+	Source             string
+	SourceChainID      string
+	SourceTokenAddress *string
+}
+
+type AssetRateListParams struct {
+	AssetCode          string
+	ReferenceAssetCode string
+	Page               PageParams
 }
 
 type ProductLimitCounterListParams struct {

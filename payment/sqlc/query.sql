@@ -287,17 +287,165 @@ INSERT INTO payment_price (
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
+-- name: CreateDynamicProductPrice :execlastid
+INSERT INTO payment_price (
+    workspace_id, product_id, asset_code, list_amount_minor, discount_amount_minor,
+    pricing_mode, reference_asset_code, reference_list_amount_minor,
+    reference_discount_amount_minor, coefficient, is_promotion, starts_at, ends_at
+)
+VALUES (?, ?, ?, ?, ?, 'dynamic', ?, ?, ?, ?, ?, ?, ?);
+
 -- name: UpdateProductPrice :execrows
 UPDATE payment_price
 SET asset_code = ?,
     list_amount_minor = ?,
     discount_amount_minor = ?,
+    pricing_mode = 'fixed',
+    reference_asset_code = NULL,
+    reference_list_amount_minor = NULL,
+    reference_discount_amount_minor = NULL,
+    coefficient = NULL,
     is_promotion = ?,
     starts_at = ?,
     ends_at = ?,
     updated_at = NOW()
 WHERE workspace_id = ?
   AND id = ?;
+
+-- name: UpdateDynamicProductPrice :execrows
+UPDATE payment_price
+SET asset_code = ?,
+    list_amount_minor = ?,
+    discount_amount_minor = ?,
+    pricing_mode = 'dynamic',
+    reference_asset_code = ?,
+    reference_list_amount_minor = ?,
+    reference_discount_amount_minor = ?,
+    coefficient = ?,
+    is_promotion = ?,
+    starts_at = ?,
+    ends_at = ?,
+    updated_at = NOW()
+WHERE workspace_id = ?
+  AND id = ?;
+
+-- name: GetAssetRateForPricing :one
+SELECT r.reference_per_asset_minor, target.scale AS target_scale
+FROM payment_asset_rate r
+JOIN payment_asset target ON target.code = r.asset_code
+WHERE r.asset_code = ?
+  AND r.reference_asset_code = ?
+LIMIT 1
+FOR UPDATE;
+
+-- name: GetAssetUSDTPrice :one
+SELECT
+    r.asset_code, a.title AS asset_title, a.scale, r.reference_asset_code,
+    r.reference_per_asset_minor, r.source, r.observed_at, r.updated_at
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.asset_code = ?
+  AND r.reference_asset_code = ?
+  AND a.is_active = 1
+LIMIT 1;
+
+-- name: ListAssetUSDTPrices :many
+SELECT
+    r.asset_code, a.title AS asset_title, a.scale, r.reference_asset_code,
+    r.reference_per_asset_minor, r.source, r.observed_at, r.updated_at
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.reference_asset_code = ?
+  AND a.is_active = 1
+ORDER BY r.asset_code;
+
+-- name: UpsertAssetRate :exec
+INSERT INTO payment_asset_rate (
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at
+)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    reference_per_asset_minor = VALUES(reference_per_asset_minor),
+    source = VALUES(source),
+    observed_at = VALUES(observed_at),
+    updated_at = NOW();
+
+-- name: ConfigureAssetRateAutoUpdate :execrows
+UPDATE payment_asset_rate
+SET auto_update_enabled = ?,
+    auto_update_source = ?,
+    source_chain_id = ?,
+    source_token_address = ?,
+    last_error = NULL,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?;
+
+-- name: ListDueAssetRateUpdates :many
+SELECT
+    r.asset_code, r.reference_asset_code, r.auto_update_source, r.source_chain_id,
+    COALESCE(r.source_token_address, a.contract_address) AS source_token_address
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.auto_update_enabled = 1
+  AND (r.lease_until IS NULL OR r.lease_until < NOW())
+ORDER BY r.asset_code
+LIMIT ?;
+
+-- name: ClaimAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET lease_owner = ?,
+    lease_until = DATE_ADD(NOW(), INTERVAL ? SECOND),
+    last_attempt_at = NOW(),
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND auto_update_enabled = 1
+  AND (lease_until IS NULL OR lease_until < NOW());
+
+-- name: CompleteAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET last_attempt_at = NOW(),
+    last_error = NULL,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND lease_owner = ?;
+
+-- name: FailAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET last_attempt_at = NOW(),
+    last_error = ?,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND lease_owner = ?;
+
+-- name: ListDynamicPricesForRate :many
+SELECT
+    workspace_id, id, product_id, reference_list_amount_minor,
+    reference_discount_amount_minor, coefficient
+FROM payment_price
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND pricing_mode = 'dynamic'
+ORDER BY id
+FOR UPDATE;
+
+-- name: UpdateDynamicPriceAmounts :execrows
+UPDATE payment_price
+SET list_amount_minor = ?,
+    discount_amount_minor = ?,
+    updated_at = NOW()
+WHERE workspace_id = ?
+  AND id = ?
+  AND pricing_mode = 'dynamic';
 
 -- name: GetProductPriceProductID :one
 SELECT product_id
@@ -318,6 +466,11 @@ SELECT
     pp.asset_code,
     pp.list_amount_minor,
     pp.discount_amount_minor,
+    pp.pricing_mode,
+    pp.reference_asset_code,
+    pp.reference_list_amount_minor,
+    pp.reference_discount_amount_minor,
+    pp.coefficient,
     pp.is_promotion,
     pp.starts_at,
     pp.ends_at,
@@ -2155,6 +2308,11 @@ SELECT
     asset_code,
     list_amount_minor,
     discount_amount_minor,
+    pricing_mode,
+    reference_asset_code,
+    reference_list_amount_minor,
+    reference_discount_amount_minor,
+    coefficient,
     is_promotion,
     starts_at,
     ends_at,
@@ -2165,6 +2323,29 @@ WHERE workspace_id = ?
   AND id = ?
 LIMIT 1;
 
+-- name: AdminGetAssetRate :one
+SELECT
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at,
+    auto_update_enabled, auto_update_source,
+    source_chain_id, source_token_address, last_attempt_at,
+    last_error, lease_owner, lease_until, created_at, updated_at
+FROM payment_asset_rate
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+LIMIT 1;
+
+-- name: AdminListAssetRates :many
+SELECT
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at,
+    auto_update_enabled, auto_update_source,
+    source_chain_id, source_token_address, last_attempt_at,
+    last_error, lease_owner, lease_until, created_at, updated_at
+FROM payment_asset_rate
+WHERE (? = '' OR asset_code = ?)
+  AND (? = '' OR reference_asset_code = ?)
+ORDER BY asset_code, reference_asset_code
+LIMIT ? OFFSET ?;
+
 -- name: AdminListPrices :many
 SELECT
     id,
@@ -2173,6 +2354,11 @@ SELECT
     asset_code,
     list_amount_minor,
     discount_amount_minor,
+    pricing_mode,
+    reference_asset_code,
+    reference_list_amount_minor,
+    reference_discount_amount_minor,
+    coefficient,
     is_promotion,
     starts_at,
     ends_at,

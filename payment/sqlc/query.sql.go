@@ -143,6 +143,46 @@ func (q *Queries) AdminGetAsset(ctx context.Context, code string) (PaymentAsset,
 	return i, err
 }
 
+const adminGetAssetRate = `-- name: AdminGetAssetRate :one
+SELECT
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at,
+    auto_update_enabled, auto_update_source,
+    source_chain_id, source_token_address, last_attempt_at,
+    last_error, lease_owner, lease_until, created_at, updated_at
+FROM payment_asset_rate
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+LIMIT 1
+`
+
+type AdminGetAssetRateParams struct {
+	AssetCode          string `json:"asset_code"`
+	ReferenceAssetCode string `json:"reference_asset_code"`
+}
+
+func (q *Queries) AdminGetAssetRate(ctx context.Context, arg AdminGetAssetRateParams) (PaymentAssetRate, error) {
+	row := q.queryRow(ctx, q.adminGetAssetRateStmt, adminGetAssetRate, arg.AssetCode, arg.ReferenceAssetCode)
+	var i PaymentAssetRate
+	err := row.Scan(
+		&i.AssetCode,
+		&i.ReferenceAssetCode,
+		&i.ReferencePerAssetMinor,
+		&i.Source,
+		&i.ObservedAt,
+		&i.AutoUpdateEnabled,
+		&i.AutoUpdateSource,
+		&i.SourceChainID,
+		&i.SourceTokenAddress,
+		&i.LastAttemptAt,
+		&i.LastError,
+		&i.LeaseOwner,
+		&i.LeaseUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const adminGetFulfillment = `-- name: AdminGetFulfillment :one
 SELECT
     id,
@@ -542,6 +582,11 @@ SELECT
     asset_code,
     list_amount_minor,
     discount_amount_minor,
+    pricing_mode,
+    reference_asset_code,
+    reference_list_amount_minor,
+    reference_discount_amount_minor,
+    coefficient,
     is_promotion,
     starts_at,
     ends_at,
@@ -568,6 +613,11 @@ func (q *Queries) AdminGetPrice(ctx context.Context, arg AdminGetPriceParams) (P
 		&i.AssetCode,
 		&i.ListAmountMinor,
 		&i.DiscountAmountMinor,
+		&i.PricingMode,
+		&i.ReferenceAssetCode,
+		&i.ReferenceListAmountMinor,
+		&i.ReferenceDiscountAmountMinor,
+		&i.Coefficient,
 		&i.IsPromotion,
 		&i.StartsAt,
 		&i.EndsAt,
@@ -918,6 +968,74 @@ func (q *Queries) AdminGetSubscription(ctx context.Context, arg AdminGetSubscrip
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const adminListAssetRates = `-- name: AdminListAssetRates :many
+SELECT
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at,
+    auto_update_enabled, auto_update_source,
+    source_chain_id, source_token_address, last_attempt_at,
+    last_error, lease_owner, lease_until, created_at, updated_at
+FROM payment_asset_rate
+WHERE (? = '' OR asset_code = ?)
+  AND (? = '' OR reference_asset_code = ?)
+ORDER BY asset_code, reference_asset_code
+LIMIT ? OFFSET ?
+`
+
+type AdminListAssetRatesParams struct {
+	Column1            interface{} `json:"column_1"`
+	AssetCode          string      `json:"asset_code"`
+	Column3            interface{} `json:"column_3"`
+	ReferenceAssetCode string      `json:"reference_asset_code"`
+	Limit              int32       `json:"limit"`
+	Offset             int32       `json:"offset"`
+}
+
+func (q *Queries) AdminListAssetRates(ctx context.Context, arg AdminListAssetRatesParams) ([]PaymentAssetRate, error) {
+	rows, err := q.query(ctx, q.adminListAssetRatesStmt, adminListAssetRates,
+		arg.Column1,
+		arg.AssetCode,
+		arg.Column3,
+		arg.ReferenceAssetCode,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentAssetRate
+	for rows.Next() {
+		var i PaymentAssetRate
+		if err := rows.Scan(
+			&i.AssetCode,
+			&i.ReferenceAssetCode,
+			&i.ReferencePerAssetMinor,
+			&i.Source,
+			&i.ObservedAt,
+			&i.AutoUpdateEnabled,
+			&i.AutoUpdateSource,
+			&i.SourceChainID,
+			&i.SourceTokenAddress,
+			&i.LastAttemptAt,
+			&i.LastError,
+			&i.LeaseOwner,
+			&i.LeaseUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListFulfillmentItems = `-- name: AdminListFulfillmentItems :many
@@ -1764,6 +1882,11 @@ SELECT
     asset_code,
     list_amount_minor,
     discount_amount_minor,
+    pricing_mode,
+    reference_asset_code,
+    reference_list_amount_minor,
+    reference_discount_amount_minor,
+    coefficient,
     is_promotion,
     starts_at,
     ends_at,
@@ -1811,6 +1934,11 @@ func (q *Queries) AdminListPrices(ctx context.Context, arg AdminListPricesParams
 			&i.AssetCode,
 			&i.ListAmountMinor,
 			&i.DiscountAmountMinor,
+			&i.PricingMode,
+			&i.ReferenceAssetCode,
+			&i.ReferenceListAmountMinor,
+			&i.ReferenceDiscountAmountMinor,
+			&i.Coefficient,
 			&i.IsPromotion,
 			&i.StartsAt,
 			&i.EndsAt,
@@ -2840,6 +2968,102 @@ func (q *Queries) AdminUpsertProvider(ctx context.Context, arg AdminUpsertProvid
 	return err
 }
 
+const claimAssetRateUpdate = `-- name: ClaimAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET lease_owner = ?,
+    lease_until = DATE_ADD(NOW(), INTERVAL ? SECOND),
+    last_attempt_at = NOW(),
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND auto_update_enabled = 1
+  AND (lease_until IS NULL OR lease_until < NOW())
+`
+
+type ClaimAssetRateUpdateParams struct {
+	LeaseOwner         sql.NullString `json:"lease_owner"`
+	DATEADD            interface{}    `json:"DATE_ADD"`
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode string         `json:"reference_asset_code"`
+}
+
+func (q *Queries) ClaimAssetRateUpdate(ctx context.Context, arg ClaimAssetRateUpdateParams) (int64, error) {
+	result, err := q.exec(ctx, q.claimAssetRateUpdateStmt, claimAssetRateUpdate,
+		arg.LeaseOwner,
+		arg.DATEADD,
+		arg.AssetCode,
+		arg.ReferenceAssetCode,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const completeAssetRateUpdate = `-- name: CompleteAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET last_attempt_at = NOW(),
+    last_error = NULL,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND lease_owner = ?
+`
+
+type CompleteAssetRateUpdateParams struct {
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode string         `json:"reference_asset_code"`
+	LeaseOwner         sql.NullString `json:"lease_owner"`
+}
+
+func (q *Queries) CompleteAssetRateUpdate(ctx context.Context, arg CompleteAssetRateUpdateParams) (int64, error) {
+	result, err := q.exec(ctx, q.completeAssetRateUpdateStmt, completeAssetRateUpdate, arg.AssetCode, arg.ReferenceAssetCode, arg.LeaseOwner)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const configureAssetRateAutoUpdate = `-- name: ConfigureAssetRateAutoUpdate :execrows
+UPDATE payment_asset_rate
+SET auto_update_enabled = ?,
+    auto_update_source = ?,
+    source_chain_id = ?,
+    source_token_address = ?,
+    last_error = NULL,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+`
+
+type ConfigureAssetRateAutoUpdateParams struct {
+	AutoUpdateEnabled  bool           `json:"auto_update_enabled"`
+	AutoUpdateSource   sql.NullString `json:"auto_update_source"`
+	SourceChainID      sql.NullString `json:"source_chain_id"`
+	SourceTokenAddress sql.NullString `json:"source_token_address"`
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode string         `json:"reference_asset_code"`
+}
+
+func (q *Queries) ConfigureAssetRateAutoUpdate(ctx context.Context, arg ConfigureAssetRateAutoUpdateParams) (int64, error) {
+	result, err := q.exec(ctx, q.configureAssetRateAutoUpdateStmt, configureAssetRateAutoUpdate,
+		arg.AutoUpdateEnabled,
+		arg.AutoUpdateSource,
+		arg.SourceChainID,
+		arg.SourceTokenAddress,
+		arg.AssetCode,
+		arg.ReferenceAssetCode,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countActivePaymentSubscriptionsAll = `-- name: CountActivePaymentSubscriptionsAll :one
 SELECT COUNT(*)
 FROM payment_subscription
@@ -2966,6 +3190,51 @@ func (q *Queries) CountActivePaymentSubscriptionsForProvider(ctx context.Context
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createDynamicProductPrice = `-- name: CreateDynamicProductPrice :execlastid
+INSERT INTO payment_price (
+    workspace_id, product_id, asset_code, list_amount_minor, discount_amount_minor,
+    pricing_mode, reference_asset_code, reference_list_amount_minor,
+    reference_discount_amount_minor, coefficient, is_promotion, starts_at, ends_at
+)
+VALUES (?, ?, ?, ?, ?, 'dynamic', ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateDynamicProductPriceParams struct {
+	WorkspaceID                  string         `json:"workspace_id"`
+	ProductID                    string         `json:"product_id"`
+	AssetCode                    string         `json:"asset_code"`
+	ListAmountMinor              uint64         `json:"list_amount_minor"`
+	DiscountAmountMinor          uint64         `json:"discount_amount_minor"`
+	ReferenceAssetCode           sql.NullString `json:"reference_asset_code"`
+	ReferenceListAmountMinor     sql.NullInt64  `json:"reference_list_amount_minor"`
+	ReferenceDiscountAmountMinor sql.NullInt64  `json:"reference_discount_amount_minor"`
+	Coefficient                  sql.NullString `json:"coefficient"`
+	IsPromotion                  bool           `json:"is_promotion"`
+	StartsAt                     time.Time      `json:"starts_at"`
+	EndsAt                       time.Time      `json:"ends_at"`
+}
+
+func (q *Queries) CreateDynamicProductPrice(ctx context.Context, arg CreateDynamicProductPriceParams) (int64, error) {
+	result, err := q.exec(ctx, q.createDynamicProductPriceStmt, createDynamicProductPrice,
+		arg.WorkspaceID,
+		arg.ProductID,
+		arg.AssetCode,
+		arg.ListAmountMinor,
+		arg.DiscountAmountMinor,
+		arg.ReferenceAssetCode,
+		arg.ReferenceListAmountMinor,
+		arg.ReferenceDiscountAmountMinor,
+		arg.Coefficient,
+		arg.IsPromotion,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 const createFulfillment = `-- name: CreateFulfillment :execlastid
@@ -3740,6 +4009,38 @@ func (q *Queries) EnsureProductLimitCounter(ctx context.Context, arg EnsureProdu
 	return result.RowsAffected()
 }
 
+const failAssetRateUpdate = `-- name: FailAssetRateUpdate :execrows
+UPDATE payment_asset_rate
+SET last_attempt_at = NOW(),
+    last_error = ?,
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = NOW()
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND lease_owner = ?
+`
+
+type FailAssetRateUpdateParams struct {
+	LastError          sql.NullString `json:"last_error"`
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode string         `json:"reference_asset_code"`
+	LeaseOwner         sql.NullString `json:"lease_owner"`
+}
+
+func (q *Queries) FailAssetRateUpdate(ctx context.Context, arg FailAssetRateUpdateParams) (int64, error) {
+	result, err := q.exec(ctx, q.failAssetRateUpdateStmt, failAssetRateUpdate,
+		arg.LastError,
+		arg.AssetCode,
+		arg.ReferenceAssetCode,
+		arg.LeaseOwner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getAsset = `-- name: GetAsset :one
 SELECT
     code,
@@ -3816,6 +4117,77 @@ func (q *Queries) GetAssetByChainContract(ctx context.Context, arg GetAssetByCha
 		&i.ContractAddress,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAssetRateForPricing = `-- name: GetAssetRateForPricing :one
+SELECT r.reference_per_asset_minor, target.scale AS target_scale
+FROM payment_asset_rate r
+JOIN payment_asset target ON target.code = r.asset_code
+WHERE r.asset_code = ?
+  AND r.reference_asset_code = ?
+LIMIT 1
+FOR UPDATE
+`
+
+type GetAssetRateForPricingParams struct {
+	AssetCode          string `json:"asset_code"`
+	ReferenceAssetCode string `json:"reference_asset_code"`
+}
+
+type GetAssetRateForPricingRow struct {
+	ReferencePerAssetMinor uint64 `json:"reference_per_asset_minor"`
+	TargetScale            uint16 `json:"target_scale"`
+}
+
+func (q *Queries) GetAssetRateForPricing(ctx context.Context, arg GetAssetRateForPricingParams) (GetAssetRateForPricingRow, error) {
+	row := q.queryRow(ctx, q.getAssetRateForPricingStmt, getAssetRateForPricing, arg.AssetCode, arg.ReferenceAssetCode)
+	var i GetAssetRateForPricingRow
+	err := row.Scan(&i.ReferencePerAssetMinor, &i.TargetScale)
+	return i, err
+}
+
+const getAssetUSDTPrice = `-- name: GetAssetUSDTPrice :one
+SELECT
+    r.asset_code, a.title AS asset_title, a.scale, r.reference_asset_code,
+    r.reference_per_asset_minor, r.source, r.observed_at, r.updated_at
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.asset_code = ?
+  AND r.reference_asset_code = ?
+  AND a.is_active = 1
+LIMIT 1
+`
+
+type GetAssetUSDTPriceParams struct {
+	AssetCode          string `json:"asset_code"`
+	ReferenceAssetCode string `json:"reference_asset_code"`
+}
+
+type GetAssetUSDTPriceRow struct {
+	AssetCode              string    `json:"asset_code"`
+	AssetTitle             string    `json:"asset_title"`
+	Scale                  uint16    `json:"scale"`
+	ReferenceAssetCode     string    `json:"reference_asset_code"`
+	ReferencePerAssetMinor uint64    `json:"reference_per_asset_minor"`
+	Source                 string    `json:"source"`
+	ObservedAt             time.Time `json:"observed_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+func (q *Queries) GetAssetUSDTPrice(ctx context.Context, arg GetAssetUSDTPriceParams) (GetAssetUSDTPriceRow, error) {
+	row := q.queryRow(ctx, q.getAssetUSDTPriceStmt, getAssetUSDTPrice, arg.AssetCode, arg.ReferenceAssetCode)
+	var i GetAssetUSDTPriceRow
+	err := row.Scan(
+		&i.AssetCode,
+		&i.AssetTitle,
+		&i.Scale,
+		&i.ReferenceAssetCode,
+		&i.ReferencePerAssetMinor,
+		&i.Source,
+		&i.ObservedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -3930,6 +4302,11 @@ SELECT
     pp.asset_code,
     pp.list_amount_minor,
     pp.discount_amount_minor,
+    pp.pricing_mode,
+    pp.reference_asset_code,
+    pp.reference_list_amount_minor,
+    pp.reference_discount_amount_minor,
+    pp.coefficient,
     pp.is_promotion,
     pp.starts_at,
     pp.ends_at,
@@ -3959,16 +4336,21 @@ type GetCurrentProductPriceParams struct {
 }
 
 type GetCurrentProductPriceRow struct {
-	ID                  uint64    `json:"id"`
-	ProductID           string    `json:"product_id"`
-	AssetCode           string    `json:"asset_code"`
-	ListAmountMinor     uint64    `json:"list_amount_minor"`
-	DiscountAmountMinor uint64    `json:"discount_amount_minor"`
-	IsPromotion         bool      `json:"is_promotion"`
-	StartsAt            time.Time `json:"starts_at"`
-	EndsAt              time.Time `json:"ends_at"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                           uint64                  `json:"id"`
+	ProductID                    string                  `json:"product_id"`
+	AssetCode                    string                  `json:"asset_code"`
+	ListAmountMinor              uint64                  `json:"list_amount_minor"`
+	DiscountAmountMinor          uint64                  `json:"discount_amount_minor"`
+	PricingMode                  PaymentPricePricingMode `json:"pricing_mode"`
+	ReferenceAssetCode           sql.NullString          `json:"reference_asset_code"`
+	ReferenceListAmountMinor     sql.NullInt64           `json:"reference_list_amount_minor"`
+	ReferenceDiscountAmountMinor sql.NullInt64           `json:"reference_discount_amount_minor"`
+	Coefficient                  sql.NullString          `json:"coefficient"`
+	IsPromotion                  bool                    `json:"is_promotion"`
+	StartsAt                     time.Time               `json:"starts_at"`
+	EndsAt                       time.Time               `json:"ends_at"`
+	CreatedAt                    time.Time               `json:"created_at"`
+	UpdatedAt                    time.Time               `json:"updated_at"`
 }
 
 func (q *Queries) GetCurrentProductPrice(ctx context.Context, arg GetCurrentProductPriceParams) (GetCurrentProductPriceRow, error) {
@@ -3985,6 +4367,11 @@ func (q *Queries) GetCurrentProductPrice(ctx context.Context, arg GetCurrentProd
 		&i.AssetCode,
 		&i.ListAmountMinor,
 		&i.DiscountAmountMinor,
+		&i.PricingMode,
+		&i.ReferenceAssetCode,
+		&i.ReferenceListAmountMinor,
+		&i.ReferenceDiscountAmountMinor,
+		&i.Coefficient,
 		&i.IsPromotion,
 		&i.StartsAt,
 		&i.EndsAt,
@@ -5510,6 +5897,60 @@ func (q *Queries) ListActiveProductLimitCounters(ctx context.Context, arg ListAc
 	return items, nil
 }
 
+const listAssetUSDTPrices = `-- name: ListAssetUSDTPrices :many
+SELECT
+    r.asset_code, a.title AS asset_title, a.scale, r.reference_asset_code,
+    r.reference_per_asset_minor, r.source, r.observed_at, r.updated_at
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.reference_asset_code = ?
+  AND a.is_active = 1
+ORDER BY r.asset_code
+`
+
+type ListAssetUSDTPricesRow struct {
+	AssetCode              string    `json:"asset_code"`
+	AssetTitle             string    `json:"asset_title"`
+	Scale                  uint16    `json:"scale"`
+	ReferenceAssetCode     string    `json:"reference_asset_code"`
+	ReferencePerAssetMinor uint64    `json:"reference_per_asset_minor"`
+	Source                 string    `json:"source"`
+	ObservedAt             time.Time `json:"observed_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+func (q *Queries) ListAssetUSDTPrices(ctx context.Context, referenceAssetCode string) ([]ListAssetUSDTPricesRow, error) {
+	rows, err := q.query(ctx, q.listAssetUSDTPricesStmt, listAssetUSDTPrices, referenceAssetCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetUSDTPricesRow
+	for rows.Next() {
+		var i ListAssetUSDTPricesRow
+		if err := rows.Scan(
+			&i.AssetCode,
+			&i.AssetTitle,
+			&i.Scale,
+			&i.ReferenceAssetCode,
+			&i.ReferencePerAssetMinor,
+			&i.Source,
+			&i.ObservedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT
     code,
@@ -5546,6 +5987,111 @@ func (q *Queries) ListAssets(ctx context.Context) ([]PaymentAsset, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDueAssetRateUpdates = `-- name: ListDueAssetRateUpdates :many
+SELECT
+    r.asset_code, r.reference_asset_code, r.auto_update_source, r.source_chain_id,
+    COALESCE(r.source_token_address, a.contract_address) AS source_token_address
+FROM payment_asset_rate r
+JOIN payment_asset a ON a.code = r.asset_code
+WHERE r.auto_update_enabled = 1
+  AND (r.lease_until IS NULL OR r.lease_until < NOW())
+ORDER BY r.asset_code
+LIMIT ?
+`
+
+type ListDueAssetRateUpdatesRow struct {
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode string         `json:"reference_asset_code"`
+	AutoUpdateSource   sql.NullString `json:"auto_update_source"`
+	SourceChainID      sql.NullString `json:"source_chain_id"`
+	SourceTokenAddress sql.NullString `json:"source_token_address"`
+}
+
+func (q *Queries) ListDueAssetRateUpdates(ctx context.Context, limit int32) ([]ListDueAssetRateUpdatesRow, error) {
+	rows, err := q.query(ctx, q.listDueAssetRateUpdatesStmt, listDueAssetRateUpdates, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueAssetRateUpdatesRow
+	for rows.Next() {
+		var i ListDueAssetRateUpdatesRow
+		if err := rows.Scan(
+			&i.AssetCode,
+			&i.ReferenceAssetCode,
+			&i.AutoUpdateSource,
+			&i.SourceChainID,
+			&i.SourceTokenAddress,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDynamicPricesForRate = `-- name: ListDynamicPricesForRate :many
+SELECT
+    workspace_id, id, product_id, reference_list_amount_minor,
+    reference_discount_amount_minor, coefficient
+FROM payment_price
+WHERE asset_code = ?
+  AND reference_asset_code = ?
+  AND pricing_mode = 'dynamic'
+ORDER BY id
+FOR UPDATE
+`
+
+type ListDynamicPricesForRateParams struct {
+	AssetCode          string         `json:"asset_code"`
+	ReferenceAssetCode sql.NullString `json:"reference_asset_code"`
+}
+
+type ListDynamicPricesForRateRow struct {
+	WorkspaceID                  string         `json:"workspace_id"`
+	ID                           uint64         `json:"id"`
+	ProductID                    string         `json:"product_id"`
+	ReferenceListAmountMinor     sql.NullInt64  `json:"reference_list_amount_minor"`
+	ReferenceDiscountAmountMinor sql.NullInt64  `json:"reference_discount_amount_minor"`
+	Coefficient                  sql.NullString `json:"coefficient"`
+}
+
+func (q *Queries) ListDynamicPricesForRate(ctx context.Context, arg ListDynamicPricesForRateParams) ([]ListDynamicPricesForRateRow, error) {
+	rows, err := q.query(ctx, q.listDynamicPricesForRateStmt, listDynamicPricesForRate, arg.AssetCode, arg.ReferenceAssetCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDynamicPricesForRateRow
+	for rows.Next() {
+		var i ListDynamicPricesForRateRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ID,
+			&i.ProductID,
+			&i.ReferenceListAmountMinor,
+			&i.ReferenceDiscountAmountMinor,
+			&i.Coefficient,
 		); err != nil {
 			return nil, err
 		}
@@ -7247,6 +7793,90 @@ func (q *Queries) SnapshotPaymentOrderItems(ctx context.Context, arg SnapshotPay
 	return err
 }
 
+const updateDynamicPriceAmounts = `-- name: UpdateDynamicPriceAmounts :execrows
+UPDATE payment_price
+SET list_amount_minor = ?,
+    discount_amount_minor = ?,
+    updated_at = NOW()
+WHERE workspace_id = ?
+  AND id = ?
+  AND pricing_mode = 'dynamic'
+`
+
+type UpdateDynamicPriceAmountsParams struct {
+	ListAmountMinor     uint64 `json:"list_amount_minor"`
+	DiscountAmountMinor uint64 `json:"discount_amount_minor"`
+	WorkspaceID         string `json:"workspace_id"`
+	ID                  uint64 `json:"id"`
+}
+
+func (q *Queries) UpdateDynamicPriceAmounts(ctx context.Context, arg UpdateDynamicPriceAmountsParams) (int64, error) {
+	result, err := q.exec(ctx, q.updateDynamicPriceAmountsStmt, updateDynamicPriceAmounts,
+		arg.ListAmountMinor,
+		arg.DiscountAmountMinor,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateDynamicProductPrice = `-- name: UpdateDynamicProductPrice :execrows
+UPDATE payment_price
+SET asset_code = ?,
+    list_amount_minor = ?,
+    discount_amount_minor = ?,
+    pricing_mode = 'dynamic',
+    reference_asset_code = ?,
+    reference_list_amount_minor = ?,
+    reference_discount_amount_minor = ?,
+    coefficient = ?,
+    is_promotion = ?,
+    starts_at = ?,
+    ends_at = ?,
+    updated_at = NOW()
+WHERE workspace_id = ?
+  AND id = ?
+`
+
+type UpdateDynamicProductPriceParams struct {
+	AssetCode                    string         `json:"asset_code"`
+	ListAmountMinor              uint64         `json:"list_amount_minor"`
+	DiscountAmountMinor          uint64         `json:"discount_amount_minor"`
+	ReferenceAssetCode           sql.NullString `json:"reference_asset_code"`
+	ReferenceListAmountMinor     sql.NullInt64  `json:"reference_list_amount_minor"`
+	ReferenceDiscountAmountMinor sql.NullInt64  `json:"reference_discount_amount_minor"`
+	Coefficient                  sql.NullString `json:"coefficient"`
+	IsPromotion                  bool           `json:"is_promotion"`
+	StartsAt                     time.Time      `json:"starts_at"`
+	EndsAt                       time.Time      `json:"ends_at"`
+	WorkspaceID                  string         `json:"workspace_id"`
+	ID                           uint64         `json:"id"`
+}
+
+func (q *Queries) UpdateDynamicProductPrice(ctx context.Context, arg UpdateDynamicProductPriceParams) (int64, error) {
+	result, err := q.exec(ctx, q.updateDynamicProductPriceStmt, updateDynamicProductPrice,
+		arg.AssetCode,
+		arg.ListAmountMinor,
+		arg.DiscountAmountMinor,
+		arg.ReferenceAssetCode,
+		arg.ReferenceListAmountMinor,
+		arg.ReferenceDiscountAmountMinor,
+		arg.Coefficient,
+		arg.IsPromotion,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updatePaymentAttemptStatus = `-- name: UpdatePaymentAttemptStatus :exec
 UPDATE payment_attempt
 SET status = ?,
@@ -7301,6 +7931,11 @@ UPDATE payment_price
 SET asset_code = ?,
     list_amount_minor = ?,
     discount_amount_minor = ?,
+    pricing_mode = 'fixed',
+    reference_asset_code = NULL,
+    reference_list_amount_minor = NULL,
+    reference_discount_amount_minor = NULL,
+    coefficient = NULL,
     is_promotion = ?,
     starts_at = ?,
     ends_at = ?,
@@ -7381,6 +8016,37 @@ func (q *Queries) UpsertAsset(ctx context.Context, arg UpsertAssetParams) error 
 		arg.Network,
 		arg.ContractAddress,
 		arg.IsActive,
+	)
+	return err
+}
+
+const upsertAssetRate = `-- name: UpsertAssetRate :exec
+INSERT INTO payment_asset_rate (
+    asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at
+)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    reference_per_asset_minor = VALUES(reference_per_asset_minor),
+    source = VALUES(source),
+    observed_at = VALUES(observed_at),
+    updated_at = NOW()
+`
+
+type UpsertAssetRateParams struct {
+	AssetCode              string    `json:"asset_code"`
+	ReferenceAssetCode     string    `json:"reference_asset_code"`
+	ReferencePerAssetMinor uint64    `json:"reference_per_asset_minor"`
+	Source                 string    `json:"source"`
+	ObservedAt             time.Time `json:"observed_at"`
+}
+
+func (q *Queries) UpsertAssetRate(ctx context.Context, arg UpsertAssetRateParams) error {
+	_, err := q.exec(ctx, q.upsertAssetRateStmt, upsertAssetRate,
+		arg.AssetCode,
+		arg.ReferenceAssetCode,
+		arg.ReferencePerAssetMinor,
+		arg.Source,
+		arg.ObservedAt,
 	)
 	return err
 }

@@ -77,25 +77,35 @@ type ProductItemUpsertParams struct {
 }
 
 type ProductPriceCreateParams struct {
-	WorkspaceID         string
-	ProductID           string
-	AssetCode           string
-	ListAmountMinor     uint64
-	DiscountAmountMinor uint64
-	IsPromotion         bool
-	StartsAt            *time.Time
-	EndsAt              *time.Time
+	WorkspaceID                  string
+	ProductID                    string
+	AssetCode                    string
+	ListAmountMinor              uint64
+	DiscountAmountMinor          uint64
+	PricingMode                  string
+	ReferenceAssetCode           *string
+	ReferenceListAmountMinor     *uint64
+	ReferenceDiscountAmountMinor *uint64
+	Coefficient                  *string
+	IsPromotion                  bool
+	StartsAt                     *time.Time
+	EndsAt                       *time.Time
 }
 
 type ProductPriceUpdateParams struct {
-	ID                  uint64
-	WorkspaceID         string
-	AssetCode           string
-	ListAmountMinor     uint64
-	DiscountAmountMinor uint64
-	IsPromotion         bool
-	StartsAt            *time.Time
-	EndsAt              *time.Time
+	ID                           uint64
+	WorkspaceID                  string
+	AssetCode                    string
+	ListAmountMinor              uint64
+	DiscountAmountMinor          uint64
+	PricingMode                  string
+	ReferenceAssetCode           *string
+	ReferenceListAmountMinor     *uint64
+	ReferenceDiscountAmountMinor *uint64
+	Coefficient                  *string
+	IsPromotion                  bool
+	StartsAt                     *time.Time
+	EndsAt                       *time.Time
 }
 
 func (r *PaymentRepository) UpsertProductGroup(ctx context.Context, params ProductGroupUpsertParams) error {
@@ -432,10 +442,6 @@ func (r *PaymentRepository) CreateProductPrice(ctx context.Context, params Produ
 	if err != nil {
 		return 0, err
 	}
-	if params.DiscountAmountMinor > params.ListAmountMinor {
-		return 0, ErrInvalidPrice
-	}
-
 	startsAt := sqlwrap.ValueFromPtr(params.StartsAt)
 	if startsAt.IsZero() {
 		startsAt = time.Now().Add(-time.Minute)
@@ -448,17 +454,26 @@ func (r *PaymentRepository) CreateProductPrice(ctx context.Context, params Produ
 
 	var id int64
 	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
-		var err error
-		id, err = tx.q.CreateProductPrice(ctx, paymentsqlc.CreateProductPriceParams{
-			WorkspaceID:         workspaceID,
-			ProductID:           params.ProductID,
-			AssetCode:           params.AssetCode,
-			ListAmountMinor:     params.ListAmountMinor,
-			DiscountAmountMinor: params.DiscountAmountMinor,
-			IsPromotion:         params.IsPromotion,
-			StartsAt:            startsAt,
-			EndsAt:              endsAt,
+		amounts, err := tx.resolveProductPriceAmounts(ctx, workspaceID, productPriceInput{
+			AssetCode: params.AssetCode, ListAmountMinor: params.ListAmountMinor,
+			DiscountAmountMinor: params.DiscountAmountMinor, PricingMode: params.PricingMode,
+			ReferenceAssetCode:           params.ReferenceAssetCode,
+			ReferenceListAmountMinor:     params.ReferenceListAmountMinor,
+			ReferenceDiscountAmountMinor: params.ReferenceDiscountAmountMinor,
+			Coefficient:                  params.Coefficient,
 		})
+		if err != nil {
+			return err
+		}
+		if amounts.dynamic {
+			id, err = tx.createDynamicProductPrice(ctx, workspaceID, params, amounts, startsAt, endsAt)
+		} else {
+			id, err = tx.q.CreateProductPrice(ctx, paymentsqlc.CreateProductPriceParams{
+				WorkspaceID: workspaceID, ProductID: params.ProductID, AssetCode: params.AssetCode,
+				ListAmountMinor: amounts.list, DiscountAmountMinor: amounts.discount,
+				IsPromotion: params.IsPromotion, StartsAt: startsAt, EndsAt: endsAt,
+			})
+		}
 		if err != nil {
 			return err
 		}
@@ -476,10 +491,6 @@ func (r *PaymentRepository) UpdateProductPrice(ctx context.Context, params Produ
 	if err != nil {
 		return 0, err
 	}
-	if params.DiscountAmountMinor > params.ListAmountMinor {
-		return 0, ErrInvalidPrice
-	}
-
 	startsAt := sqlwrap.ValueFromPtr(params.StartsAt)
 	if startsAt.IsZero() {
 		startsAt = time.Now().Add(-time.Minute)
@@ -499,16 +510,26 @@ func (r *PaymentRepository) UpdateProductPrice(ctx context.Context, params Produ
 		if err != nil {
 			return err
 		}
-		rows, err = tx.q.UpdateProductPrice(ctx, paymentsqlc.UpdateProductPriceParams{
-			ID:                  params.ID,
-			WorkspaceID:         workspaceID,
-			AssetCode:           params.AssetCode,
-			ListAmountMinor:     params.ListAmountMinor,
-			DiscountAmountMinor: params.DiscountAmountMinor,
-			IsPromotion:         params.IsPromotion,
-			StartsAt:            startsAt,
-			EndsAt:              endsAt,
+		amounts, err := tx.resolveProductPriceAmounts(ctx, workspaceID, productPriceInput{
+			AssetCode: params.AssetCode, ListAmountMinor: params.ListAmountMinor,
+			DiscountAmountMinor: params.DiscountAmountMinor, PricingMode: params.PricingMode,
+			ReferenceAssetCode:           params.ReferenceAssetCode,
+			ReferenceListAmountMinor:     params.ReferenceListAmountMinor,
+			ReferenceDiscountAmountMinor: params.ReferenceDiscountAmountMinor,
+			Coefficient:                  params.Coefficient,
 		})
+		if err != nil {
+			return err
+		}
+		if amounts.dynamic {
+			rows, err = tx.updateDynamicProductPrice(ctx, workspaceID, params, amounts, startsAt, endsAt)
+		} else {
+			rows, err = tx.q.UpdateProductPrice(ctx, paymentsqlc.UpdateProductPriceParams{
+				ID: params.ID, WorkspaceID: workspaceID, AssetCode: params.AssetCode,
+				ListAmountMinor: amounts.list, DiscountAmountMinor: amounts.discount,
+				IsPromotion: params.IsPromotion, StartsAt: startsAt, EndsAt: endsAt,
+			})
+		}
 		if err != nil {
 			return err
 		}

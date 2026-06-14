@@ -462,6 +462,48 @@ func (ns NullPaymentPaidOrderIndexStatus) Value() (driver.Value, error) {
 	return string(ns.PaymentPaidOrderIndexStatus), nil
 }
 
+type PaymentPricePricingMode string
+
+const (
+	PaymentPricePricingModeFixed   PaymentPricePricingMode = "fixed"
+	PaymentPricePricingModeDynamic PaymentPricePricingMode = "dynamic"
+)
+
+func (e *PaymentPricePricingMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PaymentPricePricingMode(s)
+	case string:
+		*e = PaymentPricePricingMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PaymentPricePricingMode: %T", src)
+	}
+	return nil
+}
+
+type NullPaymentPricePricingMode struct {
+	PaymentPricePricingMode PaymentPricePricingMode `json:"payment_price_pricing_mode"`
+	Valid                   bool                    `json:"valid"` // Valid is true if PaymentPricePricingMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPaymentPricePricingMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.PaymentPricePricingMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PaymentPricePricingMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPaymentPricePricingMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PaymentPricePricingMode), nil
+}
+
 type PaymentProductCacheDurationUnit string
 
 const (
@@ -1324,6 +1366,24 @@ type PaymentAsset struct {
 	UpdatedAt       time.Time             `json:"updated_at"`
 }
 
+type PaymentAssetRate struct {
+	AssetCode              string         `json:"asset_code"`
+	ReferenceAssetCode     string         `json:"reference_asset_code"`
+	ReferencePerAssetMinor uint64         `json:"reference_per_asset_minor"`
+	Source                 string         `json:"source"`
+	ObservedAt             time.Time      `json:"observed_at"`
+	AutoUpdateEnabled      bool           `json:"auto_update_enabled"`
+	AutoUpdateSource       sql.NullString `json:"auto_update_source"`
+	SourceChainID          sql.NullString `json:"source_chain_id"`
+	SourceTokenAddress     sql.NullString `json:"source_token_address"`
+	LastAttemptAt          sql.NullTime   `json:"last_attempt_at"`
+	LastError              sql.NullString `json:"last_error"`
+	LeaseOwner             sql.NullString `json:"lease_owner"`
+	LeaseUntil             sql.NullTime   `json:"lease_until"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
+}
+
 type PaymentAttempt struct {
 	ID                     uint64               `json:"id"`
 	OrderID                uint64               `json:"order_id"`
@@ -1473,17 +1533,22 @@ type PaymentPaidOrderIndex struct {
 }
 
 type PaymentPrice struct {
-	ID                  uint64    `json:"id"`
-	WorkspaceID         string    `json:"workspace_id"`
-	ProductID           string    `json:"product_id"`
-	AssetCode           string    `json:"asset_code"`
-	ListAmountMinor     uint64    `json:"list_amount_minor"`
-	DiscountAmountMinor uint64    `json:"discount_amount_minor"`
-	IsPromotion         bool      `json:"is_promotion"`
-	StartsAt            time.Time `json:"starts_at"`
-	EndsAt              time.Time `json:"ends_at"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                           uint64                  `json:"id"`
+	WorkspaceID                  string                  `json:"workspace_id"`
+	ProductID                    string                  `json:"product_id"`
+	AssetCode                    string                  `json:"asset_code"`
+	ListAmountMinor              uint64                  `json:"list_amount_minor"`
+	DiscountAmountMinor          uint64                  `json:"discount_amount_minor"`
+	PricingMode                  PaymentPricePricingMode `json:"pricing_mode"`
+	ReferenceAssetCode           sql.NullString          `json:"reference_asset_code"`
+	ReferenceListAmountMinor     sql.NullInt64           `json:"reference_list_amount_minor"`
+	ReferenceDiscountAmountMinor sql.NullInt64           `json:"reference_discount_amount_minor"`
+	Coefficient                  sql.NullString          `json:"coefficient"`
+	IsPromotion                  bool                    `json:"is_promotion"`
+	StartsAt                     time.Time               `json:"starts_at"`
+	EndsAt                       time.Time               `json:"ends_at"`
+	CreatedAt                    time.Time               `json:"created_at"`
+	UpdatedAt                    time.Time               `json:"updated_at"`
 }
 
 type PaymentProduct struct {
