@@ -129,6 +129,8 @@ func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 }
 
 func (c *CPA) adopt(running *CPA) {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
 	c.Admin, c.User = running.Admin, running.User
 	c.callbacks, c.client, c.ownsClient = running.callbacks, running.client, running.ownsClient
 	c.rootCtx, c.rootCancel = running.rootCtx, running.rootCancel
@@ -174,6 +176,16 @@ func (c *CPA) Close() error {
 		err = errors.Join(err, c.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (c *CPA) IsReady() bool {
+	if c == nil {
+		return false
+	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	return c.rootCtx != nil && c.rootCtx.Err() == nil && c.Admin != nil && c.User != nil
 }
 
 func (c *CPA) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

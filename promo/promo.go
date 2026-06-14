@@ -125,6 +125,8 @@ func open(ctx context.Context, params DatabaseParams) (*Promo, error) {
 }
 
 func (p *Promo) adopt(running *Promo) {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
 	p.Admin, p.User = running.Admin, running.User
 	p.callbacks, p.client, p.ownsClient = running.callbacks, running.client, running.ownsClient
 	p.rootCtx, p.rootCancel = running.rootCtx, running.rootCancel
@@ -167,6 +169,16 @@ func (p *Promo) Close() error {
 		err = errors.Join(err, p.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (p *Promo) IsReady() bool {
+	if p == nil {
+		return false
+	}
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	return p.rootCtx != nil && p.rootCtx.Err() == nil && p.Admin != nil && p.User != nil
 }
 
 func (p *Promo) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

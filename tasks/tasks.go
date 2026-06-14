@@ -123,6 +123,8 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 }
 
 func (t *Tasks) adopt(running *Tasks) {
+	t.lifecycleMu.Lock()
+	defer t.lifecycleMu.Unlock()
 	t.Admin, t.Internal, t.User = running.Admin, running.Internal, running.User
 	t.callbacks, t.client, t.ownsClient = running.callbacks, running.client, running.ownsClient
 	t.rootCtx, t.rootCancel = running.rootCtx, running.rootCancel
@@ -171,6 +173,17 @@ func (t *Tasks) Close() error {
 		err = errors.Join(err, t.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (t *Tasks) IsReady() bool {
+	if t == nil {
+		return false
+	}
+	t.lifecycleMu.Lock()
+	defer t.lifecycleMu.Unlock()
+	return t.rootCtx != nil && t.rootCtx.Err() == nil &&
+		t.Admin != nil && t.Internal != nil && t.User != nil
 }
 
 func (t *Tasks) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

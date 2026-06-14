@@ -125,6 +125,8 @@ func open(ctx context.Context, params DatabaseParams) (*Calendar, error) {
 }
 
 func (c *Calendar) adopt(running *Calendar) {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
 	c.Admin, c.User = running.Admin, running.User
 	c.callbacks, c.client, c.ownsClient = running.callbacks, running.client, running.ownsClient
 	c.rootCtx, c.rootCancel = running.rootCtx, running.rootCancel
@@ -167,6 +169,16 @@ func (c *Calendar) Close() error {
 		err = errors.Join(err, c.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (c *Calendar) IsReady() bool {
+	if c == nil {
+		return false
+	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	return c.rootCtx != nil && c.rootCtx.Err() == nil && c.Admin != nil && c.User != nil
 }
 
 func (c *Calendar) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

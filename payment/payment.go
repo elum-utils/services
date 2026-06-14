@@ -156,6 +156,8 @@ func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 }
 
 func (a *Payment) adopt(running *Payment) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
 	a.Admin = running.Admin
 	a.User = running.User
 	a.asset = running.asset
@@ -262,6 +264,17 @@ func (a *Payment) Close() error {
 		err = errors.Join(err, a.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (a *Payment) IsReady() bool {
+	if a == nil {
+		return false
+	}
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	return a.rootCtx != nil && a.rootCtx.Err() == nil &&
+		a.Admin != nil && a.User != nil && a.Adapters != nil
 }
 
 func (a *Payment) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

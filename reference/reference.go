@@ -103,6 +103,8 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 }
 
 func (r *Reference) adopt(running *Reference) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
 	r.Admin, r.User = running.Admin, running.User
 	r.client, r.ownsClient = running.client, running.ownsClient
 	r.rootCtx, r.rootCancel = running.rootCtx, running.rootCancel
@@ -140,4 +142,14 @@ func (r *Reference) Close() error {
 		err = errors.Join(err, r.client.Close())
 	}
 	return err
+}
+
+// IsReady reports whether the service is initialized and its lifecycle is active.
+func (r *Reference) IsReady() bool {
+	if r == nil {
+		return false
+	}
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	return r.rootCtx != nil && r.rootCtx.Err() == nil && r.Admin != nil && r.User != nil
 }
