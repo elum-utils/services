@@ -37,7 +37,21 @@ func (r *PaymentRepository) AdminUpsertAsset(ctx context.Context, params payment
 }
 
 func (r *PaymentRepository) AdminDeleteAsset(ctx context.Context, code string) (int64, error) {
-	rows, err := r.q.DeleteAsset(ctx, code)
+	var rows int64
+	err := r.inTransaction(ctx, func(tx *PaymentRepository) error {
+		if _, err := tx.q.DeleteAssetRatesForAsset(ctx, paymentsqlc.DeleteAssetRatesForAssetParams{
+			AssetCode:          code,
+			ReferenceAssetCode: code,
+		}); err != nil {
+			return err
+		}
+		deleted, err := tx.q.DeleteAsset(ctx, code)
+		if err != nil {
+			return err
+		}
+		rows = deleted
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}

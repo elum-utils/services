@@ -3800,6 +3800,25 @@ func (q *Queries) DeleteAsset(ctx context.Context, code string) (int64, error) {
 	return result.RowsAffected()
 }
 
+const deleteAssetRatesForAsset = `-- name: DeleteAssetRatesForAsset :execrows
+DELETE FROM payment_asset_rate
+WHERE asset_code = ?
+   OR reference_asset_code = ?
+`
+
+type DeleteAssetRatesForAssetParams struct {
+	AssetCode          string `json:"asset_code"`
+	ReferenceAssetCode string `json:"reference_asset_code"`
+}
+
+func (q *Queries) DeleteAssetRatesForAsset(ctx context.Context, arg DeleteAssetRatesForAssetParams) (int64, error) {
+	result, err := q.exec(ctx, q.deleteAssetRatesForAssetStmt, deleteAssetRatesForAsset, arg.AssetCode, arg.ReferenceAssetCode)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteItem = `-- name: DeleteItem :execrows
 DELETE FROM payment_item
 WHERE workspace_id = ?

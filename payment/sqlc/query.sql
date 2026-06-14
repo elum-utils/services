@@ -91,6 +91,11 @@ ON DUPLICATE KEY UPDATE
 DELETE FROM payment_asset
 WHERE code = ?;
 
+-- name: DeleteAssetRatesForAsset :execrows
+DELETE FROM payment_asset_rate
+WHERE asset_code = ?
+   OR reference_asset_code = ?;
+
 -- name: GetProviderAsset :one
 SELECT
     provider_code,

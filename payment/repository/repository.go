@@ -115,14 +115,6 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 		}
 	}
 
-	if err := r.migrateDynamicPricing(ctx); err != nil {
-		return err
-	}
-
-	if err := r.migrateLegacyTONStorage(ctx); err != nil {
-		return err
-	}
-
 	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.PaymentTable)
 	}); err != nil {

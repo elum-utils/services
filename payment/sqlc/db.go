@@ -228,6 +228,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteAssetStmt, err = db.PrepareContext(ctx, deleteAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteAsset: %w", err)
 	}
+	if q.deleteAssetRatesForAssetStmt, err = db.PrepareContext(ctx, deleteAssetRatesForAsset); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteAssetRatesForAsset: %w", err)
+	}
 	if q.deleteItemStmt, err = db.PrepareContext(ctx, deleteItem); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteItem: %w", err)
 	}
@@ -828,6 +831,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing deleteAssetStmt: %w", cerr)
 		}
 	}
+	if q.deleteAssetRatesForAssetStmt != nil {
+		if cerr := q.deleteAssetRatesForAssetStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteAssetRatesForAssetStmt: %w", cerr)
+		}
+	}
 	if q.deleteItemStmt != nil {
 		if cerr := q.deleteItemStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteItemStmt: %w", cerr)
@@ -1360,6 +1368,7 @@ type Queries struct {
 	createPurchaseKeyStmt                                 *sql.Stmt
 	decrementProductLimitCountersForRefundStmt            *sql.Stmt
 	deleteAssetStmt                                       *sql.Stmt
+	deleteAssetRatesForAssetStmt                          *sql.Stmt
 	deleteItemStmt                                        *sql.Stmt
 	deleteLocalizationStmt                                *sql.Stmt
 	deleteProductStmt                                     *sql.Stmt
@@ -1519,6 +1528,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createPurchaseKeyStmt:                                 q.createPurchaseKeyStmt,
 		decrementProductLimitCountersForRefundStmt:            q.decrementProductLimitCountersForRefundStmt,
 		deleteAssetStmt:                                       q.deleteAssetStmt,
+		deleteAssetRatesForAssetStmt:                          q.deleteAssetRatesForAssetStmt,
 		deleteItemStmt:                                        q.deleteItemStmt,
 		deleteLocalizationStmt:                                q.deleteLocalizationStmt,
 		deleteProductStmt:                                     q.deleteProductStmt,

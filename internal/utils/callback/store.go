@@ -150,75 +150,7 @@ CREATE TABLE IF NOT EXISTS %s (
 	if _, err := db.ExecContext(ctx, statement); err != nil {
 		return fmt.Errorf("callback schema statement failed for %s: %w", tableName, err)
 	}
-	return migrateLegacyEvents(ctx, db, tableName)
-}
-
-func migrateLegacyEvents(ctx context.Context, db *sql.DB, tableName string) error {
-	sourceService := tableSourceService(tableName)
-	if sourceService == "" {
-		return nil
-	}
-
-	var legacyTableExists int
-	if err := db.QueryRowContext(ctx, `
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = DATABASE() AND table_name = ?`, DefaultTable).Scan(&legacyTableExists); err != nil {
-		return fmt.Errorf("callback: inspect legacy table: %w", err)
-	}
-	if legacyTableExists == 0 {
-		return nil
-	}
-
-	var idempotencyColumnExists int
-	if err := db.QueryRowContext(ctx, `
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name = ?
-  AND column_name = 'idempotency_key'`, DefaultTable).Scan(&idempotencyColumnExists); err != nil {
-		return fmt.Errorf("callback: inspect legacy idempotency column: %w", err)
-	}
-	idempotencyExpression := "event_key"
-	if idempotencyColumnExists > 0 {
-		idempotencyExpression = "COALESCE(NULLIF(idempotency_key, ''), event_key)"
-	}
-
-	statement := fmt.Sprintf(`
-INSERT IGNORE INTO %s (
-    source_service, event_type, event_key, idempotency_key,
-    payload, payload_content_type, status, attempt_count,
-    next_attempt_at, locked_by, locked_until, delivered_at,
-    rejected_at, last_error, reject_reason, created_at, updated_at
-)
-SELECT
-    source_service, event_type, event_key, %s,
-    payload, payload_content_type, status, attempt_count,
-    next_attempt_at, locked_by, locked_until, delivered_at,
-    rejected_at, last_error, reject_reason, created_at, updated_at
-FROM %s
-WHERE source_service = ?`, quoteIdentifier(tableName), idempotencyExpression, quoteIdentifier(DefaultTable))
-	if _, err := db.ExecContext(ctx, statement, sourceService); err != nil {
-		return fmt.Errorf("callback: migrate legacy events for %s: %w", sourceService, err)
-	}
 	return nil
-}
-
-func tableSourceService(tableName string) string {
-	switch tableName {
-	case PaymentTable:
-		return "payment"
-	case CPATable:
-		return "cpa"
-	case PromoTable:
-		return "promo"
-	case CalendarTable:
-		return "calendar"
-	case TasksTable:
-		return "tasks"
-	default:
-		return ""
-	}
 }
 
 func (s *Store) CreateEvent(ctx context.Context, params CreateParams) (uint64, error) {
