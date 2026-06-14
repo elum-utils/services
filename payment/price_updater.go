@@ -85,6 +85,9 @@ func (a *Payment) priceUpdaterLoop(workerID string) {
 }
 
 func (a *Payment) runDuePriceUpdates(ctx context.Context, workerID string) error {
+	if _, err := a.pricing.SyncAutomaticAssetRates(ctx); err != nil {
+		return err
+	}
 	updates, err := a.pricing.ClaimDueAssetRateUpdates(ctx, workerID, 300, defaultPriceUpdateLease)
 	if err != nil {
 		return err

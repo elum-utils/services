@@ -435,6 +435,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.snapshotPaymentOrderItemsStmt, err = db.PrepareContext(ctx, snapshotPaymentOrderItems); err != nil {
 		return nil, fmt.Errorf("error preparing query SnapshotPaymentOrderItems: %w", err)
 	}
+	if q.syncAutomaticAssetRatesStmt, err = db.PrepareContext(ctx, syncAutomaticAssetRates); err != nil {
+		return nil, fmt.Errorf("error preparing query SyncAutomaticAssetRates: %w", err)
+	}
 	if q.updateDynamicPriceAmountsStmt, err = db.PrepareContext(ctx, updateDynamicPriceAmounts); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateDynamicPriceAmounts: %w", err)
 	}
@@ -1170,6 +1173,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing snapshotPaymentOrderItemsStmt: %w", cerr)
 		}
 	}
+	if q.syncAutomaticAssetRatesStmt != nil {
+		if cerr := q.syncAutomaticAssetRatesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing syncAutomaticAssetRatesStmt: %w", cerr)
+		}
+	}
 	if q.updateDynamicPriceAmountsStmt != nil {
 		if cerr := q.updateDynamicPriceAmountsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateDynamicPriceAmountsStmt: %w", cerr)
@@ -1421,6 +1429,7 @@ type Queries struct {
 	refreshPaymentDailyStatsStmt                          *sql.Stmt
 	setPaymentAttemptProviderChargeIDStmt                 *sql.Stmt
 	snapshotPaymentOrderItemsStmt                         *sql.Stmt
+	syncAutomaticAssetRatesStmt                           *sql.Stmt
 	updateDynamicPriceAmountsStmt                         *sql.Stmt
 	updateDynamicProductPriceStmt                         *sql.Stmt
 	updatePaymentAttemptStatusStmt                        *sql.Stmt
@@ -1579,6 +1588,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		refreshPaymentDailyStatsStmt:                          q.refreshPaymentDailyStatsStmt,
 		setPaymentAttemptProviderChargeIDStmt:                 q.setPaymentAttemptProviderChargeIDStmt,
 		snapshotPaymentOrderItemsStmt:                         q.snapshotPaymentOrderItemsStmt,
+		syncAutomaticAssetRatesStmt:                           q.syncAutomaticAssetRatesStmt,
 		updateDynamicPriceAmountsStmt:                         q.updateDynamicPriceAmountsStmt,
 		updateDynamicProductPriceStmt:                         q.updateDynamicProductPriceStmt,
 		updatePaymentAttemptStatusStmt:                        q.updatePaymentAttemptStatusStmt,

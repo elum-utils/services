@@ -36,6 +36,19 @@ type DueAssetRateUpdate struct {
 	SourceTokenAddress string
 }
 
+func (r *PaymentRepository) SyncAutomaticAssetRates(ctx context.Context) (int64, error) {
+	return r.q.SyncAutomaticAssetRates(ctx, paymentsqlc.SyncAutomaticAssetRatesParams{
+		ReferenceAssetCode: USDTAssetCode,
+		Code:               USDTAssetCode,
+		Code_2:             USDTAssetCode,
+		Code_3:             USDTAssetCode,
+		Code_4:             USDTAssetCode,
+		Code_5:             USDTAssetCode,
+		Code_6:             USDTAssetCode,
+		Code_7:             USDTAssetCode,
+	})
+}
+
 func (r *PaymentRepository) ConfigureAssetRateAutoUpdate(
 	ctx context.Context,
 	params AssetRateAutoUpdateParams,

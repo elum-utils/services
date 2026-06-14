@@ -370,6 +370,60 @@ ON DUPLICATE KEY UPDATE
     observed_at = VALUES(observed_at),
     updated_at = NOW();
 
+-- name: SyncAutomaticAssetRates :execrows
+INSERT INTO payment_asset_rate (
+    asset_code,
+    reference_asset_code,
+    reference_per_asset_minor,
+    source,
+    observed_at,
+    auto_update_enabled,
+    auto_update_source,
+    source_chain_id,
+    source_token_address
+)
+SELECT
+    a.code,
+    ?,
+    CASE WHEN a.code = ? THEN 1000000 ELSE 1 END,
+    CASE WHEN a.code = ? THEN 'fixed' ELSE 'pending' END,
+    NOW(),
+    CASE WHEN a.code = ? THEN 0 ELSE 1 END,
+    CASE WHEN a.code = ? THEN NULL ELSE 'dexscreener' END,
+    CASE WHEN a.code = ? THEN NULL ELSE a.chain END,
+    CASE WHEN a.code = ? THEN NULL ELSE a.contract_address END
+FROM payment_asset a
+WHERE a.is_active = 1
+  AND (
+      a.code = ?
+      OR (
+          a.asset_kind IN ('crypto_native', 'crypto_jetton')
+          AND a.chain IS NOT NULL
+          AND a.contract_address IS NOT NULL
+      )
+  )
+ON DUPLICATE KEY UPDATE
+    reference_per_asset_minor = CASE
+        WHEN payment_asset_rate.asset_code = payment_asset_rate.reference_asset_code
+            THEN VALUES(reference_per_asset_minor)
+        ELSE payment_asset_rate.reference_per_asset_minor
+    END,
+    source = CASE
+        WHEN payment_asset_rate.asset_code = payment_asset_rate.reference_asset_code
+            THEN VALUES(source)
+        ELSE payment_asset_rate.source
+    END,
+    observed_at = CASE
+        WHEN payment_asset_rate.asset_code = payment_asset_rate.reference_asset_code
+            THEN VALUES(observed_at)
+        ELSE payment_asset_rate.observed_at
+    END,
+    auto_update_enabled = VALUES(auto_update_enabled),
+    auto_update_source = VALUES(auto_update_source),
+    source_chain_id = VALUES(source_chain_id),
+    source_token_address = VALUES(source_token_address),
+    updated_at = NOW();
+
 -- name: ConfigureAssetRateAutoUpdate :execrows
 UPDATE payment_asset_rate
 SET auto_update_enabled = ?,
@@ -390,6 +444,9 @@ SELECT
 FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.auto_update_enabled = 1
+  AND a.is_active = 1
+  AND a.asset_kind IN ('crypto_native', 'crypto_jetton')
+  AND COALESCE(r.source_token_address, a.contract_address) IS NOT NULL
   AND (r.lease_until IS NULL OR r.lease_until < NOW())
 ORDER BY r.asset_code
 LIMIT ?;
