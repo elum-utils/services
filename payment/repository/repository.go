@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 
@@ -33,7 +34,7 @@ type Options struct {
 
 const bootstrapQueryTimeout = 30 * time.Second
 
-var ErrWorkspaceRequired = errors.New("payment: workspace id is required")
+var ErrWorkspaceRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment workspace id is required")
 
 func NewPaymentRepository(db *sqlwrap.Client) *PaymentRepository {
 	return NewPaymentRepositoryWithOptions(db, Options{

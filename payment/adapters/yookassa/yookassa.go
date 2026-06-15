@@ -2,7 +2,6 @@ package yookassa
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -84,7 +83,7 @@ func NewClient(credentials Credentials) *Client {
 
 func (c *Client) requireCredentials() error {
 	if c == nil || c.shopID == "" || c.secretKey == "" {
-		return errors.New("yookassa: shop id and secret key are required")
+		return ErrCredentialsRequired
 	}
 	return nil
 }

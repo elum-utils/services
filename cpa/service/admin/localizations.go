@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/cpa/repository"
 )
@@ -19,7 +18,7 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params UpsertLocalizatio
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.Locale == "" || params.Title == "" {
-		return errors.New("cpa admin: locale and title are required")
+		return ErrLocalizationRequired
 	}
 	return a.repository.UpsertLocalization(mergedCtx, repository.Localization{
 		WorkspaceID: params.WorkspaceID,

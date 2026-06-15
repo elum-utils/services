@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	utils "github.com/elum-utils/services/internal/utils"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -17,11 +18,11 @@ import (
 )
 
 var (
-	ErrProductLocked         = errors.New("payment: product limit is locked")
-	ErrPaymentMismatch       = errors.New("payment: payment data mismatch")
-	ErrOrderStateInvalid     = errors.New("payment: invalid order state")
-	ErrPaymentAmountOverflow = errors.New("payment: amount overflow")
-	ErrProductQuantityFixed  = errors.New("payment: product quantity is fixed")
+	ErrProductLocked         = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product limit is locked")
+	ErrPaymentMismatch       = serviceerrors.New(serviceerrors.CodeConflict, "payment data mismatch")
+	ErrOrderStateInvalid     = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment order state is invalid")
+	ErrPaymentAmountOverflow = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment amount overflow")
+	ErrProductQuantityFixed  = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product quantity is fixed")
 )
 
 type OrderCreateParams struct {

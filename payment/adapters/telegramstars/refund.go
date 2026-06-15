@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 )
 
 func (a *TelegramStars) Execute(ctx context.Context, params RefundParams) (RefundResult, error) {
@@ -10,7 +9,7 @@ func (a *TelegramStars) Execute(ctx context.Context, params RefundParams) (Refun
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil {
-		return RefundResult{}, errors.New("telegram_stars: api is not initialized")
+		return RefundResult{}, ErrNotInitialized
 	}
 	if err := NewClient(params.Credentials).RefundStarPayment(ctx, refundStarPaymentRequest{
 		UserID:                  params.UserID,

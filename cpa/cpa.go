@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
@@ -40,19 +41,19 @@ func New(params DatabaseParams) *CPA {
 func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*CPA, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa sql client initialization failed", err)
 	}
 	return newCPA(ctx, client, false, options), nil
 }
 
 func (c *CPA) Run(ctx context.Context) error {
 	if c == nil {
-		return errors.New("cpa: nil service")
+		return ErrServiceNil
 	}
 	c.lifecycleMu.Lock()
 	if c.running {
 		c.lifecycleMu.Unlock()
-		return errors.New("cpa: service is already running")
+		return ErrServiceRunning
 	}
 	c.running = true
 	params := c.params
@@ -67,7 +68,7 @@ func (c *CPA) Run(ctx context.Context) error {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return nil
 		}
-		return err
+		return wrapLifecycleError(err)
 	}
 	c.adopt(running)
 	defer c.Close()
@@ -88,28 +89,28 @@ func (c *CPA) Run(ctx context.Context) error {
 		if errors.Is(err, context.Canceled) && c.rootCtx.Err() != nil {
 			return nil
 		}
-		return err
+		return wrapLifecycleError(err)
 	}
 }
 
 func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 	if params.User == "" {
-		return nil, errors.New("cpa: database user is required")
+		return nil, ErrDatabaseUserRequired
 	}
 	if params.Database == "" {
-		return nil, errors.New("cpa: database name is required")
+		return nil, ErrDatabaseNameRequired
 	}
 	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
 		User: params.User, Password: params.Password, Database: params.Database,
 		Host: params.Host, Port: params.Port,
 	})
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "cpa database connection failed", err)
 	}
 	client, err := sqlwrap.New(db, toSQLWrapOptions(params.Options))
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
 		QueryTimeout: params.Options.QueryTimeout,
@@ -119,11 +120,11 @@ func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa bootstrap failed", err)
 	}
 	if err := bootstrap.Close(); err != nil {
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa bootstrap shutdown failed", err)
 	}
 	return newCPA(ctx, client, true, params.Options), nil
 }

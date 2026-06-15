@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/cpa/repository"
 )
@@ -23,7 +22,7 @@ func (a *Admin) AddCodes(ctx context.Context, params AddCodesParams) (int, error
 	if offer.CodeMode != repository.CodeModePersonal ||
 		offer.CodeSource == nil ||
 		*offer.CodeSource != repository.CodeSourcePool {
-		return 0, errors.New("cpa admin: codes can only be uploaded to personal pool offers")
+		return 0, ErrCodeUploadModeUnsupported
 	}
 	return a.repository.AddCodes(mergedCtx, params.WorkspaceID, params.CPAID, params.Codes)
 }

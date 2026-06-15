@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/payment/service/asset"
 	"github.com/elum-utils/services/payment/service/product"
@@ -20,63 +19,63 @@ type ConfigureProviderAssetParams = asset.ProviderUpsertParams
 
 func (a *Admin) SaveProduct(ctx context.Context, params SaveProductParams) error {
 	if a == nil || a.products == nil {
-		return errors.New("payment admin: product service is not initialized")
+		return ErrProductServiceNotInitialized
 	}
 	return a.products.Upsert(ctx, params)
 }
 
 func (a *Admin) SaveProductGroup(ctx context.Context, params SaveProductGroupParams) error {
 	if a == nil || a.products == nil {
-		return errors.New("payment admin: product service is not initialized")
+		return ErrProductServiceNotInitialized
 	}
 	return a.products.UpsertGroup(ctx, params)
 }
 
 func (a *Admin) SaveLocalization(ctx context.Context, params SaveLocalizationParams) error {
 	if a == nil || a.products == nil {
-		return errors.New("payment admin: product service is not initialized")
+		return ErrProductServiceNotInitialized
 	}
 	return a.products.UpsertLocalization(ctx, params)
 }
 
 func (a *Admin) SaveItem(ctx context.Context, params SaveItemParams) error {
 	if a == nil || a.products == nil {
-		return errors.New("payment admin: product service is not initialized")
+		return ErrProductServiceNotInitialized
 	}
 	return a.products.UpsertItem(ctx, params)
 }
 
 func (a *Admin) AttachProductItem(ctx context.Context, params AttachProductItemParams) error {
 	if a == nil || a.products == nil {
-		return errors.New("payment admin: product service is not initialized")
+		return ErrProductServiceNotInitialized
 	}
 	return a.products.AddItem(ctx, params)
 }
 
 func (a *Admin) CreateCatalogPrice(ctx context.Context, params CreateCatalogPriceParams) (uint64, error) {
 	if a == nil || a.products == nil {
-		return 0, errors.New("payment admin: product service is not initialized")
+		return 0, ErrProductServiceNotInitialized
 	}
 	return a.products.CreatePrice(ctx, params)
 }
 
 func (a *Admin) UpdateCatalogPrice(ctx context.Context, params UpdateCatalogPriceParams) (int64, error) {
 	if a == nil || a.products == nil {
-		return 0, errors.New("payment admin: product service is not initialized")
+		return 0, ErrProductServiceNotInitialized
 	}
 	return a.products.UpdatePrice(ctx, params)
 }
 
 func (a *Admin) ConfigureAsset(ctx context.Context, params ConfigureAssetParams) error {
 	if a == nil || a.assets == nil {
-		return errors.New("payment admin: asset service is not initialized")
+		return ErrAssetServiceNotInitialized
 	}
 	return a.assets.Upsert(ctx, params)
 }
 
 func (a *Admin) ConfigureProviderAsset(ctx context.Context, params ConfigureProviderAssetParams) error {
 	if a == nil || a.assets == nil {
-		return errors.New("payment admin: asset service is not initialized")
+		return ErrAssetServiceNotInitialized
 	}
 	return a.assets.UpsertProvider(ctx, params)
 }

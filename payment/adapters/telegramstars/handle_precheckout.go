@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 
 	utils "github.com/elum-utils/services/internal/utils"
 	"github.com/elum-utils/services/payment/repository"
@@ -13,7 +12,7 @@ func (a *TelegramStars) HandlePreCheckoutQuery(ctx context.Context, query PreChe
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("telegram_stars: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	client := NewClient(query.Credentials)
 

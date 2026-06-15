@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 
@@ -15,10 +16,10 @@ import (
 )
 
 var (
-	ErrWorkspaceRequired = errors.New("cpa: workspace id is required")
-	ErrOfferRequired     = errors.New("cpa: offer id is required")
-	ErrNoCodesAvailable  = errors.New("cpa: no personal codes available")
-	ErrInvalidCodeConfig = errors.New("cpa: invalid generated code configuration")
+	ErrWorkspaceRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa workspace id is required")
+	ErrOfferRequired     = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa offer id is required")
+	ErrNoCodesAvailable  = serviceerrors.New(serviceerrors.CodeUnavailable, "cpa personal codes are not available")
+	ErrInvalidCodeConfig = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa generated code configuration is invalid")
 )
 
 type Repository struct {

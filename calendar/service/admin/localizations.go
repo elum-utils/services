@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/calendar/repository"
 )
@@ -19,7 +18,7 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationP
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.WorkspaceID == "" || params.CalendarID == "" || params.Locale == "" || params.Title == "" {
-		return errors.New("calendar admin: localization scope, locale and title are required")
+		return ErrLocalizationRequired
 	}
 	return a.repository.UpsertLocalization(mergedCtx, repository.Localization(params))
 }

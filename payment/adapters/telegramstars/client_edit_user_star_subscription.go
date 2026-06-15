@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
@@ -22,7 +21,7 @@ func (c *Client) EditUserStarSubscription(ctx context.Context, payload editUserS
 		return err
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices || !result.OK || !result.Result {
-		return fmt.Errorf("telegram_stars: editUserStarSubscription failed: status=%d code=%d description=%s body=%s", resp.StatusCode(), result.ErrorCode, result.Description, resp.String())
+		return wrapAPIError("editUserStarSubscription", resp.StatusCode(), result.ErrorCode, result.Description, resp.String())
 	}
 	return nil
 }

@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -75,37 +74,37 @@ func (a *Admin) DeleteOffer(ctx context.Context, workspaceID, cpaID string) (int
 
 func validateOffer(params UpsertOfferParams) error {
 	if params.WorkspaceID == "" || params.ID == "" {
-		return errors.New("cpa admin: workspace and offer id are required")
+		return ErrOfferScopeRequired
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
-		return errors.New("cpa admin: payload must be valid JSON")
+		return ErrOfferPayloadInvalid
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
-		return errors.New("cpa admin: start_at must be before end_at")
+		return ErrOfferRangeInvalid
 	}
 	switch params.CodeMode {
 	case repository.CodeModeShared:
 		if params.SharedCode == nil || strings.TrimSpace(*params.SharedCode) == "" {
-			return errors.New("cpa admin: shared_code is required")
+			return ErrOfferSharedCodeRequired
 		}
 	case repository.CodeModePersonal:
 		if params.CodeSource == nil {
-			return errors.New("cpa admin: personal code source is required")
+			return ErrOfferCodeSourceRequired
 		}
 		switch *params.CodeSource {
 		case repository.CodeSourcePool:
 		case repository.CodeSourceGenerated:
 			if params.GeneratedLength == nil || *params.GeneratedLength <= 0 {
-				return errors.New("cpa admin: generated code length must be positive")
+				return ErrGeneratedCodeLengthInvalid
 			}
 			if params.GeneratedAlphabet == nil || len([]rune(*params.GeneratedAlphabet)) < 2 {
-				return errors.New("cpa admin: generated alphabet needs at least two symbols")
+				return ErrGeneratedCodeAlphabetInvalid
 			}
 		default:
-			return errors.New("cpa admin: unsupported personal code source")
+			return ErrPersonalCodeSourceUnsupported
 		}
 	default:
-		return errors.New("cpa admin: unsupported code mode")
+		return ErrCodeModeUnsupported
 	}
 	return nil
 }

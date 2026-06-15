@@ -2,17 +2,10 @@ package refund
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/payment/repository"
-)
-
-var (
-	ErrProviderUnsupported = errors.New("payment refund: provider does not support orchestrated refund")
-	ErrAttemptRequired     = errors.New("payment refund: payment attempt is required")
-	ErrAmountInvalid       = errors.New("payment refund: amount is invalid")
 )
 
 type ProviderRefundFunc func(context.Context, ProviderRefundParams) (ProviderRefundResult, error)

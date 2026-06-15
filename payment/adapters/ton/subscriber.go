@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/tlb"
@@ -71,30 +72,30 @@ func (s *Sub) Err() error {
 
 func (s *Sub) JettonMasterAddress(ctx context.Context, jettonWalletAddress string) (string, error) {
 	if s == nil || s.Api == nil {
-		return "", fmt.Errorf("ton: subscriber is not initialized")
+		return "", ErrSubscriberNotInitialized
 	}
 	wallet, err := address.ParseAddr(jettonWalletAddress)
 	if err != nil {
-		return "", fmt.Errorf("ton: parse jetton wallet address: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeInvalidFields, "ton jetton wallet address is invalid", err)
 	}
 	block, err := s.Api.CurrentMasterchainInfo(ctx)
 	if err != nil {
-		return "", fmt.Errorf("ton: get masterchain info: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeUnavailable, "ton masterchain info request failed", err)
 	}
 	result, err := s.Api.WaitForBlock(block.SeqNo).RunGetMethod(ctx, block, wallet, "get_wallet_data")
 	if err != nil {
-		return "", fmt.Errorf("ton: get jetton wallet data: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeUnavailable, "ton jetton wallet data request failed", err)
 	}
 	masterSlice, err := result.Slice(2)
 	if err != nil {
-		return "", fmt.Errorf("ton: read jetton master result: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeInternalError, "ton jetton master result read failed", err)
 	}
 	master, err := masterSlice.LoadAddr()
 	if err != nil {
-		return "", fmt.Errorf("ton: read jetton master address: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeInternalError, "ton jetton master address read failed", err)
 	}
 	if master == nil || master.IsAddrNone() {
-		return "", fmt.Errorf("ton: jetton master address is empty")
+		return "", ErrJettonMasterAddressEmpty
 	}
 	return master.StringRaw(), nil
 }

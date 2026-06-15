@@ -3,7 +3,6 @@ package yookassa
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	utils "github.com/elum-utils/services/internal/utils"
 	"github.com/elum-utils/services/payment/repository"
@@ -14,7 +13,7 @@ func (a *YooKassa) HandleWebhook(ctx context.Context, raw []byte, signatureValid
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if !signatureValid {
-		return nil, errors.New("yookassa: invalid webhook signature")
+		return nil, ErrWebhookSignatureInvalid
 	}
 	var webhook webhookPayload
 	if err := json.Unmarshal(raw, &webhook); err != nil {
@@ -28,7 +27,7 @@ func (a *YooKassa) handlePayload(ctx context.Context, webhook webhookPayload, ra
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if webhook.Object.ID == "" {
-		return nil, errors.New("yookassa: webhook payment id is empty")
+		return nil, ErrPaymentIDRequired
 	}
 
 	attempt, err := a.repository.GetAttemptByProviderPaymentID(ctx, ProviderCode, webhook.Object.ID)

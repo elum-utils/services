@@ -3,7 +3,6 @@ package ton
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 
@@ -22,13 +21,13 @@ func (a *TON) StartSubscriber(ctx context.Context, params SubscriberParams) (*Su
 	params.NetworkConfigURL = strings.TrimSpace(params.NetworkConfigURL)
 	params.WalletAddress = strings.TrimSpace(params.WalletAddress)
 	if params.WorkspaceID == "" {
-		return nil, errors.New("ton: workspace id is required")
+		return nil, ErrWorkspaceIDRequired
 	}
 	if params.NetworkConfigURL == "" {
-		return nil, errors.New("ton: network config url is required")
+		return nil, ErrNetworkConfigURLRequired
 	}
 	if params.WalletAddress == "" {
-		return nil, errors.New("ton: wallet address is required")
+		return nil, ErrWalletAddressRequired
 	}
 	network, err := validateNetwork(params.Network)
 	if err != nil {

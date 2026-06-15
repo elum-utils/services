@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -19,9 +20,9 @@ const (
 )
 
 var (
-	ErrInvalidPricingMode = errors.New("payment: invalid pricing mode")
-	ErrInvalidAssetRate   = errors.New("payment: invalid asset rate")
-	ErrAssetRateNotFound  = errors.New("payment: asset rate not found")
+	ErrInvalidPricingMode = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment pricing mode is invalid")
+	ErrInvalidAssetRate   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment asset rate is invalid")
+	ErrAssetRateNotFound  = serviceerrors.New(serviceerrors.CodeNotFound, "payment asset rate not found")
 )
 
 type productPriceInput struct {

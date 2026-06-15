@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/tasks/repository"
 )
@@ -81,7 +80,7 @@ func (a *Admin) UpsertReward(ctx context.Context, workspaceID string, taskID uin
 
 func validateReward(reward RewardModel) (string, error) {
 	if reward.Key == "" || reward.Quantity <= 0 {
-		return "", errors.New("tasks admin: reward key and positive quantity are required")
+		return "", ErrRewardRequired
 	}
 	rewardType := reward.Type
 	if rewardType == "" {
@@ -90,14 +89,14 @@ func validateReward(reward RewardModel) (string, error) {
 	switch rewardType {
 	case "quantity":
 		if reward.Unit != nil {
-			return "", errors.New("tasks admin: quantity reward must not have duration unit")
+			return "", ErrRewardQuantityUnit
 		}
 	case "duration":
 		if reward.Unit == nil || !validDurationUnit(*reward.Unit) {
-			return "", errors.New("tasks admin: duration reward requires a valid duration unit")
+			return "", ErrRewardDurationUnit
 		}
 	default:
-		return "", errors.New("tasks admin: reward type must be quantity or duration")
+		return "", ErrRewardTypeUnsupported
 	}
 	return rewardType, nil
 }

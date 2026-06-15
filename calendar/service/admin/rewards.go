@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/calendar/repository"
 	"github.com/elum-utils/services/calendar/service/user"
@@ -37,7 +36,7 @@ func (a *Admin) UpdateReward(ctx context.Context, params SaveRewardParams) (int6
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.ID == 0 {
-		return 0, errors.New("calendar admin: reward id is required")
+		return 0, ErrRewardIDRequired
 	}
 	if err := validateReward(params); err != nil {
 		return 0, err
@@ -71,19 +70,19 @@ func (a *Admin) DeleteReward(ctx context.Context, workspaceID, calendarID string
 func validateReward(params SaveRewardParams) error {
 	if params.WorkspaceID == "" || params.CalendarID == "" || params.StepID == 0 ||
 		params.Key == "" || params.Quantity <= 0 || params.Position == 0 {
-		return errors.New("calendar admin: reward scope, key, quantity and position are required")
+		return ErrRewardRequired
 	}
 	switch normalizedRewardType(params.Type) {
 	case "quantity":
 		if params.Unit != nil {
-			return errors.New("calendar admin: quantity reward must not have duration unit")
+			return ErrRewardQuantityUnit
 		}
 	case "duration":
 		if params.Unit == nil || !validDurationUnit(*params.Unit) {
-			return errors.New("calendar admin: duration reward requires a valid duration unit")
+			return ErrRewardDurationUnit
 		}
 	default:
-		return errors.New("calendar admin: reward type must be quantity or duration")
+		return ErrRewardTypeUnsupported
 	}
 	return nil
 }

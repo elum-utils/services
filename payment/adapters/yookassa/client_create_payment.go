@@ -2,7 +2,6 @@ package yookassa
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
@@ -23,7 +22,7 @@ func (c *Client) CreatePayment(ctx context.Context, payload createPaymentRequest
 		return paymentAPIResponse{}, err
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
-		return paymentAPIResponse{}, fmt.Errorf("yookassa: create payment failed: status=%d body=%s", resp.StatusCode(), resp.String())
+		return paymentAPIResponse{}, wrapAPIError("create payment", resp.StatusCode(), resp.String())
 	}
 	return result, nil
 }

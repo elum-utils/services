@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
@@ -63,7 +62,7 @@ func (a *Admin) DeleteReward(ctx context.Context, workspaceID string, promoID ui
 
 func validateReward(key, rewardType string, quantity int64, unit *string) (string, error) {
 	if key == "" || quantity <= 0 {
-		return "", errors.New("promo admin: reward key and positive quantity are required")
+		return "", ErrRewardRequired
 	}
 	if rewardType == "" {
 		rewardType = "quantity"
@@ -71,14 +70,14 @@ func validateReward(key, rewardType string, quantity int64, unit *string) (strin
 	switch rewardType {
 	case "quantity":
 		if unit != nil {
-			return "", errors.New("promo admin: quantity reward must not have duration unit")
+			return "", ErrRewardQuantityUnit
 		}
 	case "duration":
 		if unit == nil || !validDurationUnit(*unit) {
-			return "", errors.New("promo admin: duration reward requires a valid duration unit")
+			return "", ErrRewardDurationUnit
 		}
 	default:
-		return "", errors.New("promo admin: reward type must be quantity or duration")
+		return "", ErrRewardTypeUnsupported
 	}
 	return rewardType, nil
 }

@@ -2,7 +2,6 @@ package ton
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -26,13 +25,13 @@ func (a *TON) CreatePayment(ctx context.Context, params CreatePaymentParams) (*C
 		return nil, err
 	}
 	if asset.Chain.Valid && asset.Chain.String != "" && !strings.EqualFold(asset.Chain.String, "ton") {
-		return nil, fmt.Errorf("ton: asset %s belongs to chain %s", assetCode, asset.Chain.String)
+		return nil, ErrAssetChainMismatch
 	}
 	if asset.Network.Valid && asset.Network.String != "" && normalizeNetwork(asset.Network.String) != network {
-		return nil, fmt.Errorf("ton: asset %s belongs to network %s", assetCode, asset.Network.String)
+		return nil, ErrAssetNetworkMismatch
 	}
 	if walletAddress == "" {
-		return nil, errors.New("ton: wallet address is required")
+		return nil, ErrWalletAddressRequired
 	}
 
 	order, err := a.repository.CreateOrder(ctx, repository.OrderCreateParams{

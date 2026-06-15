@@ -2,7 +2,6 @@ package yookassa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -15,7 +14,7 @@ func (a *YooKassa) CreatePayment(ctx context.Context, params CreatePaymentParams
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("yookassa: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	client := NewClient(params.Credentials)
 
@@ -73,7 +72,7 @@ func (a *YooKassa) CreatePayment(ctx context.Context, params CreatePaymentParams
 		return nil, err
 	}
 	if payment.ID == "" {
-		return nil, errors.New("yookassa: create payment response has empty id")
+		return nil, ErrCreatePaymentEmptyID
 	}
 
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{

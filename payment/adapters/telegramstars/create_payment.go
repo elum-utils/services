@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	utils "github.com/elum-utils/services/internal/utils"
@@ -14,7 +13,7 @@ func (a *TelegramStars) CreatePayment(ctx context.Context, params CreatePaymentP
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("telegram_stars: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	client := NewClient(params.Credentials)
 

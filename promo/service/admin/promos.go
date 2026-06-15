@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -35,7 +34,7 @@ func (a *Admin) UpdatePromo(ctx context.Context, params SavePromoParams) (int64,
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.ID == 0 {
-		return 0, errors.New("promo admin: promo id is required")
+		return 0, ErrPromoIDRequired
 	}
 	if err := validatePromo(params); err != nil {
 		return 0, err
@@ -84,13 +83,13 @@ func (a *Admin) DeletePromo(ctx context.Context, workspaceID string, id uint64) 
 
 func validatePromo(params SavePromoParams) error {
 	if params.WorkspaceID == "" || strings.TrimSpace(params.Code) == "" {
-		return errors.New("promo admin: workspace and code are required")
+		return ErrPromoScopeRequired
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
-		return errors.New("promo admin: payload must be valid JSON")
+		return ErrPromoPayloadInvalid
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
-		return errors.New("promo admin: start_at must be before end_at")
+		return ErrPromoRangeInvalid
 	}
 	return nil
 }

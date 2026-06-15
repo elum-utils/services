@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/elum-utils/services/reference/repository"
@@ -15,7 +14,7 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationP
 	params.Locale = strings.ToLower(strings.TrimSpace(params.Locale))
 	if strings.TrimSpace(params.WorkspaceID) == "" || !itemKeyPattern.MatchString(params.ItemKey) ||
 		params.Locale == "" || strings.TrimSpace(params.Title) == "" {
-		return errors.New("reference admin: localization scope, locale and title are required")
+		return ErrLocalizationRequired
 	}
 	return a.repository.UpsertLocalization(mergedCtx, repository.Localization{
 		WorkspaceID: params.WorkspaceID, ItemKey: params.ItemKey, Locale: params.Locale,

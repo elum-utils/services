@@ -2,7 +2,6 @@ package platega
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -21,7 +20,7 @@ func (c *Client) GetH2H(ctx context.Context, transactionID string) (H2HResponse,
 		return H2HResponse{}, err
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
-		return H2HResponse{}, fmt.Errorf("platega: get h2h failed: status=%d body=%s", resp.StatusCode(), resp.String())
+		return H2HResponse{}, wrapAPIError("get h2h", resp.StatusCode(), resp.String())
 	}
 	return result, nil
 }

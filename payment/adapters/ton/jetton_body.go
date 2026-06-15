@@ -2,9 +2,8 @@ package ton
 
 import (
 	"encoding/base64"
-	"errors"
-	"fmt"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/xssnick/tonutils-go/tlb"
 )
 
@@ -34,12 +33,12 @@ type Jetton struct {
 
 func (s *Sub) JettonBody(ti *tlb.InternalMessage, txHash []byte) (*RootJetton, error) {
 	if ti == nil {
-		return nil, errors.New("input internal message is nil")
+		return nil, ErrInternalMessageRequired
 	}
 
 	slice, err := ti.Body.BeginParse()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse body: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrBodyParseFailed.Message(), err)
 	}
 
 	opCode, err := slice.LoadUInt(32)
@@ -49,22 +48,22 @@ func (s *Sub) JettonBody(ti *tlb.InternalMessage, txHash []byte) (*RootJetton, e
 
 	queryID, err := slice.LoadUInt(64)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load QueryID: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrQueryIDReadFailed.Message(), err)
 	}
 
 	amount, err := slice.LoadBigCoins()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load amount: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrAmountReadFailed.Message(), err)
 	}
 
 	sender, err := slice.LoadAddr()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load sender address: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrSenderAddressReadFailed.Message(), err)
 	}
 
 	payload, err := slice.LoadMaybeRef()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load payload reference: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrPayloadReferenceReadFailed.Message(), err)
 	}
 
 	text := ""
@@ -73,11 +72,11 @@ func (s *Sub) JettonBody(ti *tlb.InternalMessage, txHash []byte) (*RootJetton, e
 		if err == nil && sumType == 0x00000000 {
 			value, err := payload.LoadStringSnake()
 			if err != nil {
-				return nil, fmt.Errorf("failed to load text comment: %v", err)
+				return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrTextCommentReadFailed.Message(), err)
 			}
 			text = value
 		} else if err != nil {
-			return nil, fmt.Errorf("failed to load sumType: %v", err)
+			return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrSumTypeReadFailed.Message(), err)
 		}
 	}
 

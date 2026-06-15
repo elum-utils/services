@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/user"
@@ -53,7 +52,7 @@ func (a *Admin) DeleteReward(ctx context.Context, workspaceID, cpaID, rewardID s
 
 func validateReward(key, rewardType string, quantity int64, unit *string) (string, error) {
 	if key == "" || quantity <= 0 {
-		return "", errors.New("cpa admin: reward key and positive quantity are required")
+		return "", ErrRewardRequired
 	}
 	if rewardType == "" {
 		rewardType = "quantity"
@@ -61,14 +60,14 @@ func validateReward(key, rewardType string, quantity int64, unit *string) (strin
 	switch rewardType {
 	case "quantity":
 		if unit != nil {
-			return "", errors.New("cpa admin: quantity reward must not have duration unit")
+			return "", ErrRewardQuantityUnit
 		}
 	case "duration":
 		if unit == nil || !validDurationUnit(*unit) {
-			return "", errors.New("cpa admin: duration reward requires a valid duration unit")
+			return "", ErrRewardDurationUnit
 		}
 	default:
-		return "", errors.New("cpa admin: reward type must be quantity or duration")
+		return "", ErrRewardTypeUnsupported
 	}
 	return rewardType, nil
 }

@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	refsqlc "github.com/elum-utils/services/reference/sqlc"
 )
 
 var (
-	ErrWorkspaceRequired = errors.New("reference: workspace is required")
-	ErrItemNotFound      = errors.New("reference: item not found")
+	ErrWorkspaceRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "reference workspace is required")
+	ErrItemNotFound      = serviceerrors.New(serviceerrors.CodeNotFound, "reference item not found")
 )
 
 const bootstrapQueryTimeout = 30 * time.Second

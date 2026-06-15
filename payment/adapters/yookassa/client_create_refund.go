@@ -2,7 +2,6 @@ package yookassa
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
@@ -23,7 +22,7 @@ func (c *Client) CreateRefund(ctx context.Context, payload createRefundRequest, 
 		return refundAPIResponse{}, err
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
-		return refundAPIResponse{}, fmt.Errorf("yookassa: create refund failed: status=%d body=%s", resp.StatusCode(), resp.String())
+		return refundAPIResponse{}, wrapAPIError("create refund", resp.StatusCode(), resp.String())
 	}
 	return result, nil
 }

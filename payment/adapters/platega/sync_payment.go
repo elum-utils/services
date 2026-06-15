@@ -3,7 +3,6 @@ package platega
 import (
 	"context"
 	"encoding/json"
-	"errors"
 )
 
 func (a *Platega) SyncPayment(ctx context.Context, params SyncPaymentParams) (*WebhookResult, error) {
@@ -11,7 +10,7 @@ func (a *Platega) SyncPayment(ctx context.Context, params SyncPaymentParams) (*W
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("platega: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	transaction, err := NewClient(params.Credentials).GetTransaction(ctx, params.TransactionID)
 	if err != nil {

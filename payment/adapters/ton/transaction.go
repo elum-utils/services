@@ -17,6 +17,7 @@ import (
 	"github.com/xssnick/tonutils-go/ton/jetton"
 	"github.com/xssnick/tonutils-go/tvm/cell"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -77,7 +78,7 @@ func (a *TON) CreateTransaction(ctx context.Context, params CreateTransactionPar
 
 	destination := strings.TrimSpace(params.Destination)
 	if destination == "" {
-		return nil, fmt.Errorf("ton: destination is required")
+		return nil, ErrDestinationRequired
 	}
 
 	if assetCode == AssetTON {
@@ -89,15 +90,15 @@ func (a *TON) CreateTransaction(ctx context.Context, params CreateTransactionPar
 		return nil, err
 	}
 	if asset.Chain.Valid && asset.Chain.String != "" && !strings.EqualFold(asset.Chain.String, "ton") {
-		return nil, fmt.Errorf("ton: asset %s belongs to chain %s", assetCode, asset.Chain.String)
+		return nil, ErrAssetChainMismatch
 	}
 	if asset.Network.Valid && asset.Network.String != "" && normalizeNetwork(asset.Network.String) != network {
-		return nil, fmt.Errorf("ton: asset %s belongs to network %s", assetCode, asset.Network.String)
+		return nil, ErrAssetNetworkMismatch
 	}
 
 	sourceWallet := strings.TrimSpace(params.SourceWallet)
 	if sourceWallet == "" {
-		return nil, fmt.Errorf("ton: source wallet is required for asset %s", assetCode)
+		return nil, ErrSourceWalletRequired
 	}
 
 	responseDestination := strings.TrimSpace(params.ResponseDestination)
@@ -110,7 +111,7 @@ func (a *TON) CreateTransaction(ctx context.Context, params CreateTransactionPar
 
 func transactionTONMinor(destination string, amountMinor uint64, comment string) (*Transaction, error) {
 	if amountMinor > math.MaxInt64 {
-		return nil, fmt.Errorf("ton: amount %d exceeds supported range", amountMinor)
+		return nil, ErrAmountOverflow
 	}
 	amount := int(amountMinor)
 	return TransactionTON(destination, &amount, comment), nil
@@ -118,16 +119,16 @@ func transactionTONMinor(destination string, amountMinor uint64, comment string)
 
 func transactionJetton(ctx context.Context, network string, networkConfigURL string, sourceWallet string, destination string, responseDestination string, amountMinor uint64, comment string, asset paymentsqlc.PaymentAsset) (*Transaction, error) {
 	if !asset.ContractAddress.Valid || strings.TrimSpace(asset.ContractAddress.String) == "" {
-		return nil, fmt.Errorf("ton: asset %s has no jetton master address", asset.Code)
+		return nil, ErrJettonMasterAddressRequired
 	}
 
 	recipient, err := address.ParseAddr(destination)
 	if err != nil {
-		return nil, fmt.Errorf("ton: parse destination wallet: %w", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrDestinationAddressInvalid.Message(), err)
 	}
 	response, err := address.ParseAddr(responseDestination)
 	if err != nil {
-		return nil, fmt.Errorf("ton: parse response destination wallet: %w", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrResponseAddressInvalid.Message(), err)
 	}
 
 	jettonWalletAddress, err := resolveJettonWalletAddress(ctx, network, networkConfigURL, sourceWallet, asset.ContractAddress.String)
@@ -172,19 +173,19 @@ func resolveJettonWalletAddress(ctx context.Context, network string, networkConf
 	stickyCtx := client.StickyContext(ctx)
 	cfg, err := liteclient.GetConfigFromUrl(stickyCtx, configURL)
 	if err != nil {
-		return "", fmt.Errorf("ton: load network config: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeUnavailable, ErrNetworkConfigLoadFailed.Message(), err)
 	}
 	if err := client.AddConnectionsFromConfig(stickyCtx, cfg); err != nil {
-		return "", fmt.Errorf("ton: add lite connections: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeUnavailable, ErrLiteConnectionsFailed.Message(), err)
 	}
 
 	master, err := parseTONAddress(masterAddress)
 	if err != nil {
-		return "", fmt.Errorf("ton: parse jetton master address: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrMasterAddressInvalid.Message(), err)
 	}
 	owner, err := address.ParseAddr(ownerWallet)
 	if err != nil {
-		return "", fmt.Errorf("ton: parse owner wallet address: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrOwnerWalletInvalid.Message(), err)
 	}
 
 	api := tonclient.NewAPIClient(client, tonclient.ProofCheckPolicyFast).WithRetryTimeout(0, 5*time.Second)
@@ -192,7 +193,7 @@ func resolveJettonWalletAddress(ctx context.Context, network string, networkConf
 	masterClient := jetton.NewJettonMasterClient(api, master)
 	wallet, err := masterClient.GetJettonWallet(stickyCtx, owner)
 	if err != nil {
-		return "", fmt.Errorf("ton: get recipient jetton wallet: %w", err)
+		return "", serviceerrors.Wrap(serviceerrors.CodeUnavailable, ErrRecipientWalletResolveFailed.Message(), err)
 	}
 	return wallet.Address().String(), nil
 }

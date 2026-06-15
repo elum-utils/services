@@ -2,7 +2,6 @@ package platega
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	utils "github.com/elum-utils/services/internal/utils"
@@ -14,7 +13,7 @@ func (a *Platega) CreatePayment(ctx context.Context, params CreatePaymentParams)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("platega: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	client := NewClient(params.Credentials)
 
@@ -59,7 +58,7 @@ func (a *Platega) CreatePayment(ctx context.Context, params CreatePaymentParams)
 		return nil, err
 	}
 	if transaction.TransactionID == "" {
-		return nil, errors.New("platega: create transaction response has empty transaction id")
+		return nil, ErrTransactionResponseEmpty
 	}
 
 	idempotencyKey := params.IdempotencyKey
@@ -109,7 +108,7 @@ func (a *Platega) GetH2H(ctx context.Context, params GetH2HParams) (H2HResponse,
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil {
-		return H2HResponse{}, errors.New("platega: api is not initialized")
+		return H2HResponse{}, ErrNotInitialized
 	}
 	return NewClient(params.Credentials).GetH2H(ctx, params.TransactionID)
 }

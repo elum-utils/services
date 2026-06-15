@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"regexp"
 	"strings"
 
@@ -27,10 +26,10 @@ func (a *Admin) UpdateItem(ctx context.Context, params UpdateItemParams) (int64,
 	defer cancel()
 	params.Key = normalizeKey(params.Key)
 	if strings.TrimSpace(params.WorkspaceID) == "" || !itemKeyPattern.MatchString(params.Key) {
-		return 0, errors.New("reference admin: workspace and valid key are required")
+		return 0, ErrItemScopeInvalid
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
-		return 0, errors.New("reference admin: payload must be valid JSON")
+		return 0, ErrItemPayloadInvalid
 	}
 	return a.repository.UpdateItem(mergedCtx, repository.SaveItemParams{
 		WorkspaceID: params.WorkspaceID, Key: params.Key,
@@ -49,7 +48,7 @@ func (a *Admin) DangerousChangeType(ctx context.Context, params DangerousChangeT
 		return 0, err
 	}
 	if !validType(params.NewType) {
-		return 0, errors.New("reference admin: type must be quantity or duration")
+		return 0, ErrItemTypeInvalid
 	}
 	return a.repository.DangerousChangeType(mergedCtx, repository.DangerousChangeTypeParams{
 		WorkspaceID: params.WorkspaceID, Key: params.Key,
@@ -71,7 +70,7 @@ func (a *Admin) ListItems(ctx context.Context, params ItemListParams) ([]ItemMod
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.Type != "" && !validType(params.Type) {
-		return nil, errors.New("reference admin: invalid item type")
+		return nil, ErrItemTypeFilterInvalid
 	}
 	limit, offset := normalizePage(params.Page)
 	items, err := a.repository.AdminListItems(mergedCtx, repository.ListItemsParams{
@@ -105,17 +104,17 @@ func validateItem(workspaceID, key, itemType string, payload json.RawMessage) er
 		return err
 	}
 	if len(payload) == 0 || !json.Valid(payload) {
-		return errors.New("reference admin: payload must be valid JSON")
+		return ErrItemPayloadInvalid
 	}
 	return nil
 }
 
 func validateIdentity(workspaceID, key, itemType string) error {
 	if strings.TrimSpace(workspaceID) == "" || !itemKeyPattern.MatchString(key) {
-		return errors.New("reference admin: workspace and valid key are required")
+		return ErrItemScopeInvalid
 	}
 	if !validType(itemType) {
-		return errors.New("reference admin: type must be quantity or duration")
+		return ErrItemTypeInvalid
 	}
 	return nil
 }

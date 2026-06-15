@@ -3,7 +3,6 @@ package platega
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	utils "github.com/elum-utils/services/internal/utils"
 	"github.com/elum-utils/services/payment/repository"
@@ -14,11 +13,11 @@ func (a *Platega) HandleWebhook(ctx context.Context, request WebhookRequest) (*W
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("platega: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	signatureValid := validateHeaders(request.Headers, request.Credentials)
 	if !signatureValid {
-		return nil, errors.New("platega: invalid callback credentials")
+		return nil, ErrWebhookCredentialsInvalid
 	}
 
 	var payload callbackPayload
@@ -33,7 +32,7 @@ func (a *Platega) handlePayload(ctx context.Context, payload callbackPayload, ra
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if payload.ID == "" {
-		return nil, errors.New("platega: transaction id is empty")
+		return nil, ErrTransactionIDRequired
 	}
 
 	attempt, err := a.repository.GetAttemptByProviderPaymentID(ctx, ProviderCode, payload.ID)

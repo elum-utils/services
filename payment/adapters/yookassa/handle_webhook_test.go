@@ -2,7 +2,7 @@ package yookassa
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"testing"
 )
 
@@ -13,7 +13,7 @@ func TestHandleWebhookRejectsInvalidSignatureBeforePayloadParsing(t *testing.T) 
 	if err == nil {
 		t.Fatal("expected invalid signature to fail")
 	}
-	if !strings.Contains(err.Error(), "invalid webhook signature") {
+	if !errors.Is(err, ErrWebhookSignatureInvalid) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

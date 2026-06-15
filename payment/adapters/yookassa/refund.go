@@ -2,7 +2,6 @@ package yookassa
 
 import (
 	"context"
-	"errors"
 )
 
 func (a *YooKassa) Execute(ctx context.Context, params RefundParams) (RefundResult, error) {
@@ -10,7 +9,7 @@ func (a *YooKassa) Execute(ctx context.Context, params RefundParams) (RefundResu
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil {
-		return RefundResult{}, errors.New("yookassa: api is not initialized")
+		return RefundResult{}, ErrNotInitialized
 	}
 	result, err := NewClient(params.Credentials).CreateRefund(ctx, createRefundRequest{
 		PaymentID: params.PaymentID,

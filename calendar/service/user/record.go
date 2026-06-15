@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -21,7 +20,7 @@ func (u *User) Record(ctx context.Context, params RecordParams) (RecordResult, e
 	defer cancel()
 	if params.Identity.WorkspaceID == "" || params.Identity.PlatformUserID == "" ||
 		strings.TrimSpace(params.CalendarRef) == "" || strings.TrimSpace(params.OperationID) == "" {
-		return RecordResult{}, errors.New("calendar user: identity, calendar and operation are required")
+		return RecordResult{}, ErrRecordParamsRequired
 	}
 	value, err := u.repository.Record(mergedCtx, repository.RecordParams{
 		Identity: repositoryIdentity(params.Identity), CalendarRef: params.CalendarRef,

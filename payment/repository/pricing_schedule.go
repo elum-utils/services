@@ -3,10 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strings"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -15,8 +15,8 @@ const (
 )
 
 var (
-	ErrInvalidAutoUpdateConfig   = errors.New("payment: invalid asset rate auto-update config")
-	ErrAssetRateScheduleNotFound = errors.New("payment: asset rate schedule not found")
+	ErrInvalidAutoUpdateConfig   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment asset rate auto-update configuration is invalid")
+	ErrAssetRateScheduleNotFound = serviceerrors.New(serviceerrors.CodeNotFound, "payment asset rate schedule not found")
 )
 
 type AssetRateAutoUpdateParams struct {

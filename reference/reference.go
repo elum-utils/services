@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -35,19 +36,19 @@ func New(params DatabaseParams) *Reference {
 func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Reference, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference sql client initialization failed", err)
 	}
 	return newReference(ctx, client, false, options), nil
 }
 
 func (r *Reference) Run(ctx context.Context) error {
 	if r == nil {
-		return errors.New("reference: nil service")
+		return ErrServiceNil
 	}
 	r.lifecycleMu.Lock()
 	if r.running {
 		r.lifecycleMu.Unlock()
-		return errors.New("reference: service is already running")
+		return ErrServiceRunning
 	}
 	r.running = true
 	params := r.params
@@ -61,7 +62,7 @@ func (r *Reference) Run(ctx context.Context) error {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return nil
 		}
-		return err
+		return wrapLifecycleError(err)
 	}
 	r.adopt(running)
 	defer r.Close()
@@ -71,19 +72,19 @@ func (r *Reference) Run(ctx context.Context) error {
 
 func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 	if params.User == "" || params.Database == "" {
-		return nil, errors.New("reference: database user and name are required")
+		return nil, ErrDatabaseConfigRequired
 	}
 	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
 		User: params.User, Password: params.Password, Database: params.Database,
 		Host: params.Host, Port: params.Port,
 	})
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "reference database connection failed", err)
 	}
 	client, err := sqlwrap.New(db, toSQLWrapOptions(params.Options))
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
 		QueryTimeout: params.Options.QueryTimeout,
@@ -93,11 +94,11 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 	if err := bootstrap.Bootstrap(contextutil.Normalize(ctx)); err != nil {
 		_ = bootstrap.Close()
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference bootstrap failed", err)
 	}
 	if err := bootstrap.Close(); err != nil {
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference bootstrap shutdown failed", err)
 	}
 	return newReference(ctx, client, true, params.Options), nil
 }

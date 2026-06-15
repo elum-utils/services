@@ -3,10 +3,10 @@ package cpa
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	servicecallback "github.com/elum-utils/services/callback"
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
@@ -62,15 +62,15 @@ func WithCallbackIdleDelay(delay time.Duration) CallbackOption {
 
 func (c *CPA) OnCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if handler == nil {
-		return errors.New("cpa: callback handler is nil")
+		return ErrCallbackHandlerNil
 	}
 	if c == nil {
-		return errors.New("cpa: nil service")
+		return ErrServiceNil
 	}
 	c.lifecycleMu.Lock()
 	if c.running {
 		c.lifecycleMu.Unlock()
-		return errors.New("cpa: callbacks must be registered before Run")
+		return ErrCallbacksRegistrationClosed
 	}
 	if c.callbacks != nil {
 		c.lifecycleMu.Unlock()
@@ -85,7 +85,7 @@ func (c *CPA) OnCallback(ctx context.Context, handler CallbackHandler, opts ...C
 
 func (c *CPA) runCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if c == nil || c.callbacks == nil {
-		return callbackutil.ErrStoreNotConfigured
+		return ErrCallbacksNotConfigured
 	}
 	runCtx, cancel := c.bindContext(ctx)
 	defer cancel()
@@ -94,7 +94,7 @@ func (c *CPA) runCallback(ctx context.Context, handler CallbackHandler, opts ...
 		value := Context{Context: callbackCtx}
 		var payload CallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
-			return err
+			return serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa callback payload decode failed", err)
 		}
 		value.Payload = &servicecallback.RewardPayload{
 			Identity: servicecallback.Identity{

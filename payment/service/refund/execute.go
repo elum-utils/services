@@ -3,7 +3,6 @@ package refund
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/elum-utils/services/payment/repository"
 )
@@ -35,7 +34,7 @@ func (a *Refund) Execute(ctx context.Context, params Params) (*Result, error) {
 
 	providerRefund, ok := a.providers[attempt.ProviderCode]
 	if !ok || providerRefund == nil {
-		return nil, fmt.Errorf("%w: %s", ErrProviderUnsupported, attempt.ProviderCode)
+		return nil, ErrProviderUnsupported
 	}
 
 	id, err := a.repository.CreateRefund(ctx, repository.RefundCreateParams{

@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -44,7 +43,7 @@ func (a *Admin) UpdateCalendar(ctx context.Context, params SaveCalendarParams) (
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.ID == "" {
-		return 0, errors.New("calendar admin: id is required")
+		return 0, ErrCalendarIDRequired
 	}
 	if err := validateCalendar(&params); err != nil {
 		return 0, err
@@ -102,7 +101,7 @@ func (a *Admin) DeleteCalendar(ctx context.Context, workspaceID, id string) (int
 
 func validateCalendar(params *SaveCalendarParams) error {
 	if params.WorkspaceID == "" || strings.TrimSpace(params.Type) == "" {
-		return errors.New("calendar admin: workspace and type are required")
+		return ErrCalendarScopeRequired
 	}
 	if params.IntervalCount == 0 {
 		params.IntervalCount = 1
@@ -114,26 +113,26 @@ func validateCalendar(params *SaveCalendarParams) error {
 		params.Timezone = "UTC"
 	}
 	if _, err := time.LoadLocation(params.Timezone); err != nil {
-		return errors.New("calendar admin: invalid timezone")
+		return ErrCalendarTimezoneInvalid
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
-		return errors.New("calendar admin: start_at must be before end_at")
+		return ErrCalendarRangeInvalid
 	}
 	if params.Mode != repository.ModeInterval && params.Mode != repository.ModeSequential &&
 		params.Mode != repository.ModeSequentialReset {
-		return errors.New("calendar admin: invalid mode")
+		return ErrCalendarModeInvalid
 	}
 	if params.IntervalType != repository.IntervalCalendar && params.IntervalType != repository.IntervalFloating {
-		return errors.New("calendar admin: invalid interval type")
+		return ErrCalendarIntervalTypeInvalid
 	}
 	switch params.IntervalUnit {
 	case "second", "minute", "hour", "day", "week", "month":
 	default:
-		return errors.New("calendar admin: invalid interval unit")
+		return ErrCalendarIntervalUnitInvalid
 	}
 	if params.EndBehavior != repository.EndRestart && params.EndBehavior != repository.EndRepeatLast &&
 		params.EndBehavior != repository.EndStop {
-		return errors.New("calendar admin: invalid end behavior")
+		return ErrCalendarEndBehaviorInvalid
 	}
 	return nil
 }

@@ -3,7 +3,6 @@ package yookassa
 import (
 	"context"
 	"encoding/json"
-	"errors"
 )
 
 func (a *YooKassa) SyncPayment(ctx context.Context, params SyncPaymentParams) (*WebhookResult, error) {
@@ -11,7 +10,7 @@ func (a *YooKassa) SyncPayment(ctx context.Context, params SyncPaymentParams) (*
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil || a.repository == nil {
-		return nil, errors.New("yookassa: api is not initialized")
+		return nil, ErrNotInitialized
 	}
 	payment, err := NewClient(params.Credentials).GetPayment(ctx, params.PaymentID)
 	if err != nil {

@@ -2,7 +2,6 @@ package platega
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -85,7 +84,7 @@ func NewClient(credentials Credentials) *Client {
 
 func (c *Client) requireCredentials() error {
 	if c == nil || c.merchantID == "" || c.secret == "" {
-		return errors.New("platega: merchant id and secret are required")
+		return ErrCredentialsRequired
 	}
 	return nil
 }

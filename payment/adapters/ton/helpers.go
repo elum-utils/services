@@ -30,7 +30,7 @@ func validateNetwork(network string) (string, error) {
 	case NetworkMainnet, NetworkTestnet:
 		return network, nil
 	default:
-		return "", errors.New("ton: network must be ton.NetworkMainnet or ton.NetworkTestnet")
+		return "", ErrNetworkInvalid
 	}
 }
 

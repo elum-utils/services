@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -28,7 +27,7 @@ func (a *TON) ResolveJettonAsset(ctx context.Context, network string, masterAddr
 	}
 	masterAddress = strings.TrimSpace(masterAddress)
 	if masterAddress == "" {
-		return JettonAsset{}, errors.New("ton: jetton master address is required")
+		return JettonAsset{}, ErrJettonMasterAddressRequired
 	}
 
 	candidates := []string{masterAddress}
@@ -73,11 +72,7 @@ func (a *TON) ResolveJettonAsset(ctx context.Context, network string, masterAddr
 		}
 	}
 
-	return JettonAsset{}, fmt.Errorf(
-		"ton: active jetton asset for network %s and master %s not found",
-		network,
-		masterAddress,
-	)
+	return JettonAsset{}, ErrJettonAssetNotFound
 }
 
 func jettonAssetFromRow(asset paymentsqlc.PaymentAsset) JettonAsset {

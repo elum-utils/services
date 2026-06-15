@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -80,7 +79,7 @@ func NewClient(credentials Credentials) *Client {
 
 func (c *Client) requireCredentials() error {
 	if c == nil || c.botToken == "" {
-		return errors.New("telegram_stars: bot token is required")
+		return ErrBotTokenRequired
 	}
 	return nil
 }

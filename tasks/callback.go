@@ -3,10 +3,10 @@ package tasks
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	servicecallback "github.com/elum-utils/services/callback"
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
@@ -49,15 +49,15 @@ func WithCallbackIdleDelay(value time.Duration) CallbackOption {
 
 func (t *Tasks) OnCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if handler == nil {
-		return errors.New("tasks: callback handler is nil")
+		return ErrCallbackHandlerNil
 	}
 	if t == nil {
-		return errors.New("tasks: nil service")
+		return ErrServiceNil
 	}
 	t.lifecycleMu.Lock()
 	if t.running {
 		t.lifecycleMu.Unlock()
-		return errors.New("tasks: callbacks must be registered before Run")
+		return ErrCallbacksRegistrationClosed
 	}
 	if t.callbacks != nil {
 		t.lifecycleMu.Unlock()
@@ -72,7 +72,7 @@ func (t *Tasks) OnCallback(ctx context.Context, handler CallbackHandler, opts ..
 
 func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if t == nil || t.callbacks == nil {
-		return callbackutil.ErrStoreNotConfigured
+		return ErrCallbacksNotConfigured
 	}
 	runCtx, cancel := t.bindContext(ctx)
 	defer cancel()
@@ -80,7 +80,7 @@ func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts .
 	return t.callbacks.On(runCtx, func(callbackCtx callbackutil.Context) error {
 		var payload CallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
-			return err
+			return serviceerrors.Wrap(serviceerrors.CodeInternalError, "tasks callback payload decode failed", err)
 		}
 		return handler(Context{
 			Context: callbackCtx,

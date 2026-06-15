@@ -14,6 +14,7 @@ import (
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/elum-utils/services/payment/adapters/platega"
 	"github.com/elum-utils/services/payment/adapters/telegramstars"
 	"github.com/elum-utils/services/payment/adapters/ton"
@@ -73,19 +74,19 @@ func New(params DatabaseParams) *Payment {
 func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Payment, error) {
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment sql client initialization failed", err)
 	}
 	return newAPI(ctx, client, false, options), nil
 }
 
 func (a *Payment) Run(ctx context.Context) error {
 	if a == nil {
-		return errors.New("payment: nil service")
+		return ErrServiceNil
 	}
 	a.lifecycleMu.Lock()
 	if a.running {
 		a.lifecycleMu.Unlock()
-		return errors.New("payment: service is already running")
+		return ErrServiceRunning
 	}
 	a.running = true
 	params := a.params
@@ -100,7 +101,7 @@ func (a *Payment) Run(ctx context.Context) error {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return nil
 		}
-		return err
+		return wrapLifecycleError(err)
 	}
 	a.adopt(running)
 	defer a.Close()
@@ -122,28 +123,28 @@ func (a *Payment) Run(ctx context.Context) error {
 		if errors.Is(err, context.Canceled) && a.rootCtx.Err() != nil {
 			return nil
 		}
-		return err
+		return wrapLifecycleError(err)
 	}
 }
 
 func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 	if params.User == "" {
-		return nil, errors.New("payment: database user is required")
+		return nil, ErrDatabaseUserRequired
 	}
 	if params.Database == "" {
-		return nil, errors.New("payment: database name is required")
+		return nil, ErrDatabaseNameRequired
 	}
 	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
 		User: params.User, Password: params.Password, Database: params.Database,
 		Host: params.Host, Port: params.Port,
 	})
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "payment database connection failed", err)
 	}
 	client, err := sqlwrap.New(db, toSQLWrapOptions(params.Options))
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment sql client initialization failed", err)
 	}
 	bootstrap := repository.NewPaymentRepositoryWithOptions(client, repository.Options{
 		QueryTimeout: params.Options.QueryTimeout,
@@ -153,11 +154,11 @@ func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment bootstrap failed", err)
 	}
 	if err := bootstrap.Close(); err != nil {
 		_ = client.Close()
-		return nil, err
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment bootstrap shutdown failed", err)
 	}
 	return newAPI(ctx, client, true, params.Options), nil
 }
@@ -318,17 +319,17 @@ func refundProviders(
 		telegramstars.ProviderCode: func(ctx context.Context, params refund.ProviderRefundParams) (refund.ProviderRefundResult, error) {
 			credentials, ok := params.ProviderParams.(telegramstars.Credentials)
 			if !ok {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: telegram_stars credentials are required")
+				return refund.ProviderRefundResult{}, ErrTelegramStarsRefundCredentialsRequired
 			}
 			if params.AmountMinor != params.Attempt.AmountMinor {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: telegram_stars supports full refunds only")
+				return refund.ProviderRefundResult{}, ErrTelegramStarsFullRefundOnly
 			}
 			if params.Attempt.ProviderChargeID == nil || *params.Attempt.ProviderChargeID == "" {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: telegram_stars provider charge id is empty")
+				return refund.ProviderRefundResult{}, ErrTelegramStarsChargeIDRequired
 			}
 			userID, err := strconv.ParseInt(params.Order.PlatformUserID, 10, 64)
 			if err != nil {
-				return refund.ProviderRefundResult{}, fmt.Errorf("payment refund: telegram_stars platform user id must be int64: %w", err)
+				return refund.ProviderRefundResult{}, serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrTelegramStarsPlatformUserIDInvalid.Message(), err)
 			}
 			result, err := telegramStarsAPI.Execute(ctx, telegramstars.RefundParams{
 				Credentials:             credentials,
@@ -346,10 +347,10 @@ func refundProviders(
 		yookassa.ProviderCode: func(ctx context.Context, params refund.ProviderRefundParams) (refund.ProviderRefundResult, error) {
 			credentials, ok := params.ProviderParams.(yookassa.Credentials)
 			if !ok {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: yookassa credentials are required")
+				return refund.ProviderRefundResult{}, ErrYooKassaRefundCredentialsRequired
 			}
 			if params.Attempt.ProviderPaymentID == nil || *params.Attempt.ProviderPaymentID == "" {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: yookassa provider payment id is empty")
+				return refund.ProviderRefundResult{}, ErrYooKassaPaymentIDRequired
 			}
 			result, err := yooKassaAPI.Execute(ctx, yookassa.RefundParams{
 				Credentials:    credentials,
@@ -370,7 +371,7 @@ func refundProviders(
 		platega.ProviderCode: func(ctx context.Context, params refund.ProviderRefundParams) (refund.ProviderRefundResult, error) {
 			providerParams, ok := params.ProviderParams.(platega.RefundParams)
 			if !ok {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: platega refund parameters are required")
+				return refund.ProviderRefundResult{}, ErrPlategaRefundParamsRequired
 			}
 			if params.Attempt.ProviderPaymentID != nil {
 				providerParams.TransactionID = *params.Attempt.ProviderPaymentID
@@ -392,7 +393,7 @@ func refundProviders(
 		ton.ProviderCode: func(ctx context.Context, params refund.ProviderRefundParams) (refund.ProviderRefundResult, error) {
 			providerParams, ok := params.ProviderParams.(ton.RefundParams)
 			if !ok {
-				return refund.ProviderRefundResult{}, errors.New("payment refund: ton refund parameters are required")
+				return refund.ProviderRefundResult{}, ErrTONRefundParamsRequired
 			}
 			providerParams.AssetCode = params.Attempt.AssetCode
 			providerParams.AmountMinor = params.AmountMinor

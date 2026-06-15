@@ -3,17 +3,17 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"time"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
 var (
-	ErrInvalidPrice        = errors.New("payment: invalid price")
-	ErrInvalidItemQuantity = errors.New("payment: item quantity must be positive")
-	ErrInvalidReward       = errors.New("payment: invalid reward type or duration unit")
+	ErrInvalidPrice        = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment price is invalid")
+	ErrInvalidItemQuantity = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment item quantity must be positive")
+	ErrInvalidReward       = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment reward type or duration unit is invalid")
 )
 
 type ProductGroupUpsertParams struct {

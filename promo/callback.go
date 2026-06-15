@@ -3,10 +3,10 @@ package promo
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	servicecallback "github.com/elum-utils/services/callback"
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
@@ -50,15 +50,15 @@ func WithCallbackIdleDelay(value time.Duration) CallbackOption {
 
 func (p *Promo) OnCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if handler == nil {
-		return errors.New("promo: callback handler is nil")
+		return ErrCallbackHandlerNil
 	}
 	if p == nil {
-		return errors.New("promo: nil service")
+		return ErrServiceNil
 	}
 	p.lifecycleMu.Lock()
 	if p.running {
 		p.lifecycleMu.Unlock()
-		return errors.New("promo: callbacks must be registered before Run")
+		return ErrCallbacksRegistrationClosed
 	}
 	if p.callbacks != nil {
 		p.lifecycleMu.Unlock()
@@ -73,7 +73,7 @@ func (p *Promo) OnCallback(ctx context.Context, handler CallbackHandler, opts ..
 
 func (p *Promo) runCallback(ctx context.Context, handler CallbackHandler, opts ...CallbackOption) error {
 	if p == nil || p.callbacks == nil {
-		return callbackutil.ErrStoreNotConfigured
+		return ErrCallbacksNotConfigured
 	}
 	runCtx, cancel := p.bindContext(ctx)
 	defer cancel()
@@ -81,7 +81,7 @@ func (p *Promo) runCallback(ctx context.Context, handler CallbackHandler, opts .
 	return p.callbacks.On(runCtx, func(callbackCtx callbackutil.Context) error {
 		var payload CallbackPayload
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
-			return err
+			return serviceerrors.Wrap(serviceerrors.CodeInternalError, "promo callback payload decode failed", err)
 		}
 		return handler(Context{
 			Context: callbackCtx,

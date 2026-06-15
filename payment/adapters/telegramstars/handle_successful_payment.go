@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	utils "github.com/elum-utils/services/internal/utils"
@@ -14,10 +13,10 @@ func (a *TelegramStars) HandleSuccessfulPayment(ctx context.Context, payment Suc
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if payment.InvoicePayload == "" {
-		return nil, errors.New("telegram_stars: invoice payload is empty")
+		return nil, ErrInvoicePayloadRequired
 	}
 	if payment.TelegramPaymentChargeID == "" {
-		return nil, errors.New("telegram_stars: telegram payment charge id is empty")
+		return nil, ErrTelegramPaymentChargeIDRequired
 	}
 
 	attempt, err := a.repository.GetAttemptByProviderPaymentID(ctx, ProviderCode, payment.InvoicePayload)

@@ -2,7 +2,6 @@ package telegramstars
 
 import (
 	"context"
-	"errors"
 )
 
 func (a *TelegramStars) EditSubscription(ctx context.Context, params EditSubscriptionParams) error {
@@ -10,7 +9,7 @@ func (a *TelegramStars) EditSubscription(ctx context.Context, params EditSubscri
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	if a == nil {
-		return errors.New("telegram_stars: api is not initialized")
+		return ErrNotInitialized
 	}
 	return NewClient(params.Credentials).EditUserStarSubscription(ctx, editUserStarSubscriptionRequest{
 		UserID:                  params.UserID,

@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
@@ -52,5 +51,3 @@ func normalizePage(page Page) (int32, int32) {
 	}
 	return page.Limit, page.Offset
 }
-
-var ErrTypeChangeNotConfirmed = errors.New("reference admin: dangerous type change is not confirmed")

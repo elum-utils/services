@@ -2,7 +2,6 @@ package platega
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -21,7 +20,7 @@ func (c *Client) GetTransaction(ctx context.Context, transactionID string) (tran
 		return transactionStatusResponse{}, err
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
-		return transactionStatusResponse{}, fmt.Errorf("platega: get transaction failed: status=%d body=%s", resp.StatusCode(), resp.String())
+		return transactionStatusResponse{}, wrapAPIError("get transaction", resp.StatusCode(), resp.String())
 	}
 	return result, nil
 }

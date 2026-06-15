@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/elum-utils/services/payment/repository"
 )
 
@@ -38,7 +39,7 @@ func fetchDexScreenerPrices(
 	updates []repository.DueAssetRateUpdate,
 ) (map[string]uint64, error) {
 	if client == nil {
-		return nil, errors.New("payment: dexscreener HTTP client is nil")
+		return nil, ErrDexScreenerClientRequired
 	}
 	addresses := make([]string, 0, len(updates))
 	seen := make(map[string]struct{}, len(updates))
@@ -54,10 +55,10 @@ func fetchDexScreenerPrices(
 		addresses = append(addresses, address)
 	}
 	if len(addresses) == 0 {
-		return nil, errors.New("payment: no source token addresses")
+		return nil, ErrDexScreenerAddressesRequired
 	}
 	if len(addresses) > 30 {
-		return nil, errors.New("payment: dexscreener batch exceeds 30 token addresses")
+		return nil, ErrDexScreenerBatchTooLarge
 	}
 
 	endpoint := strings.TrimRight(baseURL, "/") +
@@ -75,7 +76,7 @@ func fetchDexScreenerPrices(
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1024))
-		return nil, fmt.Errorf("dexscreener status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, fmt.Sprintf("payment dexscreener request failed with status %d", response.StatusCode), errors.New(strings.TrimSpace(string(body))))
 	}
 
 	var pairs []dexScreenerPair
@@ -147,14 +148,14 @@ func dexScreenerRequestedPriceMinor(
 func usdStringToMinor(value string) (uint64, error) {
 	rat, ok := new(big.Rat).SetString(strings.TrimSpace(value))
 	if !ok || rat.Sign() <= 0 {
-		return 0, errors.New("payment: invalid USD price")
+		return 0, ErrUSDPriceInvalid
 	}
 	return ratToUSDTMinor(rat)
 }
 
 func ratToUSDTMinor(value *big.Rat) (uint64, error) {
 	if value == nil || value.Sign() <= 0 {
-		return 0, errors.New("payment: invalid USD price")
+		return 0, ErrUSDPriceInvalid
 	}
 	scaled := new(big.Rat).Mul(value, big.NewRat(1_000_000, 1))
 	minor, remainder := new(big.Int).QuoRem(scaled.Num(), scaled.Denom(), new(big.Int))
@@ -162,7 +163,7 @@ func ratToUSDTMinor(value *big.Rat) (uint64, error) {
 		minor.Add(minor, big.NewInt(1))
 	}
 	if !minor.IsUint64() || minor.Sign() <= 0 {
-		return 0, errors.New("payment: USD price exceeds supported range")
+		return 0, ErrUSDPriceOverflow
 	}
 	return minor.Uint64(), nil
 }

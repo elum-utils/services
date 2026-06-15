@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -38,7 +37,7 @@ func (a *Admin) withContext(ctx context.Context) (context.Context, context.Cance
 
 func (a *Admin) Bootstrap(ctx context.Context) error {
 	if a == nil || a.repository == nil {
-		return errors.New("tasks admin: repository is not configured")
+		return ErrRepositoryNotConfigured
 	}
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()

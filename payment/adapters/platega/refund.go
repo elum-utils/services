@@ -2,10 +2,7 @@ package platega
 
 import (
 	"context"
-	"errors"
 )
-
-var ErrRefundUnsupported = errors.New("platega: refund API is not configured")
 
 type RefundParams struct {
 	Executor       RefundExecutor

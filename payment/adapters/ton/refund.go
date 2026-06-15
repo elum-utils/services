@@ -2,10 +2,7 @@ package ton
 
 import (
 	"context"
-	"errors"
 )
-
-var ErrRefundUnsupported = errors.New("ton: outgoing wallet signer is not configured")
 
 type RefundParams struct {
 	Executor       RefundExecutor

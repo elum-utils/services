@@ -2,8 +2,8 @@ package ton
 
 import (
 	"encoding/base64"
-	"fmt"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/xssnick/tonutils-go/tlb"
 )
 
@@ -31,7 +31,7 @@ type Ton struct {
 func (s *Sub) TonBody(ti *tlb.InternalMessage, txHash []byte) (*RootTON, error) {
 	payload, err := ti.Body.BeginParse()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse body: %v", err)
+		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrBodyParseFailed.Message(), err)
 	}
 
 	text := ""
@@ -40,11 +40,11 @@ func (s *Sub) TonBody(ti *tlb.InternalMessage, txHash []byte) (*RootTON, error) 
 		if err == nil && sumType == 0x00000000 {
 			value, err := payload.LoadStringSnake()
 			if err != nil {
-				return nil, fmt.Errorf("failed to load text comment: %v", err)
+				return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrTextCommentReadFailed.Message(), err)
 			}
 			text = value
 		} else if err != nil {
-			return nil, fmt.Errorf("failed to load sumType: %v", err)
+			return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, ErrSumTypeReadFailed.Message(), err)
 		}
 	}
 
