@@ -3,8 +3,8 @@ package integration
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	json "github.com/goccy/go-json"
 	"io"
 	"net/http"
 	"net/url"

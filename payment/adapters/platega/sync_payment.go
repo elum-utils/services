@@ -2,7 +2,7 @@ package platega
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 )
 
 func (a *Platega) SyncPayment(ctx context.Context, params SyncPaymentParams) (*WebhookResult, error) {

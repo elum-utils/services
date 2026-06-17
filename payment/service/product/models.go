@@ -1,6 +1,9 @@
 package product
 
-import "time"
+import (
+	json "github.com/goccy/go-json"
+	"time"
+)
 
 type UpsertParams struct {
 	WorkspaceID          string
@@ -8,6 +11,7 @@ type UpsertParams struct {
 	GroupCode            *string
 	TitleKey             string
 	DescriptionKey       *string
+	Target               json.RawMessage
 	ImageURL             *string
 	LinkURL              *string
 	SizeLabel            *string
@@ -31,7 +35,11 @@ type ListParams struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 	AssetCode      string
 	Locale         string
 }

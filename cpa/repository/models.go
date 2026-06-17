@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 
@@ -20,6 +20,7 @@ type Offer struct {
 	WorkspaceID       string
 	ID                string
 	Payload           json.RawMessage
+	Target            json.RawMessage
 	CodeMode          string
 	CodeSource        *string
 	SharedCode        *string

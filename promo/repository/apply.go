@@ -2,10 +2,11 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/internal/utils/target"
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
 )
 
@@ -26,6 +27,17 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 		result = mapApplyBundle(rows)
 		if result.Redemption != nil {
 			result.Status = StatusAlreadyApplied
+			return nil
+		}
+		if !target.Match(result.Promo.Target, target.Context{
+			IsPremium:  identity.IsPremium,
+			Sex:        identity.Sex,
+			Country:    identity.Country,
+			Locale:     locale,
+			Platform:   identity.Platform,
+			PlatformID: identity.PlatformID,
+		}) {
+			result.Status = StatusNotFound
 			return nil
 		}
 
@@ -74,7 +86,7 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 	result := ApplyResult{
 		Status: StatusNotFound,
 		Promo: Promo{
-			ID: first.ID, WorkspaceID: first.WorkspaceID, Code: first.Code, Payload: first.Payload,
+			ID: first.ID, WorkspaceID: first.WorkspaceID, Code: first.Code, Payload: first.Payload, Target: first.Target,
 			MaxActivations: first.MaxActivations, ActivationCount: first.ActivationCount,
 			IsActive: first.IsActive, StartAt: sqlwrap.NullTimePtr(first.StartAt),
 			EndAt: sqlwrap.NullTimePtr(first.EndAt), DeletedAt: sqlwrap.NullTimePtr(first.DeletedAt),

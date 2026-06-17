@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	"github.com/elum-utils/services/cpa/service/user"
@@ -15,6 +15,7 @@ type Page struct {
 type OfferModel struct {
 	ID                string              `json:"id"`
 	Payload           json.RawMessage     `json:"payload"`
+	Target            json.RawMessage     `json:"target,omitempty"`
 	CodeMode          string              `json:"code_mode"`
 	CodeSource        *string             `json:"code_source,omitempty"`
 	SharedCode        *string             `json:"shared_code,omitempty"`

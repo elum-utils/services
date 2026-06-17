@@ -2,7 +2,7 @@ package internalapi
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	"github.com/elum-utils/services/tasks/repository"

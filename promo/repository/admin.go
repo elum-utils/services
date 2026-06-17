@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -15,6 +15,7 @@ type SavePromoParams struct {
 	WorkspaceID    string
 	Code           string
 	Payload        json.RawMessage
+	Target         json.RawMessage
 	MaxActivations uint64
 	IsActive       bool
 	StartAt        *time.Time
@@ -22,11 +23,16 @@ type SavePromoParams struct {
 }
 
 func (r *Repository) CreatePromo(ctx context.Context, params SavePromoParams) (uint64, error) {
+	target := params.Target
+	if len(target) == 0 {
+		target = []byte("null")
+	}
 	id, err := r.q.AdminCreatePromo(ctx, promosqlc.AdminCreatePromoParams{
 		WorkspaceID:    params.WorkspaceID,
 		Code:           params.Code,
 		CodeNormalized: normalizeCode(params.Code),
 		Payload:        params.Payload,
+		Target:         target,
 		MaxActivations: params.MaxActivations,
 		IsActive:       params.IsActive,
 		StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
@@ -43,10 +49,15 @@ func (r *Repository) CreatePromo(ctx context.Context, params SavePromoParams) (u
 }
 
 func (r *Repository) UpdatePromo(ctx context.Context, params SavePromoParams) (int64, error) {
+	target := params.Target
+	if len(target) == 0 {
+		target = []byte("null")
+	}
 	rows, err := r.q.AdminUpdatePromo(ctx, promosqlc.AdminUpdatePromoParams{
 		Code:           params.Code,
 		CodeNormalized: normalizeCode(params.Code),
 		Payload:        params.Payload,
+		Target:         target,
 		MaxActivations: params.MaxActivations,
 		IsActive:       params.IsActive,
 		StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
@@ -265,7 +276,7 @@ func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, promo
 
 func mapPromo(row promosqlc.PromoOffer) Promo {
 	return Promo{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Payload: row.Payload,
+		ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Payload: row.Payload, Target: row.Target,
 		MaxActivations: row.MaxActivations, ActivationCount: row.ActivationCount,
 		IsActive: row.IsActive, StartAt: sqlwrap.NullTimePtr(row.StartAt),
 		EndAt: sqlwrap.NullTimePtr(row.EndAt), DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),

@@ -450,6 +450,7 @@ type CpaOffer struct {
 	WorkspaceID       string                 `json:"workspace_id"`
 	ID                string                 `json:"id"`
 	Payload           json.RawMessage        `json:"payload"`
+	Target            json.RawMessage        `json:"target"`
 	CodeMode          CpaOfferCodeMode       `json:"code_mode"`
 	CodeSource        NullCpaOfferCodeSource `json:"code_source"`
 	SharedCode        sql.NullString         `json:"shared_code"`

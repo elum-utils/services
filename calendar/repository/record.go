@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"

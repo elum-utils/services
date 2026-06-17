@@ -1,6 +1,10 @@
 package user
 
-import "context"
+import (
+	"context"
+
+	"github.com/elum-utils/services/internal/utils/target"
+)
 
 type ListActiveParams struct {
 	Identity Identity
@@ -18,6 +22,16 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]Offer
 	result := make([]OfferModel, 0, len(bundles))
 	for _, bundle := range bundles {
 		offer := bundle.Offer
+		if !target.Match(offer.Target, target.Context{
+			IsPremium:  params.Identity.IsPremium,
+			Sex:        params.Identity.Sex,
+			Country:    params.Identity.Country,
+			Locale:     params.Locale,
+			Platform:   params.Identity.Platform,
+			PlatformID: params.Identity.PlatformID,
+		}) {
+			continue
+		}
 		model := OfferModel{
 			ID:       offer.ID,
 			Payload:  offer.Payload,

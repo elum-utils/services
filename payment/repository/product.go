@@ -7,10 +7,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	json "github.com/goccy/go-json"
 	"strings"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/internal/utils/target"
 	"github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -18,7 +20,11 @@ type ProductGetParams struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 	ProductID      string
 	AssetCode      string
 	Locale         string
@@ -36,7 +42,11 @@ type ProductListParams struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 	AssetCode      string
 	Locale         string
 	Now            time.Time
@@ -59,6 +69,7 @@ type Product struct {
 	LinkURL              sql.NullString
 	SizeLabel            sql.NullString
 	GroupCode            sql.NullString
+	Target               json.RawMessage
 	Title                string
 	Description          string
 	ImageURL             sql.NullString
@@ -162,6 +173,9 @@ func (r *PaymentRepository) GetProduct(ctx context.Context, params ProductGetPar
 	if err != nil {
 		return Product{}, err
 	}
+	if !productTargetMatches(product.Target, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID) {
+		return Product{}, sql.ErrNoRows
+	}
 
 	if err := r.attachProductLimitLocks(ctx, &product, params.PlatformID, params.PlatformUserID); err != nil {
 		return Product{}, err
@@ -194,6 +208,7 @@ func (r *PaymentRepository) ListProducts(ctx context.Context, params ProductList
 	}
 
 	products := mapProductsCatalogRows(rows, now)
+	products = filterProductsByTarget(products, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID)
 	if len(products) == 0 {
 		return []Product{}, nil
 	}
@@ -441,6 +456,7 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 		LinkURL:              selected.LinkUrl,
 		SizeLabel:            selected.SizeLabel,
 		GroupCode:            selected.GroupCode,
+		Target:               selected.Target,
 		Title:                selected.ProductTitle,
 		Description:          selected.ProductDescription,
 		ImageURL:             selected.ImageUrl,
@@ -569,6 +585,28 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 		})
 	}
 	return product, true
+}
+
+func filterProductsByTarget(products []Product, isPremium bool, sex, country, locale, platform string, platformID int64) []Product {
+	filtered := products[:0]
+	for _, product := range products {
+		if productTargetMatches(product.Target, isPremium, sex, country, locale, platform, platformID) {
+			product.Target = nil
+			filtered = append(filtered, product)
+		}
+	}
+	return filtered
+}
+
+func productTargetMatches(raw json.RawMessage, isPremium bool, sex, country, locale, platform string, platformID int64) bool {
+	return target.Match(raw, target.Context{
+		IsPremium:  isPremium,
+		Sex:        sex,
+		Country:    country,
+		Locale:     locale,
+		Platform:   platform,
+		PlatformID: platformID,
+	})
 }
 
 func listProductsDurationUnitPtr(value sqlc.NullPaymentProductCacheDurationUnit) *string {

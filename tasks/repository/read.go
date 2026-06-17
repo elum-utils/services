@@ -2,10 +2,11 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/internal/utils/target"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
@@ -19,8 +20,9 @@ func (r *Repository) ListActive(ctx context.Context, identity Identity, locale s
 	}
 	tasks := make([]ActiveTask, 0, len(catalog))
 	for _, task := range catalog {
-		if activeTaskVisibleAt(task, now) {
+		if activeTaskVisibleAt(task, now) && activeTaskTargetMatches(task, identity, locale) {
 			task.Progress = nil
+			task.Target = nil
 			tasks = append(tasks, task)
 		}
 	}
@@ -76,7 +78,7 @@ func activeTasksFromTasks(tasks []Task) []ActiveTask {
 			ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
 			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
 			TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
-			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt,
+			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt, Target: task.Target,
 		}
 		if task.Localization != nil {
 			out.Title = task.Localization.Title
@@ -89,6 +91,17 @@ func activeTasksFromTasks(tasks []Task) []ActiveTask {
 
 func activeTaskVisibleAt(task ActiveTask, now time.Time) bool {
 	return (task.StartAt == nil || !task.StartAt.After(now)) && (task.EndAt == nil || task.EndAt.After(now))
+}
+
+func activeTaskTargetMatches(task ActiveTask, identity Identity, locale string) bool {
+	return target.Match(task.Target, target.Context{
+		IsPremium:  identity.IsPremium,
+		Sex:        identity.Sex,
+		Country:    identity.Country,
+		Locale:     locale,
+		Platform:   identity.Platform,
+		PlatformID: identity.PlatformID,
+	})
 }
 
 type CallbackPayload struct {

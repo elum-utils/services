@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS cpa_offer (
     workspace_id VARCHAR(64) NOT NULL,
     id VARCHAR(128) NOT NULL,
     payload JSON NOT NULL,
+    target JSON NULL,
     code_mode ENUM('shared_code', 'personal_code') NOT NULL,
     code_source ENUM('generated', 'pool') NULL,
     shared_code VARCHAR(512) NULL,

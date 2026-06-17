@@ -1,14 +1,15 @@
 -- name: AdminCreatePromo :execlastid
 INSERT INTO promo_offer (
-    workspace_id, code, code_normalized, payload, max_activations,
+    workspace_id, code, code_normalized, payload, target, max_activations,
     is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: AdminUpdatePromo :execrows
 UPDATE promo_offer
 SET code = ?,
     code_normalized = ?,
     payload = ?,
+    target = ?,
     max_activations = ?,
     is_active = ?,
     start_at = ?,
@@ -39,6 +40,7 @@ SELECT
     o.workspace_id,
     o.code,
     o.payload,
+    o.target,
     o.max_activations,
     o.activation_count,
     o.is_active,

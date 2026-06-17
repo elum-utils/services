@@ -421,6 +421,7 @@ type TaskDefinition struct {
 	ResetEvery          uint32                   `json:"reset_every"`
 	Position            int32                    `json:"position"`
 	Payload             json.RawMessage          `json:"payload"`
+	Target              json.RawMessage          `json:"target"`
 	IntegrationKind     sql.NullString           `json:"integration_kind"`
 	IntegrationProvider sql.NullString           `json:"integration_provider"`
 	IntegrationPayload  json.RawMessage          `json:"integration_payload"`

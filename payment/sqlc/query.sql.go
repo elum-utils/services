@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -634,6 +635,7 @@ SELECT
     group_code,
     title_key,
     description_key,
+    target,
     image_url,
     link_url,
     size_label,
@@ -673,6 +675,7 @@ func (q *Queries) AdminGetProduct(ctx context.Context, arg AdminGetProductParams
 		&i.GroupCode,
 		&i.TitleKey,
 		&i.DescriptionKey,
+		&i.Target,
 		&i.ImageUrl,
 		&i.LinkUrl,
 		&i.SizeLabel,
@@ -2164,6 +2167,7 @@ SELECT
     group_code,
     title_key,
     description_key,
+    target,
     image_url,
     link_url,
     size_label,
@@ -2224,6 +2228,7 @@ func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsPa
 			&i.GroupCode,
 			&i.TitleKey,
 			&i.DescriptionKey,
+			&i.Target,
 			&i.ImageUrl,
 			&i.LinkUrl,
 			&i.SizeLabel,
@@ -5201,6 +5206,7 @@ SELECT
     pc.link_url,
     pc.size_label,
     pc.group_code,
+    pc.target,
     pc.product_title,
     pc.product_description,
     pc.image_url,
@@ -5265,6 +5271,7 @@ type GetProductRowsRow struct {
 	LinkUrl              sql.NullString                      `json:"link_url"`
 	SizeLabel            sql.NullString                      `json:"size_label"`
 	GroupCode            sql.NullString                      `json:"group_code"`
+	Target               json.RawMessage                     `json:"target"`
 	ProductTitle         string                              `json:"product_title"`
 	ProductDescription   string                              `json:"product_description"`
 	ImageUrl             sql.NullString                      `json:"image_url"`
@@ -5312,6 +5319,7 @@ func (q *Queries) GetProductRows(ctx context.Context, arg GetProductRowsParams) 
 			&i.LinkUrl,
 			&i.SizeLabel,
 			&i.GroupCode,
+			&i.Target,
 			&i.ProductTitle,
 			&i.ProductDescription,
 			&i.ImageUrl,
@@ -6135,6 +6143,7 @@ SELECT
     pc.link_url,
     pc.size_label,
     pc.group_code,
+    pc.target,
     pc.product_title,
     pc.product_description,
     pc.image_url,
@@ -6193,6 +6202,7 @@ type ListProductCatalogCacheRowsRow struct {
 	LinkUrl              sql.NullString                      `json:"link_url"`
 	SizeLabel            sql.NullString                      `json:"size_label"`
 	GroupCode            sql.NullString                      `json:"group_code"`
+	Target               json.RawMessage                     `json:"target"`
 	ProductTitle         string                              `json:"product_title"`
 	ProductDescription   string                              `json:"product_description"`
 	ImageUrl             sql.NullString                      `json:"image_url"`
@@ -6247,6 +6257,7 @@ func (q *Queries) ListProductCatalogCacheRows(ctx context.Context, arg ListProdu
 			&i.LinkUrl,
 			&i.SizeLabel,
 			&i.GroupCode,
+			&i.Target,
 			&i.ProductTitle,
 			&i.ProductDescription,
 			&i.ImageUrl,
@@ -6723,6 +6734,7 @@ SELECT
     pc.link_url,
     pc.size_label,
     pc.group_code,
+    pc.target,
     pc.product_title,
     pc.product_description,
     pc.image_url,
@@ -6782,6 +6794,7 @@ type ListProductsCatalogCacheRowsRow struct {
 	LinkUrl              sql.NullString                      `json:"link_url"`
 	SizeLabel            sql.NullString                      `json:"size_label"`
 	GroupCode            sql.NullString                      `json:"group_code"`
+	Target               json.RawMessage                     `json:"target"`
 	ProductTitle         string                              `json:"product_title"`
 	ProductDescription   string                              `json:"product_description"`
 	ImageUrl             sql.NullString                      `json:"image_url"`
@@ -6832,6 +6845,7 @@ func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProd
 			&i.LinkUrl,
 			&i.SizeLabel,
 			&i.GroupCode,
+			&i.Target,
 			&i.ProductTitle,
 			&i.ProductDescription,
 			&i.ImageUrl,
@@ -7274,6 +7288,7 @@ INSERT INTO payment_product_cache (
     link_url,
     size_label,
     group_code,
+    target,
     product_title,
     product_description,
     image_url,
@@ -7315,6 +7330,7 @@ SELECT
     p.link_url,
     p.size_label,
     p.group_code,
+    p.target,
     COALESCE(lp_title.value, p.title_key) AS product_title,
     COALESCE(lp_description.value, p.description_key, '') AS product_description,
     p.image_url,
@@ -7407,6 +7423,7 @@ INSERT INTO payment_product_cache (
     link_url,
     size_label,
     group_code,
+    target,
     product_title,
     product_description,
     image_url,
@@ -7448,6 +7465,7 @@ SELECT
     p.link_url,
     p.size_label,
     p.group_code,
+    p.target,
     COALESCE(lp_title.value, p.title_key) AS product_title,
     COALESCE(lp_description.value, p.description_key, '') AS product_description,
     p.image_url,
@@ -8310,6 +8328,7 @@ INSERT INTO payment_product (
     group_code,
     title_key,
     description_key,
+    target,
     image_url,
     link_url,
     size_label,
@@ -8328,11 +8347,12 @@ INSERT INTO payment_product (
     is_visible,
     is_closed
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     group_code = VALUES(group_code),
     title_key = VALUES(title_key),
     description_key = VALUES(description_key),
+    target = VALUES(target),
     image_url = VALUES(image_url),
     link_url = VALUES(link_url),
     size_label = VALUES(size_label),
@@ -8359,6 +8379,7 @@ type UpsertProductParams struct {
 	GroupCode            sql.NullString               `json:"group_code"`
 	TitleKey             string                       `json:"title_key"`
 	DescriptionKey       sql.NullString               `json:"description_key"`
+	Target               json.RawMessage              `json:"target"`
 	ImageUrl             sql.NullString               `json:"image_url"`
 	LinkUrl              sql.NullString               `json:"link_url"`
 	SizeLabel            sql.NullString               `json:"size_label"`
@@ -8385,6 +8406,7 @@ func (q *Queries) UpsertProduct(ctx context.Context, arg UpsertProductParams) er
 		arg.GroupCode,
 		arg.TitleKey,
 		arg.DescriptionKey,
+		arg.Target,
 		arg.ImageUrl,
 		arg.LinkUrl,
 		arg.SizeLabel,

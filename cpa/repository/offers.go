@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"sort"
 	"time"
 
@@ -16,6 +16,7 @@ type UpsertOfferParams struct {
 	WorkspaceID       string
 	ID                string
 	Payload           json.RawMessage
+	Target            json.RawMessage
 	CodeMode          string
 	CodeSource        *string
 	SharedCode        *string
@@ -30,10 +31,15 @@ func (r *Repository) UpsertOffer(ctx context.Context, params UpsertOfferParams) 
 	if err := requireScope(params.WorkspaceID, params.ID); err != nil {
 		return err
 	}
+	target := params.Target
+	if len(target) == 0 {
+		target = []byte("null")
+	}
 	if err := r.q.AdminUpsertOffer(ctx, cpasqlc.AdminUpsertOfferParams{
 		WorkspaceID: params.WorkspaceID,
 		ID:          params.ID,
 		Payload:     params.Payload,
+		Target:      target,
 		CodeMode:    cpasqlc.CpaOfferCodeMode(params.CodeMode),
 		CodeSource: sqlwrap.NullFromPtr(params.CodeSource, func(v string) cpasqlc.NullCpaOfferCodeSource {
 			return cpasqlc.NullCpaOfferCodeSource{
@@ -156,7 +162,7 @@ func (r *Repository) ListOfferBundles(ctx context.Context, workspaceID string, l
 				index = len(result)
 				indexByID[row.ID] = index
 				result = append(result, OfferBundle{
-					Offer:         mapBundleOffer(row.WorkspaceID, row.ID, row.Payload, row.CodeMode, row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet, row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt),
+					Offer:         mapBundleOffer(row.WorkspaceID, row.ID, row.Payload, row.Target, row.CodeMode, row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet, row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt),
 					Localizations: make([]Localization, 0),
 					Rewards:       make([]Reward, 0),
 				})
@@ -214,7 +220,7 @@ func (r *Repository) ListActiveOfferBundles(ctx context.Context, scope UserScope
 		index, exists := indexByID[row.ID]
 		if !exists {
 			bundle := OfferBundle{
-				Offer: mapBundleOffer(row.WorkspaceID, row.ID, row.Payload, row.CodeMode, row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet, row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt),
+				Offer: mapBundleOffer(row.WorkspaceID, row.ID, row.Payload, row.Target, row.CodeMode, row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet, row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt),
 				Localization: &Localization{
 					WorkspaceID: row.WorkspaceID,
 					CPAID:       row.ID,
@@ -416,6 +422,7 @@ func mapOffer(row cpasqlc.CpaOffer) Offer {
 		WorkspaceID:       row.WorkspaceID,
 		ID:                row.ID,
 		Payload:           row.Payload,
+		Target:            row.Target,
 		CodeMode:          string(row.CodeMode),
 		CodeSource:        nullCodeSourcePtr(row.CodeSource),
 		SharedCode:        sqlwrap.NullStringPtr(row.SharedCode),
@@ -479,6 +486,7 @@ func mapBundleOffer(
 	workspaceID string,
 	id string,
 	payload json.RawMessage,
+	target json.RawMessage,
 	codeMode cpasqlc.CpaOfferCodeMode,
 	codeSource cpasqlc.NullCpaOfferCodeSource,
 	sharedCode sql.NullString,
@@ -494,6 +502,7 @@ func mapBundleOffer(
 		WorkspaceID:       workspaceID,
 		ID:                id,
 		Payload:           payload,
+		Target:            target,
 		CodeMode:          codeMode,
 		CodeSource:        codeSource,
 		SharedCode:        sharedCode,

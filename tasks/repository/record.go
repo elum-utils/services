@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
+	json "github.com/goccy/go-json"
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"

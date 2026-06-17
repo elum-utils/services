@@ -2,7 +2,7 @@ package platega
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 
 	utils "github.com/elum-utils/services/internal/utils"
 	"github.com/elum-utils/services/payment/repository"

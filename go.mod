@@ -2,7 +2,10 @@ module github.com/elum-utils/services
 
 go 1.26.1
 
-require github.com/go-sql-driver/mysql v1.10.0
+require (
+	github.com/go-sql-driver/mysql v1.10.0
+	github.com/goccy/go-json v0.10.6
+)
 
 require (
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect

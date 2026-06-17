@@ -242,7 +242,7 @@ func (q *Queries) AdminGetCodeStats(ctx context.Context, arg AdminGetCodeStatsPa
 }
 
 const adminGetOffer = `-- name: AdminGetOffer :one
-SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
 FROM cpa_offer
 WHERE workspace_id = ? AND id = ?
 LIMIT 1
@@ -260,6 +260,7 @@ func (q *Queries) AdminGetOffer(ctx context.Context, arg AdminGetOfferParams) (C
 		&i.WorkspaceID,
 		&i.ID,
 		&i.Payload,
+		&i.Target,
 		&i.CodeMode,
 		&i.CodeSource,
 		&i.SharedCode,
@@ -550,7 +551,7 @@ SELECT
     r.quantity AS reward_quantity
     , r.duration_unit
 FROM (
-    SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+    SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = ?
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
@@ -609,12 +610,12 @@ func (q *Queries) AdminListOfferBundleRewards(ctx context.Context, arg AdminList
 
 const adminListOfferBundles = `-- name: AdminListOfferBundles :many
 SELECT
-    o.workspace_id, o.id, o.payload, o.code_mode, o.code_source, o.shared_code, o.generated_length, o.generated_alphabet, o.is_active, o.start_at, o.end_at, o.created_at, o.updated_at,
+    o.workspace_id, o.id, o.payload, o.target, o.code_mode, o.code_source, o.shared_code, o.generated_length, o.generated_alphabet, o.is_active, o.start_at, o.end_at, o.created_at, o.updated_at,
     l.locale,
     l.title AS localization_title,
     l.description AS localization_description
 FROM (
-    SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+    SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = ?
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
@@ -636,6 +637,7 @@ type AdminListOfferBundlesRow struct {
 	WorkspaceID             string                 `json:"workspace_id"`
 	ID                      string                 `json:"id"`
 	Payload                 json.RawMessage        `json:"payload"`
+	Target                  json.RawMessage        `json:"target"`
 	CodeMode                CpaOfferCodeMode       `json:"code_mode"`
 	CodeSource              NullCpaOfferCodeSource `json:"code_source"`
 	SharedCode              sql.NullString         `json:"shared_code"`
@@ -664,6 +666,7 @@ func (q *Queries) AdminListOfferBundles(ctx context.Context, arg AdminListOfferB
 			&i.WorkspaceID,
 			&i.ID,
 			&i.Payload,
+			&i.Target,
 			&i.CodeMode,
 			&i.CodeSource,
 			&i.SharedCode,
@@ -692,7 +695,7 @@ func (q *Queries) AdminListOfferBundles(ctx context.Context, arg AdminListOfferB
 }
 
 const adminListOffers = `-- name: AdminListOffers :many
-SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
 FROM cpa_offer
 WHERE workspace_id = ?
 ORDER BY created_at DESC, id
@@ -718,6 +721,7 @@ func (q *Queries) AdminListOffers(ctx context.Context, arg AdminListOffersParams
 			&i.WorkspaceID,
 			&i.ID,
 			&i.Payload,
+			&i.Target,
 			&i.CodeMode,
 			&i.CodeSource,
 			&i.SharedCode,
@@ -772,11 +776,12 @@ func (q *Queries) AdminUpsertLocalization(ctx context.Context, arg AdminUpsertLo
 
 const adminUpsertOffer = `-- name: AdminUpsertOffer :exec
 INSERT INTO cpa_offer (
-    workspace_id, id, payload, code_mode, code_source, shared_code,
+    workspace_id, id, payload, target, code_mode, code_source, shared_code,
     generated_length, generated_alphabet, is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     payload = VALUES(payload),
+    target = VALUES(target),
     code_mode = VALUES(code_mode),
     code_source = VALUES(code_source),
     shared_code = VALUES(shared_code),
@@ -791,6 +796,7 @@ type AdminUpsertOfferParams struct {
 	WorkspaceID       string                 `json:"workspace_id"`
 	ID                string                 `json:"id"`
 	Payload           json.RawMessage        `json:"payload"`
+	Target            json.RawMessage        `json:"target"`
 	CodeMode          CpaOfferCodeMode       `json:"code_mode"`
 	CodeSource        NullCpaOfferCodeSource `json:"code_source"`
 	SharedCode        sql.NullString         `json:"shared_code"`
@@ -806,6 +812,7 @@ func (q *Queries) AdminUpsertOffer(ctx context.Context, arg AdminUpsertOfferPara
 		arg.WorkspaceID,
 		arg.ID,
 		arg.Payload,
+		arg.Target,
 		arg.CodeMode,
 		arg.CodeSource,
 		arg.SharedCode,
@@ -953,7 +960,7 @@ func (q *Queries) CreateGeneratedCode(ctx context.Context, arg CreateGeneratedCo
 }
 
 const getActiveOfferForUpdate = `-- name: GetActiveOfferForUpdate :one
-SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
 FROM cpa_offer
 WHERE workspace_id = ?
   AND id = ?
@@ -976,6 +983,7 @@ func (q *Queries) GetActiveOfferForUpdate(ctx context.Context, arg GetActiveOffe
 		&i.WorkspaceID,
 		&i.ID,
 		&i.Payload,
+		&i.Target,
 		&i.CodeMode,
 		&i.CodeSource,
 		&i.SharedCode,
@@ -1218,6 +1226,7 @@ SELECT
     o.workspace_id,
     o.id,
     o.payload,
+    o.target,
     o.code_mode,
     o.code_source,
     o.shared_code,
@@ -1275,6 +1284,7 @@ type ListActiveOfferBundlesRow struct {
 	WorkspaceID           string                    `json:"workspace_id"`
 	ID                    string                    `json:"id"`
 	Payload               json.RawMessage           `json:"payload"`
+	Target                json.RawMessage           `json:"target"`
 	CodeMode              CpaOfferCodeMode          `json:"code_mode"`
 	CodeSource            NullCpaOfferCodeSource    `json:"code_source"`
 	SharedCode            sql.NullString            `json:"shared_code"`
@@ -1319,6 +1329,7 @@ func (q *Queries) ListActiveOfferBundles(ctx context.Context, arg ListActiveOffe
 			&i.WorkspaceID,
 			&i.ID,
 			&i.Payload,
+			&i.Target,
 			&i.CodeMode,
 			&i.CodeSource,
 			&i.SharedCode,
@@ -1357,7 +1368,7 @@ func (q *Queries) ListActiveOfferBundles(ctx context.Context, arg ListActiveOffe
 }
 
 const listActiveOffers = `-- name: ListActiveOffers :many
-SELECT workspace_id, id, payload, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
+SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
 FROM cpa_offer
 WHERE workspace_id = ?
   AND is_active = TRUE
@@ -1379,6 +1390,7 @@ func (q *Queries) ListActiveOffers(ctx context.Context, workspaceID string) ([]C
 			&i.WorkspaceID,
 			&i.ID,
 			&i.Payload,
+			&i.Target,
 			&i.CodeMode,
 			&i.CodeSource,
 			&i.SharedCode,

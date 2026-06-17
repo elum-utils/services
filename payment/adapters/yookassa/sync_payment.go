@@ -2,7 +2,7 @@ package yookassa
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 )
 
 func (a *YooKassa) SyncPayment(ctx context.Context, params SyncPaymentParams) (*WebhookResult, error) {

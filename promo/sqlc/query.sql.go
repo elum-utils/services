@@ -14,9 +14,9 @@ import (
 
 const adminCreatePromo = `-- name: AdminCreatePromo :execlastid
 INSERT INTO promo_offer (
-    workspace_id, code, code_normalized, payload, max_activations,
+    workspace_id, code, code_normalized, payload, target, max_activations,
     is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type AdminCreatePromoParams struct {
@@ -24,6 +24,7 @@ type AdminCreatePromoParams struct {
 	Code           string          `json:"code"`
 	CodeNormalized string          `json:"code_normalized"`
 	Payload        json.RawMessage `json:"payload"`
+	Target         json.RawMessage `json:"target"`
 	MaxActivations uint64          `json:"max_activations"`
 	IsActive       bool            `json:"is_active"`
 	StartAt        sql.NullTime    `json:"start_at"`
@@ -36,6 +37,7 @@ func (q *Queries) AdminCreatePromo(ctx context.Context, arg AdminCreatePromoPara
 		arg.Code,
 		arg.CodeNormalized,
 		arg.Payload,
+		arg.Target,
 		arg.MaxActivations,
 		arg.IsActive,
 		arg.StartAt,
@@ -114,7 +116,7 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 }
 
 const adminGetPromo = `-- name: AdminGetPromo :one
-SELECT id, workspace_id, code, code_normalized, payload, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
+SELECT id, workspace_id, code, code_normalized, payload, target, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM promo_offer
 WHERE workspace_id = ? AND id = ?
 LIMIT 1
@@ -134,6 +136,7 @@ func (q *Queries) AdminGetPromo(ctx context.Context, arg AdminGetPromoParams) (P
 		&i.Code,
 		&i.CodeNormalized,
 		&i.Payload,
+		&i.Target,
 		&i.MaxActivations,
 		&i.ActivationCount,
 		&i.IsActive,
@@ -303,7 +306,7 @@ func (q *Queries) AdminListLocalizations(ctx context.Context, arg AdminListLocal
 }
 
 const adminListPromos = `-- name: AdminListPromos :many
-SELECT id, workspace_id, code, code_normalized, payload, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
+SELECT id, workspace_id, code, code_normalized, payload, target, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM promo_offer
 WHERE workspace_id = ?
 ORDER BY created_at DESC, id DESC
@@ -331,6 +334,7 @@ func (q *Queries) AdminListPromos(ctx context.Context, arg AdminListPromosParams
 			&i.Code,
 			&i.CodeNormalized,
 			&i.Payload,
+			&i.Target,
 			&i.MaxActivations,
 			&i.ActivationCount,
 			&i.IsActive,
@@ -431,6 +435,7 @@ UPDATE promo_offer
 SET code = ?,
     code_normalized = ?,
     payload = ?,
+    target = ?,
     max_activations = ?,
     is_active = ?,
     start_at = ?,
@@ -442,6 +447,7 @@ type AdminUpdatePromoParams struct {
 	Code           string          `json:"code"`
 	CodeNormalized string          `json:"code_normalized"`
 	Payload        json.RawMessage `json:"payload"`
+	Target         json.RawMessage `json:"target"`
 	MaxActivations uint64          `json:"max_activations"`
 	IsActive       bool            `json:"is_active"`
 	StartAt        sql.NullTime    `json:"start_at"`
@@ -455,6 +461,7 @@ func (q *Queries) AdminUpdatePromo(ctx context.Context, arg AdminUpdatePromoPara
 		arg.Code,
 		arg.CodeNormalized,
 		arg.Payload,
+		arg.Target,
 		arg.MaxActivations,
 		arg.IsActive,
 		arg.StartAt,
@@ -565,6 +572,7 @@ SELECT
     o.workspace_id,
     o.code,
     o.payload,
+    o.target,
     o.max_activations,
     o.activation_count,
     o.is_active,
@@ -620,6 +628,7 @@ type GetApplyBundleForUpdateRow struct {
 	WorkspaceID              string                      `json:"workspace_id"`
 	Code                     string                      `json:"code"`
 	Payload                  json.RawMessage             `json:"payload"`
+	Target                   json.RawMessage             `json:"target"`
 	MaxActivations           uint64                      `json:"max_activations"`
 	ActivationCount          uint64                      `json:"activation_count"`
 	IsActive                 bool                        `json:"is_active"`
@@ -664,6 +673,7 @@ func (q *Queries) GetApplyBundleForUpdate(ctx context.Context, arg GetApplyBundl
 			&i.WorkspaceID,
 			&i.Code,
 			&i.Payload,
+			&i.Target,
 			&i.MaxActivations,
 			&i.ActivationCount,
 			&i.IsActive,

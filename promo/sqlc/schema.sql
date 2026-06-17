@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS promo_offer (
     code VARCHAR(255) NOT NULL,
     code_normalized VARCHAR(255) NOT NULL,
     payload JSON NOT NULL,
+    target JSON NULL,
     max_activations BIGINT UNSIGNED NOT NULL DEFAULT 0,
     activation_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

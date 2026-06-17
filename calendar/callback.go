@@ -2,7 +2,7 @@ package calendar
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	servicecallback "github.com/elum-utils/services/callback"

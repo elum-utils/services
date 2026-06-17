@@ -117,6 +117,7 @@ type PromoOffer struct {
 	Code            string          `json:"code"`
 	CodeNormalized  string          `json:"code_normalized"`
 	Payload         json.RawMessage `json:"payload"`
+	Target          json.RawMessage `json:"target"`
 	MaxActivations  uint64          `json:"max_activations"`
 	ActivationCount uint64          `json:"activation_count"`
 	IsActive        bool            `json:"is_active"`

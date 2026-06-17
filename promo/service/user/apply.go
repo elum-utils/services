@@ -24,6 +24,8 @@ func (u *User) Apply(ctx context.Context, params ApplyParams) (ApplyResult, erro
 	result, err := u.repository.Apply(mergedCtx, repository.Identity{
 		WorkspaceID: params.Identity.WorkspaceID, AppID: params.Identity.AppID,
 		PlatformID: params.Identity.PlatformID, PlatformUserID: params.Identity.PlatformUserID,
+		Platform:  params.Identity.Platform,
+		IsPremium: params.Identity.IsPremium, Sex: params.Identity.Sex, Country: params.Identity.Country,
 	}, params.Code, params.Locale)
 	if err != nil {
 		return ApplyResult{}, err

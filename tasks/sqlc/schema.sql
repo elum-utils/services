@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS task_definition (
     reset_every INT UNSIGNED NOT NULL DEFAULT 1,
     position INT NOT NULL DEFAULT 0,
     payload JSON NULL,
+    target JSON NULL,
     integration_kind VARCHAR(64) NULL,
     integration_provider VARCHAR(64) NULL,
     integration_payload JSON NULL,

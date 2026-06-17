@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 
@@ -20,6 +20,7 @@ type Promo struct {
 	WorkspaceID     string
 	Code            string
 	Payload         json.RawMessage
+	Target          json.RawMessage
 	MaxActivations  uint64
 	ActivationCount uint64
 	IsActive        bool
@@ -49,7 +50,11 @@ type Identity struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 }
 
 type Redemption struct {

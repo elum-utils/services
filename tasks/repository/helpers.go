@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"strconv"
 	"time"
 
@@ -99,7 +99,7 @@ func mapTask(row tasksqlc.TaskDefinition) Task {
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode),
 		TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery,
-		Position: row.Position, Payload: row.Payload, IntegrationKind: ptrString(row.IntegrationKind),
+		Position: row.Position, Payload: row.Payload, Target: row.Target, IntegrationKind: ptrString(row.IntegrationKind),
 		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: row.IntegrationPayload,
 		ImageURL:  ptrString(row.ImageUrl),
 		IsVisible: row.IsVisible, IsActive: row.IsActive, StartAt: ptrTime(row.StartAt),

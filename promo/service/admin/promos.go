@@ -2,7 +2,7 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"strings"
 	"time"
 
@@ -15,6 +15,7 @@ type SavePromoParams struct {
 	WorkspaceID    string
 	Code           string
 	Payload        json.RawMessage
+	Target         json.RawMessage
 	MaxActivations uint64
 	IsActive       bool
 	StartAt        *time.Time
@@ -88,6 +89,9 @@ func validatePromo(params SavePromoParams) error {
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
 		return ErrPromoPayloadInvalid
 	}
+	if len(params.Target) > 0 && !json.Valid(params.Target) {
+		return ErrPromoPayloadInvalid
+	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
 		return ErrPromoRangeInvalid
 	}
@@ -96,7 +100,7 @@ func validatePromo(params SavePromoParams) error {
 
 func mapPromo(value repository.Promo, localizations []repository.Localization, rewards []repository.Reward) PromoModel {
 	result := PromoModel{
-		ID: value.ID, Code: value.Code, Payload: value.Payload, MaxActivations: value.MaxActivations,
+		ID: value.ID, Code: value.Code, Payload: value.Payload, Target: value.Target, MaxActivations: value.MaxActivations,
 		ActivationCount: value.ActivationCount, IsActive: value.IsActive, StartAt: value.StartAt,
 		EndAt: value.EndAt, DeletedAt: value.DeletedAt, CreatedAt: value.CreatedAt,
 		UpdatedAt: value.UpdatedAt, Localizations: make([]LocalizationModel, 0, len(localizations)),

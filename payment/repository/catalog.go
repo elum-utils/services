@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	json "github.com/goccy/go-json"
 	"time"
 
 	serviceerrors "github.com/elum-utils/services/errors"
@@ -31,6 +32,7 @@ type ProductUpsertParams struct {
 	GroupCode            *string
 	TitleKey             string
 	DescriptionKey       *string
+	Target               json.RawMessage
 	ImageURL             *string
 	LinkURL              *string
 	SizeLabel            *string
@@ -173,6 +175,10 @@ func (r *PaymentRepository) UpsertProduct(ctx context.Context, params ProductUps
 	if quantityMode == "" {
 		quantityMode = string(paymentsqlc.PaymentProductQuantityModeFixed)
 	}
+	target := params.Target
+	if len(target) == 0 {
+		target = []byte("null")
+	}
 
 	return r.inTransaction(ctx, func(tx *PaymentRepository) error {
 		if err := tx.q.UpsertProduct(ctx, paymentsqlc.UpsertProductParams{
@@ -185,6 +191,7 @@ func (r *PaymentRepository) UpsertProduct(ctx context.Context, params ProductUps
 			DescriptionKey: sqlwrap.NullFromPtr(params.DescriptionKey, func(v string) sql.NullString {
 				return sql.NullString{String: v, Valid: true}
 			}),
+			Target: target,
 			ImageUrl: sqlwrap.NullFromPtr(params.ImageURL, func(v string) sql.NullString {
 				return sql.NullString{String: v, Valid: true}
 			}),

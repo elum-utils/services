@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 
@@ -21,6 +21,7 @@ type SaveTaskParams struct {
 	ResetEvery          uint32
 	Position            int32
 	Payload             json.RawMessage
+	Target              json.RawMessage
 	IntegrationKind     *string
 	IntegrationProvider *string
 	IntegrationPayload  json.RawMessage
@@ -46,6 +47,7 @@ type TaskModel struct {
 	ResetEvery          uint32          `json:"reset_every"`
 	Position            int32           `json:"position"`
 	Payload             json.RawMessage `json:"payload,omitempty"`
+	Target              json.RawMessage `json:"target,omitempty"`
 	IntegrationKind     *string         `json:"integration_kind,omitempty"`
 	IntegrationProvider *string         `json:"integration_provider,omitempty"`
 	IntegrationPayload  json.RawMessage `json:"integration_payload,omitempty"`

@@ -1,7 +1,7 @@
 package user
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 
@@ -9,7 +9,11 @@ type Identity struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 }
 
 type OfferModel struct {

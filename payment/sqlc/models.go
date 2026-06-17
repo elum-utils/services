@@ -7,6 +7,7 @@ package sqlc
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -1557,6 +1558,7 @@ type PaymentProduct struct {
 	GroupCode            sql.NullString               `json:"group_code"`
 	TitleKey             string                       `json:"title_key"`
 	DescriptionKey       sql.NullString               `json:"description_key"`
+	Target               json.RawMessage              `json:"target"`
 	ImageUrl             sql.NullString               `json:"image_url"`
 	LinkUrl              sql.NullString               `json:"link_url"`
 	SizeLabel            sql.NullString               `json:"size_label"`
@@ -1588,6 +1590,7 @@ type PaymentProductCache struct {
 	LinkUrl              sql.NullString                      `json:"link_url"`
 	SizeLabel            sql.NullString                      `json:"size_label"`
 	GroupCode            sql.NullString                      `json:"group_code"`
+	Target               json.RawMessage                     `json:"target"`
 	ProductTitle         string                              `json:"product_title"`
 	ProductDescription   string                              `json:"product_description"`
 	ImageUrl             sql.NullString                      `json:"image_url"`

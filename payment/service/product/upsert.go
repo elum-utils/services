@@ -17,6 +17,7 @@ func (a *Product) Upsert(ctx context.Context, params UpsertParams) error {
 		GroupCode:            params.GroupCode,
 		TitleKey:             params.TitleKey,
 		DescriptionKey:       params.DescriptionKey,
+		Target:               params.Target,
 		ImageURL:             params.ImageURL,
 		LinkURL:              params.LinkURL,
 		SizeLabel:            params.SizeLabel,

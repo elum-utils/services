@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 
 	"github.com/elum-utils/services/promo/service/user"
@@ -16,6 +16,7 @@ type PromoModel struct {
 	ID              uint64              `json:"id"`
 	Code            string              `json:"code"`
 	Payload         json.RawMessage     `json:"payload"`
+	Target          json.RawMessage     `json:"target,omitempty"`
 	MaxActivations  uint64              `json:"max_activations"`
 	ActivationCount uint64              `json:"activation_count"`
 	IsActive        bool                `json:"is_active"`

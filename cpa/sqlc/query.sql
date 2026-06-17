@@ -1,10 +1,11 @@
 -- name: AdminUpsertOffer :exec
 INSERT INTO cpa_offer (
-    workspace_id, id, payload, code_mode, code_source, shared_code,
+    workspace_id, id, payload, target, code_mode, code_source, shared_code,
     generated_length, generated_alphabet, is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     payload = VALUES(payload),
+    target = VALUES(target),
     code_mode = VALUES(code_mode),
     code_source = VALUES(code_source),
     shared_code = VALUES(shared_code),
@@ -90,6 +91,7 @@ SELECT
     o.workspace_id,
     o.id,
     o.payload,
+    o.target,
     o.code_mode,
     o.code_source,
     o.shared_code,

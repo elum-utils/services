@@ -50,6 +50,10 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 	if len(payload) == 0 {
 		payload = []byte("{}")
 	}
+	target := params.Target
+	if len(target) == 0 {
+		target = []byte("null")
+	}
 	integrationPayload := params.IntegrationPayload
 	if len(integrationPayload) == 0 {
 		integrationPayload = []byte("null")
@@ -63,7 +67,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 				ActionKey: params.ActionKey, ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
 				ClaimMode: tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
 				ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-				Position: params.Position, Payload: payload, IntegrationKind: nullString(params.IntegrationKind),
+				Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
 				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
 				ImageUrl:  nullString(params.ImageURL),
 				IsVisible: params.IsVisible, IsActive: params.IsActive,
@@ -82,7 +86,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 			ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
 			ClaimMode:  tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
 			ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-			Position: params.Position, Payload: payload, IntegrationKind: nullString(params.IntegrationKind),
+			Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
 			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
 			ImageUrl:  nullString(params.ImageURL),
 			IsVisible: params.IsVisible, IsActive: params.IsActive,

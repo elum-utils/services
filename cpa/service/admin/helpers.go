@@ -9,6 +9,7 @@ func mapOffer(value repository.Offer, localizations []repository.Localization, r
 	result := OfferModel{
 		ID:                value.ID,
 		Payload:           value.Payload,
+		Target:            value.Target,
 		CodeMode:          value.CodeMode,
 		CodeSource:        value.CodeSource,
 		SharedCode:        value.SharedCode,

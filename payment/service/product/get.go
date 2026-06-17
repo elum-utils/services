@@ -10,7 +10,11 @@ type GetParams struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 	ProductID      string
 	AssetCode      string
 	Locale         string
@@ -25,7 +29,11 @@ func (a *Product) Get(ctx context.Context, params GetParams) (*ProductModel, err
 		AppID:          params.AppID,
 		WorkspaceID:    params.WorkspaceID,
 		PlatformID:     params.PlatformID,
+		Platform:       params.Platform,
 		PlatformUserID: params.PlatformUserID,
+		IsPremium:      params.IsPremium,
+		Sex:            params.Sex,
+		Country:        params.Country,
 		ProductID:      params.ProductID,
 		AssetCode:      params.AssetCode,
 		Locale:         params.Locale,

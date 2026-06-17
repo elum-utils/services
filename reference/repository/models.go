@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 

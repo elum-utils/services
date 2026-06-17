@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"time"
 )
 
@@ -46,7 +46,11 @@ type Identity struct {
 	WorkspaceID    string
 	AppID          int64
 	PlatformID     int64
+	Platform       string
 	PlatformUserID string
+	IsPremium      bool
+	Sex            string
+	Country        string
 }
 
 type Task struct {
@@ -65,6 +69,7 @@ type Task struct {
 	ResetEvery          uint32
 	Position            int32
 	Payload             json.RawMessage
+	Target              json.RawMessage
 	IntegrationKind     *string
 	IntegrationProvider *string
 	IntegrationPayload  json.RawMessage
@@ -98,6 +103,7 @@ type ActiveTask struct {
 	Progress    *ActiveProgress `json:"progress,omitempty"`
 	StartAt     *time.Time      `json:"-" msgpack:"start_at"`
 	EndAt       *time.Time      `json:"-" msgpack:"end_at"`
+	Target      json.RawMessage `json:"-" msgpack:"target"`
 }
 
 type ActiveProgress struct {
@@ -150,6 +156,7 @@ type SaveTaskParams struct {
 	ResetEvery          uint32
 	Position            int32
 	Payload             json.RawMessage
+	Target              json.RawMessage
 	IntegrationKind     *string
 	IntegrationProvider *string
 	IntegrationPayload  json.RawMessage

@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	json "github.com/goccy/go-json"
 
 	utils "github.com/elum-utils/services/internal/utils"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"

@@ -122,7 +122,7 @@ func mapTask(task repository.Task) TaskModel {
 		SequenceKey: task.SequenceKey, SequencePosition: task.SequencePosition,
 		TaskKind: task.TaskKind, ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
 		TargetCount: task.TargetCount, ResetUnit: task.ResetUnit, ResetEvery: task.ResetEvery,
-		Position: task.Position, Payload: task.Payload, IntegrationKind: task.IntegrationKind,
+		Position: task.Position, Payload: task.Payload, Target: task.Target, IntegrationKind: task.IntegrationKind,
 		IntegrationProvider: task.IntegrationProvider, IntegrationPayload: task.IntegrationPayload,
 		ImageURL:  task.ImageURL,
 		IsVisible: task.IsVisible, IsActive: task.IsActive, StartAt: task.StartAt,

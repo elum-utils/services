@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"

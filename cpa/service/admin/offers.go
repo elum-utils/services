@@ -2,7 +2,7 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
+	json "github.com/goccy/go-json"
 	"strings"
 	"time"
 
@@ -13,6 +13,7 @@ type UpsertOfferParams struct {
 	WorkspaceID       string
 	ID                string
 	Payload           json.RawMessage
+	Target            json.RawMessage
 	CodeMode          string
 	CodeSource        *string
 	SharedCode        *string
@@ -77,6 +78,9 @@ func validateOffer(params UpsertOfferParams) error {
 		return ErrOfferScopeRequired
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
+		return ErrOfferPayloadInvalid
+	}
+	if len(params.Target) > 0 && !json.Valid(params.Target) {
 		return ErrOfferPayloadInvalid
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
