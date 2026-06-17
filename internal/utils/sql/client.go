@@ -17,15 +17,16 @@ var (
 
 // Client is a sqlc-oriented DB wrapper with timeout + L1/L2 cache support.
 type Client struct {
-	db           *sql.DB
-	queryTimeout time.Duration
-	cache        Storage
-	inMemory     *l1Cache
-	codec        Codec
-	mutex        Mutex
-	mx           sync.Mutex
-	l2Expiry     sync.Map
-	CacheEnabled bool
+	db            *sql.DB
+	queryTimeout  time.Duration
+	cache         Storage
+	inMemory      *l1Cache
+	codec         Codec
+	mutex         Mutex
+	mx            sync.Mutex
+	l2Expiry      sync.Map
+	cacheVersions sync.Map
+	CacheEnabled  bool
 }
 
 // Executor is a sqlc.DBTX-compatible view with an operation-specific timeout.
@@ -159,6 +160,10 @@ func (c *Client) ResetCache() error {
 	}
 	c.l2Expiry.Range(func(key, _ any) bool {
 		c.l2Expiry.Delete(key)
+		return true
+	})
+	c.cacheVersions.Range(func(key, _ any) bool {
+		c.cacheVersions.Delete(key)
 		return true
 	})
 	if c.cache != nil {

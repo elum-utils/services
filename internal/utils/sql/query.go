@@ -21,6 +21,10 @@ type Params struct {
 	CacheDelay time.Duration
 	// Deprecated: use CacheL1Delay.
 	NodeCacheDelay time.Duration
+
+	// CacheVersionScope adds a namespace version to the cache key. If the
+	// version is missing, Query publishes the new version only after caching data.
+	CacheVersionScope []any
 }
 
 // Query executes a typed loader under timeout and optional L1/L2 cache.
@@ -44,6 +48,26 @@ func Query[T any](
 	key := params.Key
 	if useCache && key == "" && len(params.KeyParts) > 0 {
 		key = CreateKey(params.KeyParts...)
+	}
+	versionState := cacheVersionState{}
+	var unlockVersion func()
+	if useCache && key != "" && len(params.CacheVersionScope) > 0 {
+		versionState = client.prepareCacheVersion(params.CacheVersionScope)
+		if versionState.publish {
+			mutex := client.getMutex()
+			mutexKey := versionMutexKey(versionState.key)
+			if err := mutex.Lock(mutexKey); err != nil {
+				return zero, err
+			}
+			unlockVersion = func() { _ = mutex.Unlock(mutexKey) }
+			defer func() {
+				if unlockVersion != nil {
+					unlockVersion()
+				}
+			}()
+			versionState = client.prepareCacheVersion(params.CacheVersionScope)
+		}
+		key = CreateKey("versioned_cache", params.CacheVersionScope, versionState.version, key)
 	}
 
 	if useCache && key != "" {
@@ -73,15 +97,21 @@ func Query[T any](
 
 	if useCache && key != "" {
 		l1EffectiveTTL := effectiveL1TTL(l1TTL, l2TTL)
+		cacheStored := false
 		if l1EffectiveTTL > 0 {
 			client.inMemory.Set(key, value, l1EffectiveTTL)
+			cacheStored = true
 		}
 		if l2TTL > 0 && client.cache != nil {
 			if data, encodeErr := client.codec.Marshal(value); encodeErr == nil {
 				if setErr := client.cache.Set(key, data, l2TTL); setErr == nil {
 					client.rememberL2Expiry(key, l2TTL)
+					cacheStored = true
 				}
 			}
+		}
+		if cacheStored {
+			_ = client.publishCacheVersion(versionState)
 		}
 	}
 
