@@ -14,10 +14,9 @@ func (r *Repository) Get(ctx context.Context, workspaceID, key, locale string) (
 	if err := requireWorkspace(workspaceID); err != nil {
 		return Item{}, err
 	}
-	cacheKey := referenceCacheKey("get", workspaceID, key, locale)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheGet, workspaceID, key, locale)
 	item, err := sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheGet, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Item, error) {
 		rows, err := r.q.GetItemBundle(ctx, refsqlc.GetItemBundleParams{
@@ -43,10 +42,9 @@ func (r *Repository) Resolve(ctx context.Context, workspaceID string, keys []str
 	}
 	cacheKeys := append([]string(nil), keys...)
 	sort.Strings(cacheKeys)
-	cacheKey := referenceCacheKey("resolve", workspaceID, locale, strings.Join(cacheKeys, "\x1f"))
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheResolve, workspaceID, locale, strings.Join(cacheKeys, "\x1f"))
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheResolve, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.ResolveItemBundles(ctx, refsqlc.ResolveItemBundlesParams{
@@ -73,10 +71,9 @@ func (r *Repository) List(ctx context.Context, workspaceID, locale string, limit
 	if err := requireWorkspace(workspaceID); err != nil {
 		return nil, err
 	}
-	cacheKey := referenceCacheKey("list", workspaceID, locale, limit, offset)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheList, workspaceID, locale, limit, offset)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheList, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.ListItemBundles(ctx, refsqlc.ListItemBundlesParams{

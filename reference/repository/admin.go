@@ -18,7 +18,7 @@ func (r *Repository) CreateItem(ctx context.Context, params SaveItemParams) erro
 	}); err != nil {
 		return err
 	}
-	return r.invalidateWorkspaceCache(params.WorkspaceID)
+	return r.bumpReferenceCacheVersions(params.WorkspaceID, referenceItemMutationCacheMethods...)
 }
 
 func (r *Repository) UpdateItem(ctx context.Context, params SaveItemParams) (int64, error) {
@@ -32,7 +32,7 @@ func (r *Repository) UpdateItem(ctx context.Context, params SaveItemParams) (int
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateWorkspaceCache(params.WorkspaceID)
+	return rows, r.bumpReferenceCacheVersions(params.WorkspaceID, referenceItemMutationCacheMethods...)
 }
 
 func (r *Repository) DangerousChangeType(ctx context.Context, params DangerousChangeTypeParams) (int64, error) {
@@ -47,7 +47,7 @@ func (r *Repository) DangerousChangeType(ctx context.Context, params DangerousCh
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateWorkspaceCache(params.WorkspaceID)
+	return rows, r.bumpReferenceCacheVersions(params.WorkspaceID, referenceItemMutationCacheMethods...)
 }
 
 func (r *Repository) SoftDeleteItem(ctx context.Context, workspaceID, key string) (int64, error) {
@@ -60,7 +60,7 @@ func (r *Repository) SoftDeleteItem(ctx context.Context, workspaceID, key string
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateWorkspaceCache(workspaceID)
+	return rows, r.bumpReferenceCacheVersions(workspaceID, referenceItemMutationCacheMethods...)
 }
 
 func (r *Repository) RestoreItem(ctx context.Context, workspaceID, key string, active bool) (int64, error) {
@@ -73,17 +73,16 @@ func (r *Repository) RestoreItem(ctx context.Context, workspaceID, key string, a
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateWorkspaceCache(workspaceID)
+	return rows, r.bumpReferenceCacheVersions(workspaceID, referenceItemMutationCacheMethods...)
 }
 
 func (r *Repository) AdminGetItem(ctx context.Context, workspaceID, key string) (Item, error) {
 	if err := requireWorkspace(workspaceID); err != nil {
 		return Item{}, err
 	}
-	cacheKey := referenceCacheKey("admin_get", workspaceID, key)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheAdminGet, workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheAdminGet, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Item, error) {
 		rows, err := r.q.AdminGetItemBundle(ctx, refsqlc.AdminGetItemBundleParams{
@@ -120,13 +119,12 @@ func (r *Repository) AdminListItems(ctx context.Context, params ListItemsParams)
 	if err := requireWorkspace(params.WorkspaceID); err != nil {
 		return nil, err
 	}
-	cacheKey := referenceCacheKey(
-		"admin_list", params.WorkspaceID, params.Type,
+	cacheKey := r.referenceCacheKey(
+		referenceCacheAdminList, params.WorkspaceID, params.Type,
 		params.OnlyNotDeleted, params.Limit, params.Offset,
 	)
-	rememberReferenceCacheKey(params.WorkspaceID, cacheKey)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheAdminList, params.WorkspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.AdminListItems(ctx, refsqlc.AdminListItemsParams{
@@ -160,17 +158,16 @@ func (r *Repository) UpsertLocalization(ctx context.Context, value Localization)
 	}); err != nil {
 		return err
 	}
-	return r.invalidateWorkspaceCache(value.WorkspaceID)
+	return r.bumpReferenceCacheVersions(value.WorkspaceID, referenceLocalizationMutationCacheMethods...)
 }
 
 func (r *Repository) GetLocalization(ctx context.Context, workspaceID, key, locale string) (Localization, error) {
 	if err := requireWorkspace(workspaceID); err != nil {
 		return Localization{}, err
 	}
-	cacheKey := referenceCacheKey("admin_get_localization", workspaceID, key, locale)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheAdminGetLocalization, workspaceID, key, locale)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheAdminGetLocalization, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Localization, error) {
 		row, err := r.q.AdminGetLocalization(ctx, refsqlc.AdminGetLocalizationParams{
@@ -187,10 +184,9 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID, key str
 	if err := requireWorkspace(workspaceID); err != nil {
 		return nil, err
 	}
-	cacheKey := referenceCacheKey("admin_list_localizations", workspaceID, key)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheAdminListLocalizations, workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheAdminListLocalizations, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Localization, error) {
 		rows, err := r.q.AdminListLocalizations(ctx, refsqlc.AdminListLocalizationsParams{
@@ -217,17 +213,16 @@ func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID, key, l
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateWorkspaceCache(workspaceID)
+	return rows, r.bumpReferenceCacheVersions(workspaceID, referenceLocalizationMutationCacheMethods...)
 }
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID string) (Stats, error) {
 	if err := requireWorkspace(workspaceID); err != nil {
 		return Stats{}, err
 	}
-	cacheKey := referenceCacheKey("admin_stats", workspaceID)
-	rememberReferenceCacheKey(workspaceID, cacheKey)
+	cacheKey := r.referenceCacheKey(referenceCacheAdminStats, workspaceID)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key: cacheKey, Timeout: r.timeout,
+		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheAdminStats, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Stats, error) {
 		row, err := r.q.AdminGetStats(ctx, workspaceID)

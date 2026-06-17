@@ -3,58 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
-
-const listRecordCatalogQuery = `
-SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
-       t.reset_every, t.payload, t.position, t.start_at, t.end_at
-FROM task_definition t FORCE INDEX (task_definition_action_idx)
-WHERE t.workspace_id = ?
-  AND t.action_key = ?
-  AND t.is_active = TRUE
-  AND t.deleted_at IS NULL
-ORDER BY t.branch_sort_key, t.sequence_position, t.position, t.id`
-
-const claimCatalogByIDQuery = `
-SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
-FROM task_definition t
-LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
-WHERE t.workspace_id = ? AND t.id = ?
-ORDER BY r.position, r.id`
-
-const claimCatalogByKeyQuery = `
-SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
-FROM task_definition t
-LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
-WHERE t.workspace_id = ? AND t.` + "`" + `key` + "`" + ` = ?
-ORDER BY r.position, r.id`
-
-const listRewardsCatalogQuery = `
-SELECT reward_key, reward_type, quantity, duration_unit
-FROM task_reward
-WHERE workspace_id = ? AND task_id = ?
-ORDER BY position, id`
-
-const nextSequenceTaskQuery = `
-SELECT id
-FROM task_definition
-WHERE workspace_id = ?
-  AND sequence_key = ?
-  AND sequence_position > ?
-  AND deleted_at IS NULL
-ORDER BY sequence_position, id
-LIMIT 1`
 
 type nextSequenceTask struct {
 	ID     uint64
@@ -69,67 +22,23 @@ func (r *Repository) listRecordCatalog(ctx context.Context, workspaceID, actionK
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) ([]Task, error) {
-		return loadRecordCatalog(ctx, r.db.DB(), workspaceID, actionKey)
+		rows, err := r.q.ListRecordCatalog(ctx, tasksqlc.ListRecordCatalogParams{
+			WorkspaceID: workspaceID,
+			ActionKey:   actionKey,
+		})
+		if err != nil {
+			return nil, err
+		}
+		tasks := make([]Task, 0, len(rows))
+		for _, row := range rows {
+			tasks = append(tasks, mapRecordCatalogTask(row))
+		}
+		return tasks, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
-}
-
-func loadRecordCatalog(ctx context.Context, db *sql.DB, workspaceID, actionKey string) ([]Task, error) {
-	rows, err := db.QueryContext(ctx, listRecordCatalogQuery, workspaceID, actionKey)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	tasks := make([]Task, 0, 16)
-	for rows.Next() {
-		var (
-			task             Task
-			sequenceKey      sql.NullString
-			sequencePosition sql.NullInt32
-			actionKind       string
-			claimMode        string
-			resetUnit        string
-			payload          json.RawMessage
-			startAt          sql.NullTime
-			endAt            sql.NullTime
-		)
-		if err := rows.Scan(
-			&task.ID,
-			&task.WorkspaceID,
-			&task.Key,
-			&task.GroupKey,
-			&sequenceKey,
-			&sequencePosition,
-			&task.ActionKey,
-			&actionKind,
-			&claimMode,
-			&task.TargetCount,
-			&resetUnit,
-			&task.ResetEvery,
-			&payload,
-			&task.Position,
-			&startAt,
-			&endAt,
-		); err != nil {
-			return nil, err
-		}
-		task.SequenceKey = ptrString(sequenceKey)
-		task.SequencePosition = ptrUint32(sequencePosition)
-		task.ActionKind = actionKind
-		task.ClaimMode = claimMode
-		task.ResetUnit = resetUnit
-		task.Payload = payload
-		task.StartAt = ptrTime(startAt)
-		task.EndAt = ptrTime(endAt)
-		tasks = append(tasks, task)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return tasks, nil
 }
 
 func (r *Repository) claimCatalogByID(ctx context.Context, workspaceID string, id uint64) (Task, error) {
@@ -140,7 +49,17 @@ func (r *Repository) claimCatalogByID(ctx context.Context, workspaceID string, i
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) (Task, error) {
-		return loadClaimCatalog(ctx, r.db.DB(), claimCatalogByIDQuery, workspaceID, id)
+		rows, err := r.q.GetClaimCatalogByID(ctx, tasksqlc.GetClaimCatalogByIDParams{
+			WorkspaceID: workspaceID,
+			ID:          id,
+		})
+		if err != nil {
+			return Task{}, err
+		}
+		if len(rows) == 0 {
+			return Task{}, sql.ErrNoRows
+		}
+		return mapClaimCatalogTaskByID(rows), nil
 	})
 	if err != nil {
 		return Task{}, err
@@ -156,7 +75,17 @@ func (r *Repository) claimCatalogByKey(ctx context.Context, workspaceID, taskKey
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) (Task, error) {
-		return loadClaimCatalog(ctx, r.db.DB(), claimCatalogByKeyQuery, workspaceID, taskKey)
+		rows, err := r.q.GetClaimCatalogByKey(ctx, tasksqlc.GetClaimCatalogByKeyParams{
+			WorkspaceID: workspaceID,
+			Key:         taskKey,
+		})
+		if err != nil {
+			return Task{}, err
+		}
+		if len(rows) == 0 {
+			return Task{}, sql.ErrNoRows
+		}
+		return mapClaimCatalogTaskByKey(rows), nil
 	})
 	if err != nil {
 		return Task{}, err
@@ -164,73 +93,56 @@ func (r *Repository) claimCatalogByKey(ctx context.Context, workspaceID, taskKey
 	return out, nil
 }
 
-func loadClaimCatalog(ctx context.Context, db *sql.DB, query string, args ...any) (Task, error) {
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return Task{}, err
+func (r *Repository) IntegrationCheckTask(ctx context.Context, workspaceID string, taskRefValue string) (Task, bool, error) {
+	id, keyValue := taskRef(taskRefValue)
+	if id != 0 {
+		key := integrationCheckTaskByIDCacheKey(workspaceID, id)
+		rememberTaskCacheKey(workspaceID, key)
+		out, err := repositoryQuery[Task](ctx, r, sqlwrap.Params{
+			Key:          key,
+			CacheL1Delay: r.cacheL1Delay,
+			CacheL2Delay: r.cacheL2Delay,
+		}, func(ctx context.Context) (Task, error) {
+			row, err := r.q.GetIntegrationCheckTaskByID(ctx, tasksqlc.GetIntegrationCheckTaskByIDParams{
+				WorkspaceID: workspaceID,
+				ID:          id,
+			})
+			if err != nil {
+				return Task{}, err
+			}
+			return mapIntegrationCheckTaskByID(row), nil
+		})
+		if err != nil {
+			if isNoRows(err) {
+				return Task{}, false, nil
+			}
+			return Task{}, false, err
+		}
+		return out, true, nil
 	}
-	defer rows.Close()
-	var task Task
-	found := false
-	for rows.Next() {
-		var (
-			sequenceKey      sql.NullString
-			sequencePosition sql.NullInt32
-			actionKind       string
-			claimMode        string
-			payload          json.RawMessage
-			imageURL         sql.NullString
-			rewardID         sql.NullInt64
-			rewardKey        sql.NullString
-			rewardType       sql.NullString
-			rewardQuantity   sql.NullInt64
-			rewardUnit       sql.NullString
-		)
-		if err := rows.Scan(
-			&task.ID,
-			&task.WorkspaceID,
-			&task.Key,
-			&task.GroupKey,
-			&sequenceKey,
-			&sequencePosition,
-			&task.ActionKey,
-			&actionKind,
-			&claimMode,
-			&task.TargetCount,
-			&payload,
-			&imageURL,
-			&rewardID,
-			&rewardKey,
-			&rewardType,
-			&rewardQuantity,
-			&rewardUnit,
-		); err != nil {
+	key := integrationCheckTaskByKeyCacheKey(workspaceID, keyValue)
+	rememberTaskCacheKey(workspaceID, key)
+	out, err := repositoryQuery[Task](ctx, r, sqlwrap.Params{
+		Key:          key,
+		CacheL1Delay: r.cacheL1Delay,
+		CacheL2Delay: r.cacheL2Delay,
+	}, func(ctx context.Context) (Task, error) {
+		row, err := r.q.GetIntegrationCheckTaskByKey(ctx, tasksqlc.GetIntegrationCheckTaskByKeyParams{
+			WorkspaceID: workspaceID,
+			Key:         keyValue,
+		})
+		if err != nil {
 			return Task{}, err
 		}
-		if !found {
-			task.SequenceKey = ptrString(sequenceKey)
-			task.SequencePosition = ptrUint32(sequencePosition)
-			task.ActionKind = actionKind
-			task.ClaimMode = claimMode
-			task.Payload = payload
-			task.ImageURL = ptrString(imageURL)
-			task.Rewards = make([]Reward, 0, 1)
-			found = true
+		return mapIntegrationCheckTaskByKey(row), nil
+	})
+	if err != nil {
+		if isNoRows(err) {
+			return Task{}, false, nil
 		}
-		if rewardID.Valid {
-			task.Rewards = append(task.Rewards, Reward{
-				Key: rewardKey.String, Type: rewardType.String,
-				Quantity: rewardQuantity.Int64, Unit: ptrString(rewardUnit),
-			})
-		}
+		return Task{}, false, err
 	}
-	if err := rows.Err(); err != nil {
-		return Task{}, err
-	}
-	if !found {
-		return Task{}, sql.ErrNoRows
-	}
-	return task, nil
+	return out, true, nil
 }
 
 func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, taskID uint64) ([]Reward, error) {
@@ -241,7 +153,23 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) ([]Reward, error) {
-		return loadRewardsCatalog(ctx, r.db.DB(), workspaceID, taskID)
+		rows, err := r.q.ListRewardsCatalog(ctx, tasksqlc.ListRewardsCatalogParams{
+			WorkspaceID: workspaceID,
+			TaskID:      taskID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		rewards := make([]Reward, 0, len(rows))
+		for _, row := range rows {
+			rewards = append(rewards, Reward{
+				Key:      row.RewardKey,
+				Type:     string(row.RewardType),
+				Quantity: row.Quantity,
+				Unit:     taskDurationUnitPtr(row.DurationUnit),
+			})
+		}
+		return rewards, nil
 	})
 	if err != nil {
 		return nil, err
@@ -249,38 +177,19 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 	return out, nil
 }
 
-func loadRewardsCatalog(ctx context.Context, db *sql.DB, workspaceID string, taskID uint64) ([]Reward, error) {
-	rows, err := db.QueryContext(ctx, listRewardsCatalogQuery, workspaceID, taskID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	rewards := make([]Reward, 0, 1)
-	for rows.Next() {
-		var reward Reward
-		var unit sql.NullString
-		if err := rows.Scan(&reward.Key, &reward.Type, &reward.Quantity, &unit); err != nil {
-			return nil, err
-		}
-		reward.Unit = ptrString(unit)
-		rewards = append(rewards, reward)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return rewards, nil
-}
-
 func (r *Repository) nextSequenceTask(ctx context.Context, workspaceID, sequenceKey string, sequencePosition uint32) (nextSequenceTask, error) {
 	key := nextSequenceTaskCacheKey(workspaceID, sequenceKey, sequencePosition)
 	rememberTaskCacheKey(workspaceID, key)
-	out, err := repositoryQuery[nextSequenceTask](ctx, r, sqlwrap.Params{
+	out, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:          key,
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) (nextSequenceTask, error) {
-		var id uint64
-		err := r.db.QueryRowContext(ctx, nextSequenceTaskQuery, workspaceID, sequenceKey, sequencePosition).Scan(&id)
+		id, err := r.q.GetNextSequenceTaskID(ctx, tasksqlc.GetNextSequenceTaskIDParams{
+			WorkspaceID:      workspaceID,
+			SequenceKey:      sql.NullString{String: sequenceKey, Valid: true},
+			SequencePosition: sql.NullInt32{Int32: int32(sequencePosition), Valid: true},
+		})
 		if err != nil {
 			if isNoRows(err) {
 				return nextSequenceTask{}, nil

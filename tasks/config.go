@@ -4,6 +4,7 @@ import (
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/tasks/service/integration"
 )
 
 const defaultCacheDelay = 10 * time.Minute
@@ -37,6 +38,7 @@ type Options struct {
 	CacheTTLCheck  time.Duration
 	Codec          Codec
 	Mutex          Mutex
+	Integration    integration.Options
 }
 
 type DatabaseParams struct {

@@ -97,9 +97,11 @@ func mapTask(row tasksqlc.TaskDefinition) Task {
 	return Task{
 		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
-		ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode),
+		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode),
 		TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery,
-		Position: row.Position, Payload: row.Payload, ImageURL: ptrString(row.ImageUrl),
+		Position: row.Position, Payload: row.Payload, IntegrationKind: ptrString(row.IntegrationKind),
+		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: row.IntegrationPayload,
+		ImageURL:  ptrString(row.ImageUrl),
 		IsVisible: row.IsVisible, IsActive: row.IsActive, StartAt: ptrTime(row.StartAt),
 		EndAt: ptrTime(row.EndAt), DeletedAt: ptrTime(row.DeletedAt),
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Rewards: make([]Reward, 0),

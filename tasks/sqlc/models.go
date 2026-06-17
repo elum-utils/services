@@ -406,29 +406,33 @@ func (ns NullTaskStatsEventEventType) Value() (driver.Value, error) {
 }
 
 type TaskDefinition struct {
-	ID               uint64                   `json:"id"`
-	WorkspaceID      string                   `json:"workspace_id"`
-	Key              string                   `json:"key"`
-	GroupKey         string                   `json:"group_key"`
-	SequenceKey      sql.NullString           `json:"sequence_key"`
-	SequencePosition sql.NullInt32            `json:"sequence_position"`
-	ActionKey        string                   `json:"action_key"`
-	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
-	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
-	TargetCount      uint64                   `json:"target_count"`
-	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
-	ResetEvery       uint32                   `json:"reset_every"`
-	Position         int32                    `json:"position"`
-	Payload          json.RawMessage          `json:"payload"`
-	ImageUrl         sql.NullString           `json:"image_url"`
-	IsVisible        bool                     `json:"is_visible"`
-	IsActive         bool                     `json:"is_active"`
-	StartAt          sql.NullTime             `json:"start_at"`
-	EndAt            sql.NullTime             `json:"end_at"`
-	DeletedAt        sql.NullTime             `json:"deleted_at"`
-	BranchSortKey    sql.NullString           `json:"branch_sort_key"`
-	CreatedAt        time.Time                `json:"created_at"`
-	UpdatedAt        time.Time                `json:"updated_at"`
+	ID                  uint64                   `json:"id"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Position            int32                    `json:"position"`
+	Payload             json.RawMessage          `json:"payload"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	IsVisible           bool                     `json:"is_visible"`
+	IsActive            bool                     `json:"is_active"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+	DeletedAt           sql.NullTime             `json:"deleted_at"`
+	BranchSortKey       sql.NullString           `json:"branch_sort_key"`
+	CreatedAt           time.Time                `json:"created_at"`
+	UpdatedAt           time.Time                `json:"updated_at"`
 }
 
 type TaskGroup struct {

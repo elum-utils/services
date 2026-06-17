@@ -84,8 +84,26 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getClaimBundleByKeyForUpdateStmt, err = db.PrepareContext(ctx, getClaimBundleByKeyForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetClaimBundleByKeyForUpdate: %w", err)
 	}
+	if q.getClaimCatalogByIDStmt, err = db.PrepareContext(ctx, getClaimCatalogByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetClaimCatalogByID: %w", err)
+	}
+	if q.getClaimCatalogByKeyStmt, err = db.PrepareContext(ctx, getClaimCatalogByKey); err != nil {
+		return nil, fmt.Errorf("error preparing query GetClaimCatalogByKey: %w", err)
+	}
+	if q.getCurrentProgressForUpdateStmt, err = db.PrepareContext(ctx, getCurrentProgressForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetCurrentProgressForUpdate: %w", err)
+	}
+	if q.getIntegrationCheckTaskByIDStmt, err = db.PrepareContext(ctx, getIntegrationCheckTaskByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetIntegrationCheckTaskByID: %w", err)
+	}
+	if q.getIntegrationCheckTaskByKeyStmt, err = db.PrepareContext(ctx, getIntegrationCheckTaskByKey); err != nil {
+		return nil, fmt.Errorf("error preparing query GetIntegrationCheckTaskByKey: %w", err)
+	}
 	if q.getNextSequenceTaskIDStmt, err = db.PrepareContext(ctx, getNextSequenceTaskID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetNextSequenceTaskID: %w", err)
+	}
+	if q.getSequenceStateForUpdateStmt, err = db.PrepareContext(ctx, getSequenceStateForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetSequenceStateForUpdate: %w", err)
 	}
 	if q.insertProgressEventStmt, err = db.PrepareContext(ctx, insertProgressEvent); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertProgressEvent: %w", err)
@@ -99,11 +117,20 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listCurrentProgressForUserForUpdateStmt, err = db.PrepareContext(ctx, listCurrentProgressForUserForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query ListCurrentProgressForUserForUpdate: %w", err)
 	}
+	if q.listRecordCatalogStmt, err = db.PrepareContext(ctx, listRecordCatalog); err != nil {
+		return nil, fmt.Errorf("error preparing query ListRecordCatalog: %w", err)
+	}
 	if q.listRecordTasksStmt, err = db.PrepareContext(ctx, listRecordTasks); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRecordTasks: %w", err)
 	}
 	if q.listRewardsStmt, err = db.PrepareContext(ctx, listRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRewards: %w", err)
+	}
+	if q.listRewardsCatalogStmt, err = db.PrepareContext(ctx, listRewardsCatalog); err != nil {
+		return nil, fmt.Errorf("error preparing query ListRewardsCatalog: %w", err)
+	}
+	if q.listSequenceStatesForUserStmt, err = db.PrepareContext(ctx, listSequenceStatesForUser); err != nil {
+		return nil, fmt.Errorf("error preparing query ListSequenceStatesForUser: %w", err)
 	}
 	if q.refreshTaskDailyOverviewStmt, err = db.PrepareContext(ctx, refreshTaskDailyOverview); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshTaskDailyOverview: %w", err)
@@ -113,6 +140,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.updateProgressStmt, err = db.PrepareContext(ctx, updateProgress); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateProgress: %w", err)
+	}
+	if q.upsertProgressStmt, err = db.PrepareContext(ctx, upsertProgress); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertProgress: %w", err)
 	}
 	if q.upsertSequenceStateStmt, err = db.PrepareContext(ctx, upsertSequenceState); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertSequenceState: %w", err)
@@ -222,9 +252,39 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getClaimBundleByKeyForUpdateStmt: %w", cerr)
 		}
 	}
+	if q.getClaimCatalogByIDStmt != nil {
+		if cerr := q.getClaimCatalogByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getClaimCatalogByIDStmt: %w", cerr)
+		}
+	}
+	if q.getClaimCatalogByKeyStmt != nil {
+		if cerr := q.getClaimCatalogByKeyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getClaimCatalogByKeyStmt: %w", cerr)
+		}
+	}
+	if q.getCurrentProgressForUpdateStmt != nil {
+		if cerr := q.getCurrentProgressForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getCurrentProgressForUpdateStmt: %w", cerr)
+		}
+	}
+	if q.getIntegrationCheckTaskByIDStmt != nil {
+		if cerr := q.getIntegrationCheckTaskByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getIntegrationCheckTaskByIDStmt: %w", cerr)
+		}
+	}
+	if q.getIntegrationCheckTaskByKeyStmt != nil {
+		if cerr := q.getIntegrationCheckTaskByKeyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getIntegrationCheckTaskByKeyStmt: %w", cerr)
+		}
+	}
 	if q.getNextSequenceTaskIDStmt != nil {
 		if cerr := q.getNextSequenceTaskIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getNextSequenceTaskIDStmt: %w", cerr)
+		}
+	}
+	if q.getSequenceStateForUpdateStmt != nil {
+		if cerr := q.getSequenceStateForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getSequenceStateForUpdateStmt: %w", cerr)
 		}
 	}
 	if q.insertProgressEventStmt != nil {
@@ -247,6 +307,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listCurrentProgressForUserForUpdateStmt: %w", cerr)
 		}
 	}
+	if q.listRecordCatalogStmt != nil {
+		if cerr := q.listRecordCatalogStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listRecordCatalogStmt: %w", cerr)
+		}
+	}
 	if q.listRecordTasksStmt != nil {
 		if cerr := q.listRecordTasksStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRecordTasksStmt: %w", cerr)
@@ -255,6 +320,16 @@ func (q *Queries) Close() error {
 	if q.listRewardsStmt != nil {
 		if cerr := q.listRewardsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRewardsStmt: %w", cerr)
+		}
+	}
+	if q.listRewardsCatalogStmt != nil {
+		if cerr := q.listRewardsCatalogStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listRewardsCatalogStmt: %w", cerr)
+		}
+	}
+	if q.listSequenceStatesForUserStmt != nil {
+		if cerr := q.listSequenceStatesForUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listSequenceStatesForUserStmt: %w", cerr)
 		}
 	}
 	if q.refreshTaskDailyOverviewStmt != nil {
@@ -270,6 +345,11 @@ func (q *Queries) Close() error {
 	if q.updateProgressStmt != nil {
 		if cerr := q.updateProgressStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateProgressStmt: %w", cerr)
+		}
+	}
+	if q.upsertProgressStmt != nil {
+		if cerr := q.upsertProgressStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertProgressStmt: %w", cerr)
 		}
 	}
 	if q.upsertSequenceStateStmt != nil {
@@ -336,16 +416,26 @@ type Queries struct {
 	ensureProgressStmt                      *sql.Stmt
 	getClaimBundleByIDForUpdateStmt         *sql.Stmt
 	getClaimBundleByKeyForUpdateStmt        *sql.Stmt
+	getClaimCatalogByIDStmt                 *sql.Stmt
+	getClaimCatalogByKeyStmt                *sql.Stmt
+	getCurrentProgressForUpdateStmt         *sql.Stmt
+	getIntegrationCheckTaskByIDStmt         *sql.Stmt
+	getIntegrationCheckTaskByKeyStmt        *sql.Stmt
 	getNextSequenceTaskIDStmt               *sql.Stmt
+	getSequenceStateForUpdateStmt           *sql.Stmt
 	insertProgressEventStmt                 *sql.Stmt
 	listActiveTaskBundlesStmt               *sql.Stmt
 	listCurrentProgressForUserStmt          *sql.Stmt
 	listCurrentProgressForUserForUpdateStmt *sql.Stmt
+	listRecordCatalogStmt                   *sql.Stmt
 	listRecordTasksStmt                     *sql.Stmt
 	listRewardsStmt                         *sql.Stmt
+	listRewardsCatalogStmt                  *sql.Stmt
+	listSequenceStatesForUserStmt           *sql.Stmt
 	refreshTaskDailyOverviewStmt            *sql.Stmt
 	refreshTaskDailyStatsStmt               *sql.Stmt
 	updateProgressStmt                      *sql.Stmt
+	upsertProgressStmt                      *sql.Stmt
 	upsertSequenceStateStmt                 *sql.Stmt
 }
 
@@ -373,16 +463,26 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		ensureProgressStmt:                      q.ensureProgressStmt,
 		getClaimBundleByIDForUpdateStmt:         q.getClaimBundleByIDForUpdateStmt,
 		getClaimBundleByKeyForUpdateStmt:        q.getClaimBundleByKeyForUpdateStmt,
+		getClaimCatalogByIDStmt:                 q.getClaimCatalogByIDStmt,
+		getClaimCatalogByKeyStmt:                q.getClaimCatalogByKeyStmt,
+		getCurrentProgressForUpdateStmt:         q.getCurrentProgressForUpdateStmt,
+		getIntegrationCheckTaskByIDStmt:         q.getIntegrationCheckTaskByIDStmt,
+		getIntegrationCheckTaskByKeyStmt:        q.getIntegrationCheckTaskByKeyStmt,
 		getNextSequenceTaskIDStmt:               q.getNextSequenceTaskIDStmt,
+		getSequenceStateForUpdateStmt:           q.getSequenceStateForUpdateStmt,
 		insertProgressEventStmt:                 q.insertProgressEventStmt,
 		listActiveTaskBundlesStmt:               q.listActiveTaskBundlesStmt,
 		listCurrentProgressForUserStmt:          q.listCurrentProgressForUserStmt,
 		listCurrentProgressForUserForUpdateStmt: q.listCurrentProgressForUserForUpdateStmt,
+		listRecordCatalogStmt:                   q.listRecordCatalogStmt,
 		listRecordTasksStmt:                     q.listRecordTasksStmt,
 		listRewardsStmt:                         q.listRewardsStmt,
+		listRewardsCatalogStmt:                  q.listRewardsCatalogStmt,
+		listSequenceStatesForUserStmt:           q.listSequenceStatesForUserStmt,
 		refreshTaskDailyOverviewStmt:            q.refreshTaskDailyOverviewStmt,
 		refreshTaskDailyStatsStmt:               q.refreshTaskDailyStatsStmt,
 		updateProgressStmt:                      q.updateProgressStmt,
+		upsertProgressStmt:                      q.upsertProgressStmt,
 		upsertSequenceStateStmt:                 q.upsertSequenceStateStmt,
 	}
 }

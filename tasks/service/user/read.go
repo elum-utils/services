@@ -34,7 +34,7 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 
 func mapTask(task repository.Task) TaskModel {
 	result := TaskModel{
-		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey,
+		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
 		ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
 		TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
 		Rewards: task.Rewards,

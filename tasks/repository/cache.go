@@ -25,6 +25,14 @@ func claimCatalogByKeyCacheKey(workspaceID, key string) string {
 	return sqlwrap.CreateKey("tasks", "claim_catalog_key", workspaceID, key)
 }
 
+func integrationCheckTaskByIDCacheKey(workspaceID string, id uint64) string {
+	return sqlwrap.CreateKey("tasks", "integration_check_task_id", workspaceID, id)
+}
+
+func integrationCheckTaskByKeyCacheKey(workspaceID, key string) string {
+	return sqlwrap.CreateKey("tasks", "integration_check_task_key", workspaceID, key)
+}
+
 func rewardsCatalogCacheKey(workspaceID string, taskID uint64) string {
 	return sqlwrap.CreateKey("tasks", "rewards_catalog", workspaceID, taskID)
 }

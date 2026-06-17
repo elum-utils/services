@@ -2,26 +2,12 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
-
-const listActiveTasksQuery = `
-SELECT t.id, t.` + "`" + `key` + "`" + `, t.group_key,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url, t.start_at, t.end_at,
-       l.locale, l.title, l.description,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
-FROM task_definition t FORCE INDEX (task_definition_visible_user_list_idx)
-LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id = t.id AND l.locale = ?
-LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
-WHERE t.workspace_id = ? AND t.is_visible = TRUE AND t.is_active = TRUE
-  AND t.deleted_at IS NULL
-ORDER BY t.position, t.id, r.position, r.id`
 
 func (r *Repository) ListActive(ctx context.Context, identity Identity, locale string, now time.Time) ([]ActiveTask, error) {
 	if now.IsZero() {
@@ -68,7 +54,14 @@ func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale 
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) ([]ActiveTask, error) {
-		return loadActiveCatalog(ctx, r.db.DB(), workspaceID, locale)
+		rows, err := r.q.ListActiveTaskBundles(ctx, tasksqlc.ListActiveTaskBundlesParams{
+			Locale:      locale,
+			WorkspaceID: workspaceID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return activeTasksFromTasks(mapActiveBundles(rows)), nil
 	})
 	if err != nil {
 		return nil, err
@@ -76,87 +69,22 @@ func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale 
 	return out, nil
 }
 
-func loadActiveCatalog(ctx context.Context, db *sql.DB, workspaceID, locale string) ([]ActiveTask, error) {
-	rows, err := db.QueryContext(ctx, listActiveTasksQuery, locale, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	tasks := make([]ActiveTask, 0, 16)
-	var lastID uint64
-	index := -1
-	for rows.Next() {
-		var (
-			id             uint64
-			key            string
-			groupKey       string
-			actionKey      string
-			actionKind     string
-			claimMode      string
-			targetCount    uint64
-			payload        json.RawMessage
-			imageURL       sql.NullString
-			startAt        sql.NullTime
-			endAt          sql.NullTime
-			locLocale      sql.NullString
-			locTitle       sql.NullString
-			locDescription sql.NullString
-			rewardID       sql.NullInt64
-			rewardKey      sql.NullString
-			rewardType     sql.NullString
-			rewardQuantity sql.NullInt64
-			rewardUnit     sql.NullString
-		)
-		if err := rows.Scan(
-			&id,
-			&key,
-			&groupKey,
-			&actionKey,
-			&actionKind,
-			&claimMode,
-			&targetCount,
-			&payload,
-			&imageURL,
-			&startAt,
-			&endAt,
-			&locLocale,
-			&locTitle,
-			&locDescription,
-			&rewardID,
-			&rewardKey,
-			&rewardType,
-			&rewardQuantity,
-			&rewardUnit,
-		); err != nil {
-			return nil, err
+func activeTasksFromTasks(tasks []Task) []ActiveTask {
+	result := make([]ActiveTask, 0, len(tasks))
+	for _, task := range tasks {
+		out := ActiveTask{
+			ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
+			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
+			TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
+			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt,
 		}
-		if index < 0 || id != lastID {
-			task := ActiveTask{
-				ID: id, Key: key, GroupKey: groupKey,
-				ActionKey: actionKey, ActionKind: actionKind, ClaimMode: claimMode,
-				TargetCount: targetCount, Payload: payload, ImageURL: ptrString(imageURL),
-				StartAt: ptrTime(startAt), EndAt: ptrTime(endAt),
-				Rewards: make([]Reward, 0, 1),
-			}
-			if locLocale.Valid {
-				task.Title = locTitle.String
-				task.Description = locDescription.String
-			}
-			tasks = append(tasks, task)
-			index = len(tasks) - 1
-			lastID = id
+		if task.Localization != nil {
+			out.Title = task.Localization.Title
+			out.Description = task.Localization.Description
 		}
-		if rewardID.Valid {
-			tasks[index].Rewards = append(tasks[index].Rewards, Reward{
-				Key: rewardKey.String, Type: rewardType.String,
-				Quantity: rewardQuantity.Int64, Unit: ptrString(rewardUnit),
-			})
-		}
+		result = append(result, out)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return tasks, nil
+	return result
 }
 
 func activeTaskVisibleAt(task ActiveTask, now time.Time) bool {

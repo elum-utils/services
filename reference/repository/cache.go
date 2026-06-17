@@ -1,39 +1,60 @@
 package repository
 
 import (
-	"sync"
-
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
-var referenceCacheKeys sync.Map
+const (
+	referenceCacheGet                    = "get"
+	referenceCacheResolve                = "resolve"
+	referenceCacheList                   = "list"
+	referenceCacheAdminGet               = "admin_get"
+	referenceCacheAdminList              = "admin_list"
+	referenceCacheAdminGetLocalization   = "admin_get_localization"
+	referenceCacheAdminListLocalizations = "admin_list_localizations"
+	referenceCacheAdminStats             = "admin_stats"
+)
 
-func referenceCacheKey(parts ...any) string {
-	return sqlwrap.CreateKey(append([]any{"reference"}, parts...)...)
-}
-
-func rememberReferenceCacheKey(workspaceID, key string) {
-	if workspaceID != "" && key != "" {
-		referenceCacheKeys.Store(key, workspaceID)
+var (
+	referenceItemMutationCacheMethods = []string{
+		referenceCacheGet,
+		referenceCacheResolve,
+		referenceCacheList,
+		referenceCacheAdminGet,
+		referenceCacheAdminList,
+		referenceCacheAdminStats,
 	}
+	referenceLocalizationMutationCacheMethods = []string{
+		referenceCacheGet,
+		referenceCacheResolve,
+		referenceCacheList,
+		referenceCacheAdminGet,
+		referenceCacheAdminGetLocalization,
+		referenceCacheAdminListLocalizations,
+	}
+)
+
+func (r *Repository) referenceCacheKey(method, workspaceID string, parts ...any) string {
+	args := append([]any{"reference", method, workspaceID}, parts...)
+	return sqlwrap.CreateKey(args...)
 }
 
-func (r *Repository) invalidateWorkspaceCache(workspaceID string) error {
+func referenceCacheScope(method, workspaceID string) []any {
+	return []any{"reference", method, workspaceID}
+}
+
+func (r *Repository) bumpReferenceCacheVersions(workspaceID string, methods ...string) error {
 	if r == nil || r.db == nil || workspaceID == "" {
 		return nil
 	}
 	var result error
-	referenceCacheKeys.Range(func(rawKey, rawWorkspace any) bool {
-		key, keyOK := rawKey.(string)
-		cachedWorkspace, workspaceOK := rawWorkspace.(string)
-		if !keyOK || !workspaceOK || cachedWorkspace != workspaceID {
-			return true
+	for _, method := range methods {
+		if method == "" {
+			continue
 		}
-		if err := r.db.DeleteCache(key); err != nil && result == nil {
+		if err := r.db.BumpCacheVersion(referenceCacheScope(method, workspaceID)...); err != nil && result == nil {
 			result = err
 		}
-		referenceCacheKeys.Delete(rawKey)
-		return true
-	})
+	}
 	return result
 }

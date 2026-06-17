@@ -14,32 +14,37 @@ import (
 
 const adminCreateTask = `-- name: AdminCreateTask :execlastid
 INSERT INTO task_definition (
-    workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
+    workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position, task_kind,
     action_key, action_kind, claim_mode, target_count, reset_unit,
-    reset_every, position, payload, image_url, is_visible, is_active,
+    reset_every, position, payload, integration_kind, integration_provider,
+    integration_payload, image_url, is_visible, is_active,
     start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type AdminCreateTaskParams struct {
-	WorkspaceID      string                   `json:"workspace_id"`
-	Key              string                   `json:"key"`
-	GroupKey         string                   `json:"group_key"`
-	SequenceKey      sql.NullString           `json:"sequence_key"`
-	SequencePosition sql.NullInt32            `json:"sequence_position"`
-	ActionKey        string                   `json:"action_key"`
-	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
-	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
-	TargetCount      uint64                   `json:"target_count"`
-	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
-	ResetEvery       uint32                   `json:"reset_every"`
-	Position         int32                    `json:"position"`
-	Payload          json.RawMessage          `json:"payload"`
-	ImageUrl         sql.NullString           `json:"image_url"`
-	IsVisible        bool                     `json:"is_visible"`
-	IsActive         bool                     `json:"is_active"`
-	StartAt          sql.NullTime             `json:"start_at"`
-	EndAt            sql.NullTime             `json:"end_at"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Position            int32                    `json:"position"`
+	Payload             json.RawMessage          `json:"payload"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	IsVisible           bool                     `json:"is_visible"`
+	IsActive            bool                     `json:"is_active"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
 }
 
 func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams) (int64, error) {
@@ -49,6 +54,7 @@ func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams
 		arg.GroupKey,
 		arg.SequenceKey,
 		arg.SequencePosition,
+		arg.TaskKind,
 		arg.ActionKey,
 		arg.ActionKind,
 		arg.ClaimMode,
@@ -57,6 +63,9 @@ func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams
 		arg.ResetEvery,
 		arg.Position,
 		arg.Payload,
+		arg.IntegrationKind,
+		arg.IntegrationProvider,
+		arg.IntegrationPayload,
 		arg.ImageUrl,
 		arg.IsVisible,
 		arg.IsActive,
@@ -208,8 +217,9 @@ func (q *Queries) AdminGetSingleTaskStats(ctx context.Context, arg AdminGetSingl
 
 const adminGetTask = `-- name: AdminGetTask :one
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND id = ?
@@ -231,6 +241,7 @@ func (q *Queries) AdminGetTask(ctx context.Context, arg AdminGetTaskParams) (Tas
 		&i.GroupKey,
 		&i.SequenceKey,
 		&i.SequencePosition,
+		&i.TaskKind,
 		&i.ActionKey,
 		&i.ActionKind,
 		&i.ClaimMode,
@@ -239,6 +250,9 @@ func (q *Queries) AdminGetTask(ctx context.Context, arg AdminGetTaskParams) (Tas
 		&i.ResetEvery,
 		&i.Position,
 		&i.Payload,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
 		&i.ImageUrl,
 		&i.IsVisible,
 		&i.IsActive,
@@ -611,8 +625,9 @@ func (q *Queries) AdminListTaskDailyStats(ctx context.Context, arg AdminListTask
 
 const adminListTasks = `-- name: AdminListTasks :many
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND deleted_at IS NULL
@@ -642,6 +657,7 @@ func (q *Queries) AdminListTasks(ctx context.Context, arg AdminListTasksParams) 
 			&i.GroupKey,
 			&i.SequenceKey,
 			&i.SequencePosition,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
@@ -650,6 +666,9 @@ func (q *Queries) AdminListTasks(ctx context.Context, arg AdminListTasksParams) 
 			&i.ResetEvery,
 			&i.Position,
 			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
 			&i.ImageUrl,
 			&i.IsVisible,
 			&i.IsActive,
@@ -675,8 +694,9 @@ func (q *Queries) AdminListTasks(ctx context.Context, arg AdminListTasksParams) 
 
 const adminListTasksByGroup = `-- name: AdminListTasksByGroup :many
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND group_key = ? AND deleted_at IS NULL
@@ -712,6 +732,7 @@ func (q *Queries) AdminListTasksByGroup(ctx context.Context, arg AdminListTasksB
 			&i.GroupKey,
 			&i.SequenceKey,
 			&i.SequencePosition,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
@@ -720,6 +741,9 @@ func (q *Queries) AdminListTasksByGroup(ctx context.Context, arg AdminListTasksB
 			&i.ResetEvery,
 			&i.Position,
 			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
 			&i.ImageUrl,
 			&i.IsVisible,
 			&i.IsActive,
@@ -745,32 +769,37 @@ func (q *Queries) AdminListTasksByGroup(ctx context.Context, arg AdminListTasksB
 
 const adminUpdateTask = `-- name: AdminUpdateTask :execrows
 UPDATE task_definition
-SET group_key = ?, sequence_key = ?, sequence_position = ?, action_key = ?,
+SET group_key = ?, sequence_key = ?, sequence_position = ?, task_kind = ?, action_key = ?,
     action_kind = ?, claim_mode = ?, target_count = ?, reset_unit = ?,
-    reset_every = ?, position = ?, payload = ?, image_url = ?,
+    reset_every = ?, position = ?, payload = ?, integration_kind = ?,
+    integration_provider = ?, integration_payload = ?, image_url = ?,
     is_visible = ?, is_active = ?, start_at = ?, end_at = ?
 WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
 `
 
 type AdminUpdateTaskParams struct {
-	GroupKey         string                   `json:"group_key"`
-	SequenceKey      sql.NullString           `json:"sequence_key"`
-	SequencePosition sql.NullInt32            `json:"sequence_position"`
-	ActionKey        string                   `json:"action_key"`
-	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
-	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
-	TargetCount      uint64                   `json:"target_count"`
-	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
-	ResetEvery       uint32                   `json:"reset_every"`
-	Position         int32                    `json:"position"`
-	Payload          json.RawMessage          `json:"payload"`
-	ImageUrl         sql.NullString           `json:"image_url"`
-	IsVisible        bool                     `json:"is_visible"`
-	IsActive         bool                     `json:"is_active"`
-	StartAt          sql.NullTime             `json:"start_at"`
-	EndAt            sql.NullTime             `json:"end_at"`
-	WorkspaceID      string                   `json:"workspace_id"`
-	ID               uint64                   `json:"id"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Position            int32                    `json:"position"`
+	Payload             json.RawMessage          `json:"payload"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	IsVisible           bool                     `json:"is_visible"`
+	IsActive            bool                     `json:"is_active"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	ID                  uint64                   `json:"id"`
 }
 
 func (q *Queries) AdminUpdateTask(ctx context.Context, arg AdminUpdateTaskParams) (int64, error) {
@@ -778,6 +807,7 @@ func (q *Queries) AdminUpdateTask(ctx context.Context, arg AdminUpdateTaskParams
 		arg.GroupKey,
 		arg.SequenceKey,
 		arg.SequencePosition,
+		arg.TaskKind,
 		arg.ActionKey,
 		arg.ActionKind,
 		arg.ClaimMode,
@@ -786,6 +816,9 @@ func (q *Queries) AdminUpdateTask(ctx context.Context, arg AdminUpdateTaskParams
 		arg.ResetEvery,
 		arg.Position,
 		arg.Payload,
+		arg.IntegrationKind,
+		arg.IntegrationProvider,
+		arg.IntegrationPayload,
 		arg.ImageUrl,
 		arg.IsVisible,
 		arg.IsActive,
@@ -1001,8 +1034,8 @@ func (q *Queries) EnsureProgress(ctx context.Context, arg EnsureProgressParams) 
 
 const getClaimBundleByIDForUpdate = `-- name: GetClaimBundleByIDForUpdate :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
@@ -1029,33 +1062,37 @@ type GetClaimBundleByIDForUpdateParams struct {
 }
 
 type GetClaimBundleByIDForUpdateRow struct {
-	ID               uint64                     `json:"id"`
-	WorkspaceID      string                     `json:"workspace_id"`
-	Key              string                     `json:"key"`
-	GroupKey         string                     `json:"group_key"`
-	SequenceKey      sql.NullString             `json:"sequence_key"`
-	SequencePosition sql.NullInt32              `json:"sequence_position"`
-	ActionKey        string                     `json:"action_key"`
-	ActionKind       TaskDefinitionActionKind   `json:"action_kind"`
-	ClaimMode        TaskDefinitionClaimMode    `json:"claim_mode"`
-	TargetCount      uint64                     `json:"target_count"`
-	Payload          json.RawMessage            `json:"payload"`
-	ImageUrl         sql.NullString             `json:"image_url"`
-	ProgressID       sql.NullInt64              `json:"progress_id"`
-	Progress         sql.NullInt64              `json:"progress"`
-	Status           NullTaskProgressStatus     `json:"status"`
-	PeriodStartAt    sql.NullTime               `json:"period_start_at"`
-	PeriodEndAt      sql.NullTime               `json:"period_end_at"`
-	ReadyAt          sql.NullTime               `json:"ready_at"`
-	ClaimedAt        sql.NullTime               `json:"claimed_at"`
-	OperationID      sql.NullString             `json:"operation_id"`
-	RewardsSnapshot  json.RawMessage            `json:"rewards_snapshot"`
-	RewardID         sql.NullInt64              `json:"reward_id"`
-	RewardKey        sql.NullString             `json:"reward_key"`
-	RewardType       NullTaskRewardRewardType   `json:"reward_type"`
-	RewardQuantity   sql.NullInt64              `json:"reward_quantity"`
-	DurationUnit     NullTaskRewardDurationUnit `json:"duration_unit"`
-	RewardPosition   sql.NullInt32              `json:"reward_position"`
+	ID                  uint64                     `json:"id"`
+	WorkspaceID         string                     `json:"workspace_id"`
+	Key                 string                     `json:"key"`
+	GroupKey            string                     `json:"group_key"`
+	SequenceKey         sql.NullString             `json:"sequence_key"`
+	SequencePosition    sql.NullInt32              `json:"sequence_position"`
+	TaskKind            string                     `json:"task_kind"`
+	ActionKey           string                     `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	TargetCount         uint64                     `json:"target_count"`
+	Payload             json.RawMessage            `json:"payload"`
+	IntegrationKind     sql.NullString             `json:"integration_kind"`
+	IntegrationProvider sql.NullString             `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage            `json:"integration_payload"`
+	ImageUrl            sql.NullString             `json:"image_url"`
+	ProgressID          sql.NullInt64              `json:"progress_id"`
+	Progress            sql.NullInt64              `json:"progress"`
+	Status              NullTaskProgressStatus     `json:"status"`
+	PeriodStartAt       sql.NullTime               `json:"period_start_at"`
+	PeriodEndAt         sql.NullTime               `json:"period_end_at"`
+	ReadyAt             sql.NullTime               `json:"ready_at"`
+	ClaimedAt           sql.NullTime               `json:"claimed_at"`
+	OperationID         sql.NullString             `json:"operation_id"`
+	RewardsSnapshot     json.RawMessage            `json:"rewards_snapshot"`
+	RewardID            sql.NullInt64              `json:"reward_id"`
+	RewardKey           sql.NullString             `json:"reward_key"`
+	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
+	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
+	RewardPosition      sql.NullInt32              `json:"reward_position"`
 }
 
 func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimBundleByIDForUpdateParams) ([]GetClaimBundleByIDForUpdateRow, error) {
@@ -1082,11 +1119,15 @@ func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimB
 			&i.GroupKey,
 			&i.SequenceKey,
 			&i.SequencePosition,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
 			&i.TargetCount,
 			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
 			&i.ImageUrl,
 			&i.ProgressID,
 			&i.Progress,
@@ -1119,8 +1160,8 @@ func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimB
 
 const getClaimBundleByKeyForUpdate = `-- name: GetClaimBundleByKeyForUpdate :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
@@ -1147,33 +1188,37 @@ type GetClaimBundleByKeyForUpdateParams struct {
 }
 
 type GetClaimBundleByKeyForUpdateRow struct {
-	ID               uint64                     `json:"id"`
-	WorkspaceID      string                     `json:"workspace_id"`
-	Key              string                     `json:"key"`
-	GroupKey         string                     `json:"group_key"`
-	SequenceKey      sql.NullString             `json:"sequence_key"`
-	SequencePosition sql.NullInt32              `json:"sequence_position"`
-	ActionKey        string                     `json:"action_key"`
-	ActionKind       TaskDefinitionActionKind   `json:"action_kind"`
-	ClaimMode        TaskDefinitionClaimMode    `json:"claim_mode"`
-	TargetCount      uint64                     `json:"target_count"`
-	Payload          json.RawMessage            `json:"payload"`
-	ImageUrl         sql.NullString             `json:"image_url"`
-	ProgressID       sql.NullInt64              `json:"progress_id"`
-	Progress         sql.NullInt64              `json:"progress"`
-	Status           NullTaskProgressStatus     `json:"status"`
-	PeriodStartAt    sql.NullTime               `json:"period_start_at"`
-	PeriodEndAt      sql.NullTime               `json:"period_end_at"`
-	ReadyAt          sql.NullTime               `json:"ready_at"`
-	ClaimedAt        sql.NullTime               `json:"claimed_at"`
-	OperationID      sql.NullString             `json:"operation_id"`
-	RewardsSnapshot  json.RawMessage            `json:"rewards_snapshot"`
-	RewardID         sql.NullInt64              `json:"reward_id"`
-	RewardKey        sql.NullString             `json:"reward_key"`
-	RewardType       NullTaskRewardRewardType   `json:"reward_type"`
-	RewardQuantity   sql.NullInt64              `json:"reward_quantity"`
-	DurationUnit     NullTaskRewardDurationUnit `json:"duration_unit"`
-	RewardPosition   sql.NullInt32              `json:"reward_position"`
+	ID                  uint64                     `json:"id"`
+	WorkspaceID         string                     `json:"workspace_id"`
+	Key                 string                     `json:"key"`
+	GroupKey            string                     `json:"group_key"`
+	SequenceKey         sql.NullString             `json:"sequence_key"`
+	SequencePosition    sql.NullInt32              `json:"sequence_position"`
+	TaskKind            string                     `json:"task_kind"`
+	ActionKey           string                     `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	TargetCount         uint64                     `json:"target_count"`
+	Payload             json.RawMessage            `json:"payload"`
+	IntegrationKind     sql.NullString             `json:"integration_kind"`
+	IntegrationProvider sql.NullString             `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage            `json:"integration_payload"`
+	ImageUrl            sql.NullString             `json:"image_url"`
+	ProgressID          sql.NullInt64              `json:"progress_id"`
+	Progress            sql.NullInt64              `json:"progress"`
+	Status              NullTaskProgressStatus     `json:"status"`
+	PeriodStartAt       sql.NullTime               `json:"period_start_at"`
+	PeriodEndAt         sql.NullTime               `json:"period_end_at"`
+	ReadyAt             sql.NullTime               `json:"ready_at"`
+	ClaimedAt           sql.NullTime               `json:"claimed_at"`
+	OperationID         sql.NullString             `json:"operation_id"`
+	RewardsSnapshot     json.RawMessage            `json:"rewards_snapshot"`
+	RewardID            sql.NullInt64              `json:"reward_id"`
+	RewardKey           sql.NullString             `json:"reward_key"`
+	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
+	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
+	RewardPosition      sql.NullInt32              `json:"reward_position"`
 }
 
 func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaimBundleByKeyForUpdateParams) ([]GetClaimBundleByKeyForUpdateRow, error) {
@@ -1200,11 +1245,15 @@ func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaim
 			&i.GroupKey,
 			&i.SequenceKey,
 			&i.SequencePosition,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
 			&i.TargetCount,
 			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
 			&i.ImageUrl,
 			&i.ProgressID,
 			&i.Progress,
@@ -1235,6 +1284,364 @@ func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaim
 	return items, nil
 }
 
+const getClaimCatalogByID = `-- name: GetClaimCatalogByID :many
+SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+FROM task_definition t
+LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
+WHERE t.workspace_id = ? AND t.id = ?
+ORDER BY r.position, r.id
+`
+
+type GetClaimCatalogByIDParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+type GetClaimCatalogByIDRow struct {
+	ID                  uint64                     `json:"id"`
+	WorkspaceID         string                     `json:"workspace_id"`
+	Key                 string                     `json:"key"`
+	GroupKey            string                     `json:"group_key"`
+	SequenceKey         sql.NullString             `json:"sequence_key"`
+	SequencePosition    sql.NullInt32              `json:"sequence_position"`
+	TaskKind            string                     `json:"task_kind"`
+	ActionKey           string                     `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	TargetCount         uint64                     `json:"target_count"`
+	Payload             json.RawMessage            `json:"payload"`
+	IntegrationKind     sql.NullString             `json:"integration_kind"`
+	IntegrationProvider sql.NullString             `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage            `json:"integration_payload"`
+	ImageUrl            sql.NullString             `json:"image_url"`
+	RewardID            sql.NullInt64              `json:"reward_id"`
+	RewardKey           sql.NullString             `json:"reward_key"`
+	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
+	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
+}
+
+func (q *Queries) GetClaimCatalogByID(ctx context.Context, arg GetClaimCatalogByIDParams) ([]GetClaimCatalogByIDRow, error) {
+	rows, err := q.query(ctx, q.getClaimCatalogByIDStmt, getClaimCatalogByID, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetClaimCatalogByIDRow
+	for rows.Next() {
+		var i GetClaimCatalogByIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Key,
+			&i.GroupKey,
+			&i.SequenceKey,
+			&i.SequencePosition,
+			&i.TaskKind,
+			&i.ActionKey,
+			&i.ActionKind,
+			&i.ClaimMode,
+			&i.TargetCount,
+			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
+			&i.ImageUrl,
+			&i.RewardID,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.RewardQuantity,
+			&i.DurationUnit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getClaimCatalogByKey = `-- name: GetClaimCatalogByKey :many
+SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+FROM task_definition t
+LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
+WHERE t.workspace_id = ? AND t.` + "`" + `key` + "`" + ` = ?
+ORDER BY r.position, r.id
+`
+
+type GetClaimCatalogByKeyParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Key         string `json:"key"`
+}
+
+type GetClaimCatalogByKeyRow struct {
+	ID                  uint64                     `json:"id"`
+	WorkspaceID         string                     `json:"workspace_id"`
+	Key                 string                     `json:"key"`
+	GroupKey            string                     `json:"group_key"`
+	SequenceKey         sql.NullString             `json:"sequence_key"`
+	SequencePosition    sql.NullInt32              `json:"sequence_position"`
+	TaskKind            string                     `json:"task_kind"`
+	ActionKey           string                     `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	TargetCount         uint64                     `json:"target_count"`
+	Payload             json.RawMessage            `json:"payload"`
+	IntegrationKind     sql.NullString             `json:"integration_kind"`
+	IntegrationProvider sql.NullString             `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage            `json:"integration_payload"`
+	ImageUrl            sql.NullString             `json:"image_url"`
+	RewardID            sql.NullInt64              `json:"reward_id"`
+	RewardKey           sql.NullString             `json:"reward_key"`
+	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
+	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
+}
+
+func (q *Queries) GetClaimCatalogByKey(ctx context.Context, arg GetClaimCatalogByKeyParams) ([]GetClaimCatalogByKeyRow, error) {
+	rows, err := q.query(ctx, q.getClaimCatalogByKeyStmt, getClaimCatalogByKey, arg.WorkspaceID, arg.Key)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetClaimCatalogByKeyRow
+	for rows.Next() {
+		var i GetClaimCatalogByKeyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Key,
+			&i.GroupKey,
+			&i.SequenceKey,
+			&i.SequencePosition,
+			&i.TaskKind,
+			&i.ActionKey,
+			&i.ActionKind,
+			&i.ClaimMode,
+			&i.TargetCount,
+			&i.Payload,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
+			&i.ImageUrl,
+			&i.RewardID,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.RewardQuantity,
+			&i.DurationUnit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCurrentProgressForUpdate = `-- name: GetCurrentProgressForUpdate :one
+SELECT id, workspace_id, task_id, app_id, platform_id, platform_user_id,
+       period_start_at, period_end_at, progress, status, ready_at, claimed_at,
+       operation_id, COALESCE(rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot, created_at, updated_at
+FROM task_progress
+WHERE workspace_id = ?
+  AND task_id = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND period_start_at <= ?
+  AND period_end_at > ?
+LIMIT 1
+FOR UPDATE
+`
+
+type GetCurrentProgressForUpdateParams struct {
+	WorkspaceID    string    `json:"workspace_id"`
+	TaskID         uint64    `json:"task_id"`
+	AppID          int64     `json:"app_id"`
+	PlatformID     int64     `json:"platform_id"`
+	PlatformUserID string    `json:"platform_user_id"`
+	PeriodStartAt  time.Time `json:"period_start_at"`
+	PeriodEndAt    time.Time `json:"period_end_at"`
+}
+
+func (q *Queries) GetCurrentProgressForUpdate(ctx context.Context, arg GetCurrentProgressForUpdateParams) (TaskProgress, error) {
+	row := q.queryRow(ctx, q.getCurrentProgressForUpdateStmt, getCurrentProgressForUpdate,
+		arg.WorkspaceID,
+		arg.TaskID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.PeriodStartAt,
+		arg.PeriodEndAt,
+	)
+	var i TaskProgress
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.TaskID,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PeriodStartAt,
+		&i.PeriodEndAt,
+		&i.Progress,
+		&i.Status,
+		&i.ReadyAt,
+		&i.ClaimedAt,
+		&i.OperationID,
+		&i.RewardsSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIntegrationCheckTaskByID = `-- name: GetIntegrationCheckTaskByID :one
+SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.reset_unit, t.reset_every, t.payload, t.integration_kind, t.integration_provider,
+       t.integration_payload, t.image_url, t.start_at, t.end_at
+FROM task_definition t
+WHERE t.workspace_id = ? AND t.id = ? AND t.is_active = TRUE AND t.deleted_at IS NULL
+`
+
+type GetIntegrationCheckTaskByIDParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+type GetIntegrationCheckTaskByIDRow struct {
+	ID                  uint64                   `json:"id"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Payload             json.RawMessage          `json:"payload"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+}
+
+func (q *Queries) GetIntegrationCheckTaskByID(ctx context.Context, arg GetIntegrationCheckTaskByIDParams) (GetIntegrationCheckTaskByIDRow, error) {
+	row := q.queryRow(ctx, q.getIntegrationCheckTaskByIDStmt, getIntegrationCheckTaskByID, arg.WorkspaceID, arg.ID)
+	var i GetIntegrationCheckTaskByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.GroupKey,
+		&i.SequenceKey,
+		&i.SequencePosition,
+		&i.TaskKind,
+		&i.ActionKey,
+		&i.ActionKind,
+		&i.ClaimMode,
+		&i.TargetCount,
+		&i.ResetUnit,
+		&i.ResetEvery,
+		&i.Payload,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
+		&i.ImageUrl,
+		&i.StartAt,
+		&i.EndAt,
+	)
+	return i, err
+}
+
+const getIntegrationCheckTaskByKey = `-- name: GetIntegrationCheckTaskByKey :one
+SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.reset_unit, t.reset_every, t.payload, t.integration_kind, t.integration_provider,
+       t.integration_payload, t.image_url, t.start_at, t.end_at
+FROM task_definition t
+WHERE t.workspace_id = ? AND t.` + "`" + `key` + "`" + ` = ? AND t.is_active = TRUE AND t.deleted_at IS NULL
+`
+
+type GetIntegrationCheckTaskByKeyParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Key         string `json:"key"`
+}
+
+type GetIntegrationCheckTaskByKeyRow struct {
+	ID                  uint64                   `json:"id"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Payload             json.RawMessage          `json:"payload"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+}
+
+func (q *Queries) GetIntegrationCheckTaskByKey(ctx context.Context, arg GetIntegrationCheckTaskByKeyParams) (GetIntegrationCheckTaskByKeyRow, error) {
+	row := q.queryRow(ctx, q.getIntegrationCheckTaskByKeyStmt, getIntegrationCheckTaskByKey, arg.WorkspaceID, arg.Key)
+	var i GetIntegrationCheckTaskByKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.GroupKey,
+		&i.SequenceKey,
+		&i.SequencePosition,
+		&i.TaskKind,
+		&i.ActionKey,
+		&i.ActionKind,
+		&i.ClaimMode,
+		&i.TargetCount,
+		&i.ResetUnit,
+		&i.ResetEvery,
+		&i.Payload,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
+		&i.ImageUrl,
+		&i.StartAt,
+		&i.EndAt,
+	)
+	return i, err
+}
+
 const getNextSequenceTaskID = `-- name: GetNextSequenceTaskID :one
 SELECT id
 FROM task_definition
@@ -1257,6 +1664,43 @@ func (q *Queries) GetNextSequenceTaskID(ctx context.Context, arg GetNextSequence
 	var id uint64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getSequenceStateForUpdate = `-- name: GetSequenceStateForUpdate :one
+SELECT current_task_id, status
+FROM task_sequence_state
+WHERE workspace_id = ?
+  AND sequence_key = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+FOR UPDATE
+`
+
+type GetSequenceStateForUpdateParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	SequenceKey    string `json:"sequence_key"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
+	PlatformUserID string `json:"platform_user_id"`
+}
+
+type GetSequenceStateForUpdateRow struct {
+	CurrentTaskID sql.NullInt64           `json:"current_task_id"`
+	Status        TaskSequenceStateStatus `json:"status"`
+}
+
+func (q *Queries) GetSequenceStateForUpdate(ctx context.Context, arg GetSequenceStateForUpdateParams) (GetSequenceStateForUpdateRow, error) {
+	row := q.queryRow(ctx, q.getSequenceStateForUpdateStmt, getSequenceStateForUpdate,
+		arg.WorkspaceID,
+		arg.SequenceKey,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+	)
+	var i GetSequenceStateForUpdateRow
+	err := row.Scan(&i.CurrentTaskID, &i.Status)
+	return i, err
 }
 
 const insertProgressEvent = `-- name: InsertProgressEvent :execrows
@@ -1298,8 +1742,8 @@ func (q *Queries) InsertProgressEvent(ctx context.Context, arg InsertProgressEve
 
 const listActiveTaskBundles = `-- name: ListActiveTaskBundles :many
 SELECT t.id, t.` + "`" + `key` + "`" + `, t.group_key,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.image_url, t.start_at, t.end_at,
        l.locale, l.title, l.description,
        r.id AS reward_id, r.reward_key, r.reward_type,
        r.quantity AS reward_quantity, r.duration_unit
@@ -1308,28 +1752,27 @@ LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id =
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.is_visible = TRUE AND t.is_active = TRUE
   AND t.deleted_at IS NULL
-  AND (t.start_at IS NULL OR t.start_at <= ?)
-  AND (t.end_at IS NULL OR t.end_at > ?)
 ORDER BY t.position, t.id, r.position, r.id
 `
 
 type ListActiveTaskBundlesParams struct {
-	Locale      string       `json:"locale"`
-	WorkspaceID string       `json:"workspace_id"`
-	StartAt     sql.NullTime `json:"start_at"`
-	EndAt       sql.NullTime `json:"end_at"`
+	Locale      string `json:"locale"`
+	WorkspaceID string `json:"workspace_id"`
 }
 
 type ListActiveTaskBundlesRow struct {
 	ID             uint64                     `json:"id"`
 	Key            string                     `json:"key"`
 	GroupKey       string                     `json:"group_key"`
+	TaskKind       string                     `json:"task_kind"`
 	ActionKey      string                     `json:"action_key"`
 	ActionKind     TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode      TaskDefinitionClaimMode    `json:"claim_mode"`
 	TargetCount    uint64                     `json:"target_count"`
 	Payload        json.RawMessage            `json:"payload"`
 	ImageUrl       sql.NullString             `json:"image_url"`
+	StartAt        sql.NullTime               `json:"start_at"`
+	EndAt          sql.NullTime               `json:"end_at"`
 	Locale         sql.NullString             `json:"locale"`
 	Title          sql.NullString             `json:"title"`
 	Description    sql.NullString             `json:"description"`
@@ -1341,12 +1784,7 @@ type ListActiveTaskBundlesRow struct {
 }
 
 func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskBundlesParams) ([]ListActiveTaskBundlesRow, error) {
-	rows, err := q.query(ctx, q.listActiveTaskBundlesStmt, listActiveTaskBundles,
-		arg.Locale,
-		arg.WorkspaceID,
-		arg.StartAt,
-		arg.EndAt,
-	)
+	rows, err := q.query(ctx, q.listActiveTaskBundlesStmt, listActiveTaskBundles, arg.Locale, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1358,12 +1796,15 @@ func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskB
 			&i.ID,
 			&i.Key,
 			&i.GroupKey,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.ImageUrl,
+			&i.StartAt,
+			&i.EndAt,
 			&i.Locale,
 			&i.Title,
 			&i.Description,
@@ -1525,9 +1966,87 @@ func (q *Queries) ListCurrentProgressForUserForUpdate(ctx context.Context, arg L
 	return items, nil
 }
 
+const listRecordCatalog = `-- name: ListRecordCatalog :many
+SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.reset_every, t.payload, t.position, t.start_at, t.end_at
+FROM task_definition t FORCE INDEX (task_definition_action_idx)
+WHERE t.workspace_id = ?
+  AND t.action_key = ?
+  AND t.is_active = TRUE
+  AND t.deleted_at IS NULL
+ORDER BY t.branch_sort_key, t.sequence_position, t.position, t.id
+`
+
+type ListRecordCatalogParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ActionKey   string `json:"action_key"`
+}
+
+type ListRecordCatalogRow struct {
+	ID               uint64                   `json:"id"`
+	WorkspaceID      string                   `json:"workspace_id"`
+	Key              string                   `json:"key"`
+	GroupKey         string                   `json:"group_key"`
+	SequenceKey      sql.NullString           `json:"sequence_key"`
+	SequencePosition sql.NullInt32            `json:"sequence_position"`
+	TaskKind         string                   `json:"task_kind"`
+	ActionKey        string                   `json:"action_key"`
+	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
+	TargetCount      uint64                   `json:"target_count"`
+	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery       uint32                   `json:"reset_every"`
+	Payload          json.RawMessage          `json:"payload"`
+	Position         int32                    `json:"position"`
+	StartAt          sql.NullTime             `json:"start_at"`
+	EndAt            sql.NullTime             `json:"end_at"`
+}
+
+func (q *Queries) ListRecordCatalog(ctx context.Context, arg ListRecordCatalogParams) ([]ListRecordCatalogRow, error) {
+	rows, err := q.query(ctx, q.listRecordCatalogStmt, listRecordCatalog, arg.WorkspaceID, arg.ActionKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecordCatalogRow
+	for rows.Next() {
+		var i ListRecordCatalogRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Key,
+			&i.GroupKey,
+			&i.SequenceKey,
+			&i.SequencePosition,
+			&i.TaskKind,
+			&i.ActionKey,
+			&i.ActionKind,
+			&i.ClaimMode,
+			&i.TargetCount,
+			&i.ResetUnit,
+			&i.ResetEvery,
+			&i.Payload,
+			&i.Position,
+			&i.StartAt,
+			&i.EndAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecordTasks = `-- name: ListRecordTasks :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -1539,7 +2058,7 @@ WHERE t.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_sequence_state s
 JOIN task_definition t
@@ -1556,7 +2075,7 @@ WHERE s.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 LEFT JOIN task_sequence_state s
@@ -1605,6 +2124,7 @@ type ListRecordTasksRow struct {
 	GroupKey         string                   `json:"group_key"`
 	SequenceKey      sql.NullString           `json:"sequence_key"`
 	SequencePosition sql.NullInt32            `json:"sequence_position"`
+	TaskKind         string                   `json:"task_kind"`
 	ActionKey        string                   `json:"action_key"`
 	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
@@ -1651,6 +2171,7 @@ func (q *Queries) ListRecordTasks(ctx context.Context, arg ListRecordTasksParams
 			&i.GroupKey,
 			&i.SequenceKey,
 			&i.SequencePosition,
+			&i.TaskKind,
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
@@ -1707,6 +2228,103 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Tas
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRewardsCatalog = `-- name: ListRewardsCatalog :many
+SELECT reward_key, reward_type, quantity, duration_unit
+FROM task_reward
+WHERE workspace_id = ? AND task_id = ?
+ORDER BY position, id
+`
+
+type ListRewardsCatalogParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	TaskID      uint64 `json:"task_id"`
+}
+
+type ListRewardsCatalogRow struct {
+	RewardKey    string                     `json:"reward_key"`
+	RewardType   TaskRewardRewardType       `json:"reward_type"`
+	Quantity     int64                      `json:"quantity"`
+	DurationUnit NullTaskRewardDurationUnit `json:"duration_unit"`
+}
+
+func (q *Queries) ListRewardsCatalog(ctx context.Context, arg ListRewardsCatalogParams) ([]ListRewardsCatalogRow, error) {
+	rows, err := q.query(ctx, q.listRewardsCatalogStmt, listRewardsCatalog, arg.WorkspaceID, arg.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRewardsCatalogRow
+	for rows.Next() {
+		var i ListRewardsCatalogRow
+		if err := rows.Scan(
+			&i.RewardKey,
+			&i.RewardType,
+			&i.Quantity,
+			&i.DurationUnit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSequenceStatesForUser = `-- name: ListSequenceStatesForUser :many
+SELECT sequence_key, current_task_id
+FROM task_sequence_state
+WHERE workspace_id = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND status = 'active'
+`
+
+type ListSequenceStatesForUserParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
+	PlatformUserID string `json:"platform_user_id"`
+}
+
+type ListSequenceStatesForUserRow struct {
+	SequenceKey   string        `json:"sequence_key"`
+	CurrentTaskID sql.NullInt64 `json:"current_task_id"`
+}
+
+func (q *Queries) ListSequenceStatesForUser(ctx context.Context, arg ListSequenceStatesForUserParams) ([]ListSequenceStatesForUserRow, error) {
+	rows, err := q.query(ctx, q.listSequenceStatesForUserStmt, listSequenceStatesForUser,
+		arg.WorkspaceID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSequenceStatesForUserRow
+	for rows.Next() {
+		var i ListSequenceStatesForUserRow
+		if err := rows.Scan(&i.SequenceKey, &i.CurrentTaskID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1893,6 +2511,50 @@ func (q *Queries) UpdateProgress(ctx context.Context, arg UpdateProgressParams) 
 		arg.OperationID,
 		arg.RewardsSnapshot,
 		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const upsertProgress = `-- name: UpsertProgress :execrows
+INSERT INTO task_progress (
+    workspace_id, task_id, app_id, platform_id, platform_user_id,
+    period_start_at, period_end_at, progress, status, ready_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    period_end_at = VALUES(period_end_at),
+    progress = VALUES(progress),
+    status = VALUES(status),
+    ready_at = VALUES(ready_at)
+`
+
+type UpsertProgressParams struct {
+	WorkspaceID    string             `json:"workspace_id"`
+	TaskID         uint64             `json:"task_id"`
+	AppID          int64              `json:"app_id"`
+	PlatformID     int64              `json:"platform_id"`
+	PlatformUserID string             `json:"platform_user_id"`
+	PeriodStartAt  time.Time          `json:"period_start_at"`
+	PeriodEndAt    time.Time          `json:"period_end_at"`
+	Progress       uint64             `json:"progress"`
+	Status         TaskProgressStatus `json:"status"`
+	ReadyAt        sql.NullTime       `json:"ready_at"`
+}
+
+func (q *Queries) UpsertProgress(ctx context.Context, arg UpsertProgressParams) (int64, error) {
+	result, err := q.exec(ctx, q.upsertProgressStmt, upsertProgress,
+		arg.WorkspaceID,
+		arg.TaskID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.PeriodStartAt,
+		arg.PeriodEndAt,
+		arg.Progress,
+		arg.Status,
+		arg.ReadyAt,
 	)
 	if err != nil {
 		return 0, err

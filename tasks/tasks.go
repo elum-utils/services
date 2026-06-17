@@ -13,14 +13,16 @@ import (
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
 	"github.com/elum-utils/services/tasks/service/admin"
+	"github.com/elum-utils/services/tasks/service/integration"
 	"github.com/elum-utils/services/tasks/service/internalapi"
 	"github.com/elum-utils/services/tasks/service/user"
 )
 
 type Tasks struct {
-	Admin    *admin.Admin
-	Internal *internalapi.Internal
-	User     *user.User
+	Admin       *admin.Admin
+	Internal    *internalapi.Internal
+	Integration *integration.Integration
+	User        *user.User
 
 	callbacks  *callbackutil.Store
 	client     *sqlwrap.Client
@@ -126,7 +128,7 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 func (t *Tasks) adopt(running *Tasks) {
 	t.lifecycleMu.Lock()
 	defer t.lifecycleMu.Unlock()
-	t.Admin, t.Internal, t.User = running.Admin, running.Internal, running.User
+	t.Admin, t.Internal, t.Integration, t.User = running.Admin, running.Internal, running.Integration, running.User
 	t.callbacks, t.client, t.ownsClient = running.callbacks, running.client, running.ownsClient
 	t.rootCtx, t.rootCancel = running.rootCtx, running.rootCancel
 }
@@ -135,10 +137,18 @@ func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options 
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repositoryOptions(options)
 	return &Tasks{
-		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithOptions(rootCtx, db, repositoryOptions), User: user.NewWithOptions(rootCtx, db, repositoryOptions),
-		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), client: db, ownsClient: ownsClient,
+		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithOptions(rootCtx, db, repositoryOptions),
+		Integration: integration.NewWithOptions(rootCtx, db, integrationOptions(options, repositoryOptions)),
+		User:        user.NewWithOptions(rootCtx, db, repositoryOptions),
+		callbacks:   callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), client: db, ownsClient: ownsClient,
 		rootCtx: rootCtx, rootCancel: cancel,
 	}
+}
+
+func integrationOptions(options Options, repositoryOptions repository.Options) integration.Options {
+	result := options.Integration
+	result.RepositoryOptions = repositoryOptions
+	return result
 }
 
 func repositoryOptions(options Options) repository.Options {
@@ -164,6 +174,9 @@ func (t *Tasks) Close() error {
 	if t.Internal != nil {
 		err = errors.Join(err, t.Internal.Close())
 	}
+	if t.Integration != nil {
+		err = errors.Join(err, t.Integration.Close())
+	}
 	if t.User != nil {
 		err = errors.Join(err, t.User.Close())
 	}
@@ -184,7 +197,7 @@ func (t *Tasks) IsReady() bool {
 	t.lifecycleMu.Lock()
 	defer t.lifecycleMu.Unlock()
 	return t.rootCtx != nil && t.rootCtx.Err() == nil &&
-		t.Admin != nil && t.Internal != nil && t.User != nil
+		t.Admin != nil && t.Internal != nil && t.Integration != nil && t.User != nil
 }
 
 func (t *Tasks) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

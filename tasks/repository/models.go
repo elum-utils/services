@@ -6,6 +6,11 @@ import (
 )
 
 const (
+	TaskKindInternal           = "internal"
+	TaskKindChannelSubscribe   = "channel_subscribe"
+	TaskKindExternalCheck      = "external_check"
+	TaskKindExternalConfirming = "external_confirming"
+
 	ActionKindAppAction         = "app_action"
 	ActionKindAmountAction      = "amount_action"
 	ActionKindChannelSubscribe  = "channel_subscribe"
@@ -45,37 +50,42 @@ type Identity struct {
 }
 
 type Task struct {
-	ID               uint64
-	WorkspaceID      string
-	Key              string
-	GroupKey         string
-	SequenceKey      *string
-	SequencePosition *uint32
-	ActionKey        string
-	ActionKind       string
-	ClaimMode        string
-	TargetCount      uint64
-	ResetUnit        string
-	ResetEvery       uint32
-	Position         int32
-	Payload          json.RawMessage
-	ImageURL         *string
-	IsVisible        bool
-	IsActive         bool
-	StartAt          *time.Time
-	EndAt            *time.Time
-	DeletedAt        *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	Localization     *Localization
-	Rewards          []Reward
-	Progress         *Progress
+	ID                  uint64
+	WorkspaceID         string
+	Key                 string
+	GroupKey            string
+	SequenceKey         *string
+	SequencePosition    *uint32
+	TaskKind            string
+	ActionKey           string
+	ActionKind          string
+	ClaimMode           string
+	TargetCount         uint64
+	ResetUnit           string
+	ResetEvery          uint32
+	Position            int32
+	Payload             json.RawMessage
+	IntegrationKind     *string
+	IntegrationProvider *string
+	IntegrationPayload  json.RawMessage
+	ImageURL            *string
+	IsVisible           bool
+	IsActive            bool
+	StartAt             *time.Time
+	EndAt               *time.Time
+	DeletedAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	Localization        *Localization
+	Rewards             []Reward
+	Progress            *Progress
 }
 
 type ActiveTask struct {
 	ID          uint64          `json:"id"`
 	Key         string          `json:"key"`
 	GroupKey    string          `json:"group_key"`
+	TaskKind    string          `json:"task_kind"`
 	ActionKey   string          `json:"action_key"`
 	ActionKind  string          `json:"action_kind"`
 	ClaimMode   string          `json:"claim_mode"`
@@ -125,25 +135,29 @@ type Progress struct {
 }
 
 type SaveTaskParams struct {
-	ID               uint64
-	WorkspaceID      string
-	Key              string
-	GroupKey         string
-	SequenceKey      *string
-	SequencePosition *uint32
-	ActionKey        string
-	ActionKind       string
-	ClaimMode        string
-	TargetCount      uint64
-	ResetUnit        string
-	ResetEvery       uint32
-	Position         int32
-	Payload          json.RawMessage
-	ImageURL         *string
-	IsVisible        bool
-	IsActive         bool
-	StartAt          *time.Time
-	EndAt            *time.Time
+	ID                  uint64
+	WorkspaceID         string
+	Key                 string
+	GroupKey            string
+	SequenceKey         *string
+	SequencePosition    *uint32
+	TaskKind            string
+	ActionKey           string
+	ActionKind          string
+	ClaimMode           string
+	TargetCount         uint64
+	ResetUnit           string
+	ResetEvery          uint32
+	Position            int32
+	Payload             json.RawMessage
+	IntegrationKind     *string
+	IntegrationProvider *string
+	IntegrationPayload  json.RawMessage
+	ImageURL            *string
+	IsVisible           bool
+	IsActive            bool
+	StartAt             *time.Time
+	EndAt               *time.Time
 }
 
 type RecordParams struct {
@@ -161,6 +175,20 @@ type RecordResult struct {
 	Consumed  uint64
 	Remaining uint64
 	Tasks     []TaskResult
+}
+
+type MarkIntegrationTaskReadyParams struct {
+	Identity         Identity
+	Task             Task
+	Source           string
+	ExternalEventKey string
+	Payload          json.RawMessage
+	Now              time.Time
+}
+
+type MarkIntegrationTaskReadyResult struct {
+	Status string
+	Task   Task
 }
 
 type TaskResult struct {

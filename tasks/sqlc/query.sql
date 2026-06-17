@@ -15,17 +15,19 @@ ON DUPLICATE KEY UPDATE position = VALUES(position), is_active = VALUES(is_activ
 
 -- name: AdminCreateTask :execlastid
 INSERT INTO task_definition (
-    workspace_id, `key`, group_key, sequence_key, sequence_position,
+    workspace_id, `key`, group_key, sequence_key, sequence_position, task_kind,
     action_key, action_kind, claim_mode, target_count, reset_unit,
-    reset_every, position, payload, image_url, is_visible, is_active,
+    reset_every, position, payload, integration_kind, integration_provider,
+    integration_payload, image_url, is_visible, is_active,
     start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: AdminUpdateTask :execrows
 UPDATE task_definition
-SET group_key = ?, sequence_key = ?, sequence_position = ?, action_key = ?,
+SET group_key = ?, sequence_key = ?, sequence_position = ?, task_kind = ?, action_key = ?,
     action_kind = ?, claim_mode = ?, target_count = ?, reset_unit = ?,
-    reset_every = ?, position = ?, payload = ?, image_url = ?,
+    reset_every = ?, position = ?, payload = ?, integration_kind = ?,
+    integration_provider = ?, integration_payload = ?, image_url = ?,
     is_visible = ?, is_active = ?, start_at = ?, end_at = ?
 WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL;
 
@@ -36,8 +38,9 @@ WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL;
 
 -- name: AdminGetTask :one
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND id = ?
@@ -45,8 +48,9 @@ LIMIT 1;
 
 -- name: AdminListTasks :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND deleted_at IS NULL
@@ -55,8 +59,9 @@ LIMIT ? OFFSET ?;
 
 -- name: AdminListTasksByGroup :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       action_key, action_kind, claim_mode, target_count, reset_unit,
-       reset_every, position, payload, image_url, is_visible, is_active,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
 FROM task_definition
 WHERE workspace_id = ? AND group_key = ? AND deleted_at IS NULL
@@ -85,7 +90,7 @@ WHERE workspace_id = ? AND task_id = ? AND reward_key = ?;
 
 -- name: ListRecordTasks :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -97,7 +102,7 @@ WHERE t.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_sequence_state s
 JOIN task_definition t
@@ -114,7 +119,7 @@ WHERE s.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 LEFT JOIN task_sequence_state s
@@ -134,6 +139,17 @@ WHERE t.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 ORDER BY branch_sort_key, sequence_position, position, id;
 
+-- name: ListRecordCatalog :many
+SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.reset_every, t.payload, t.position, t.start_at, t.end_at
+FROM task_definition t FORCE INDEX (task_definition_action_idx)
+WHERE t.workspace_id = ?
+  AND t.action_key = ?
+  AND t.is_active = TRUE
+  AND t.deleted_at IS NULL
+ORDER BY t.branch_sort_key, t.sequence_position, t.position, t.id;
+
 -- name: GetNextSequenceTaskID :one
 SELECT id
 FROM task_definition
@@ -143,6 +159,25 @@ WHERE workspace_id = ?
   AND deleted_at IS NULL
 ORDER BY sequence_position, id
 LIMIT 1;
+
+-- name: ListSequenceStatesForUser :many
+SELECT sequence_key, current_task_id
+FROM task_sequence_state
+WHERE workspace_id = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND status = 'active';
+
+-- name: GetSequenceStateForUpdate :one
+SELECT current_task_id, status
+FROM task_sequence_state
+WHERE workspace_id = ?
+  AND sequence_key = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+FOR UPDATE;
 
 -- name: UpsertSequenceState :exec
 INSERT INTO task_sequence_state (
@@ -166,6 +201,21 @@ WHERE workspace_id = ?
   AND period_end_at > ?
 FOR UPDATE;
 
+-- name: GetCurrentProgressForUpdate :one
+SELECT id, workspace_id, task_id, app_id, platform_id, platform_user_id,
+       period_start_at, period_end_at, progress, status, ready_at, claimed_at,
+       operation_id, COALESCE(rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot, created_at, updated_at
+FROM task_progress
+WHERE workspace_id = ?
+  AND task_id = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND period_start_at <= ?
+  AND period_end_at > ?
+LIMIT 1
+FOR UPDATE;
+
 -- name: ListCurrentProgressForUser :many
 SELECT id, workspace_id, task_id, app_id, platform_id, platform_user_id,
        period_start_at, period_end_at, progress, status, ready_at, claimed_at,
@@ -184,6 +234,17 @@ INSERT INTO task_progress (
     period_start_at, period_end_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), period_end_at = VALUES(period_end_at);
+
+-- name: UpsertProgress :execrows
+INSERT INTO task_progress (
+    workspace_id, task_id, app_id, platform_id, platform_user_id,
+    period_start_at, period_end_at, progress, status, ready_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    period_end_at = VALUES(period_end_at),
+    progress = VALUES(progress),
+    status = VALUES(status),
+    ready_at = VALUES(ready_at);
 
 -- name: UpdateProgress :execrows
 UPDATE task_progress
@@ -213,10 +274,52 @@ FROM task_reward
 WHERE workspace_id = ? AND task_id = ?
 ORDER BY position, id;
 
+-- name: ListRewardsCatalog :many
+SELECT reward_key, reward_type, quantity, duration_unit
+FROM task_reward
+WHERE workspace_id = ? AND task_id = ?
+ORDER BY position, id;
+
+-- name: GetClaimCatalogByID :many
+SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+FROM task_definition t
+LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
+WHERE t.workspace_id = ? AND t.id = ?
+ORDER BY r.position, r.id;
+
+-- name: GetClaimCatalogByKey :many
+SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+FROM task_definition t
+LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
+WHERE t.workspace_id = ? AND t.`key` = ?
+ORDER BY r.position, r.id;
+
+-- name: GetIntegrationCheckTaskByID :one
+SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.reset_unit, t.reset_every, t.payload, t.integration_kind, t.integration_provider,
+       t.integration_payload, t.image_url, t.start_at, t.end_at
+FROM task_definition t
+WHERE t.workspace_id = ? AND t.id = ? AND t.is_active = TRUE AND t.deleted_at IS NULL;
+
+-- name: GetIntegrationCheckTaskByKey :one
+SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.reset_unit, t.reset_every, t.payload, t.integration_kind, t.integration_provider,
+       t.integration_payload, t.image_url, t.start_at, t.end_at
+FROM task_definition t
+WHERE t.workspace_id = ? AND t.`key` = ? AND t.is_active = TRUE AND t.deleted_at IS NULL;
+
 -- name: GetClaimBundleByIDForUpdate :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
@@ -233,8 +336,8 @@ FOR UPDATE;
 
 -- name: GetClaimBundleByKeyForUpdate :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
@@ -251,8 +354,8 @@ FOR UPDATE;
 
 -- name: ListActiveTaskBundles :many
 SELECT t.id, t.`key`, t.group_key,
-       t.action_key, t.action_kind, t.claim_mode, t.target_count,
-       t.payload, t.image_url,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.payload, t.image_url, t.start_at, t.end_at,
        l.locale, l.title, l.description,
        r.id AS reward_id, r.reward_key, r.reward_type,
        r.quantity AS reward_quantity, r.duration_unit
@@ -261,8 +364,6 @@ LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id =
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.is_visible = TRUE AND t.is_active = TRUE
   AND t.deleted_at IS NULL
-  AND (t.start_at IS NULL OR t.start_at <= ?)
-  AND (t.end_at IS NULL OR t.end_at > ?)
 ORDER BY t.position, t.id, r.position, r.id;
 
 -- name: AdminGetTaskStats :one

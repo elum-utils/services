@@ -42,19 +42,30 @@ func (r *Repository) UpsertSequence(ctx context.Context, workspaceID, key string
 }
 
 func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint64, error) {
+	taskKind := params.TaskKind
+	if taskKind == "" {
+		taskKind = TaskKindInternal
+	}
 	payload := params.Payload
 	if len(payload) == 0 {
 		payload = []byte("{}")
 	}
+	integrationPayload := params.IntegrationPayload
+	if len(integrationPayload) == 0 {
+		integrationPayload = []byte("null")
+	}
 	if params.ID == 0 {
-		id, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
+		id, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 			return r.q.AdminCreateTask(ctx, tasksqlc.AdminCreateTaskParams{
 				WorkspaceID: params.WorkspaceID, Key: params.Key, GroupKey: params.GroupKey,
 				SequenceKey: nullString(params.SequenceKey), SequencePosition: nullInt32FromUint32(params.SequencePosition),
+				TaskKind:  taskKind,
 				ActionKey: params.ActionKey, ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
 				ClaimMode: tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
 				ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-				Position: params.Position, Payload: payload, ImageUrl: nullString(params.ImageURL),
+				Position: params.Position, Payload: payload, IntegrationKind: nullString(params.IntegrationKind),
+				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
+				ImageUrl:  nullString(params.ImageURL),
 				IsVisible: params.IsVisible, IsActive: params.IsActive,
 				StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
 			})
@@ -64,14 +75,16 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 		}
 		return uint64(id), r.invalidateTaskCache(ctx, params.WorkspaceID)
 	}
-	_, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
+	_, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.AdminUpdateTask(ctx, tasksqlc.AdminUpdateTaskParams{
 			GroupKey: params.GroupKey, SequenceKey: nullString(params.SequenceKey),
-			SequencePosition: nullInt32FromUint32(params.SequencePosition), ActionKey: params.ActionKey,
+			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: taskKind, ActionKey: params.ActionKey,
 			ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
 			ClaimMode:  tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
 			ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-			Position: params.Position, Payload: payload, ImageUrl: nullString(params.ImageURL),
+			Position: params.Position, Payload: payload, IntegrationKind: nullString(params.IntegrationKind),
+			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
+			ImageUrl:  nullString(params.ImageURL),
 			IsVisible: params.IsVisible, IsActive: params.IsActive,
 			StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
 			WorkspaceID: params.WorkspaceID, ID: params.ID,
@@ -84,7 +97,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 }
 
 func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint64) (int64, error) {
-	rows, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
+	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.AdminDeleteTask(ctx, tasksqlc.AdminDeleteTaskParams{WorkspaceID: workspaceID, ID: id})
 	})
 	if err != nil {
@@ -188,7 +201,7 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskI
 }
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskID uint64, key string) (int64, error) {
-	rows, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
+	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.AdminDeleteReward(ctx, tasksqlc.AdminDeleteRewardParams{
 			WorkspaceID: workspaceID, TaskID: taskID, RewardKey: key,
 		})
