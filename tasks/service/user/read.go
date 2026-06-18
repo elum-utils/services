@@ -20,6 +20,22 @@ func (u *User) ListActive(ctx context.Context, identity Identity, locale string,
 func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+	if issueID, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
+		result, err := u.repository.ClaimPartnerIssue(mergedCtx, params.Identity, issueID, params.OperationID, params.Now)
+		if err != nil {
+			return ClaimResult{}, err
+		}
+		output := ClaimResult{Status: result.Status}
+		if result.Issue.ID != 0 {
+			now := params.Now
+			if now.IsZero() {
+				now = time.Now().UTC()
+			}
+			task := partnerIssueTask(result.Issue, result.Rewards, now)
+			output.Task = &task
+		}
+		return output, nil
+	}
 	result, err := u.repository.Claim(mergedCtx, repository.ClaimParams(params))
 	if err != nil {
 		return ClaimResult{}, err

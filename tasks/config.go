@@ -5,6 +5,7 @@ import (
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/service/integration"
+	"github.com/elum-utils/services/tasks/service/user"
 )
 
 const defaultCacheDelay = 10 * time.Minute
@@ -28,17 +29,18 @@ type Codec interface {
 }
 
 type Options struct {
-	MaxConnections int
-	QueryTimeout   time.Duration
-	CacheL1Delay   time.Duration
-	CacheL2Delay   time.Duration
-	Cache          Storage
-	CacheEnabled   bool
-	CacheSize      int
-	CacheTTLCheck  time.Duration
-	Codec          Codec
-	Mutex          Mutex
-	Integration    integration.Options
+	MaxConnections   int
+	QueryTimeout     time.Duration
+	CacheL1Delay     time.Duration
+	CacheL2Delay     time.Duration
+	Cache            Storage
+	CacheEnabled     bool
+	CacheSize        int
+	CacheTTLCheck    time.Duration
+	Codec            Codec
+	Mutex            Mutex
+	Integration      integration.Options
+	PartnerProviders map[string]user.PartnerProvider
 }
 
 type DatabaseParams struct {

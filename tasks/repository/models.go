@@ -40,6 +40,21 @@ const (
 	ClaimStatusNotFound    = "not_found"
 
 	CallbackEventClaimed = "task.claimed"
+
+	TaskKindPartner = "partner"
+
+	PartnerIssueStatusIssued    = "issued"
+	PartnerIssueStatusCompleted = "completed"
+	PartnerIssueStatusClaimed   = "claimed"
+
+	PartnerStatsEventIssued    = "issued"
+	PartnerStatsEventCompleted = "completed"
+	PartnerStatsEventClaimed   = "claimed"
+	PartnerStatsEventFailed    = "failed"
+	PartnerStatsEventFake      = "fake"
+	PartnerStatsEventExpired   = "expired"
+
+	PartnerIssueKeyPrefix = "partner_issue:"
 )
 
 type Identity struct {
@@ -216,4 +231,110 @@ type ClaimParams struct {
 type ClaimResult struct {
 	Status string
 	Task   *Task
+}
+
+type PartnerConfig struct {
+	WorkspaceID string
+	Provider    string
+	GroupKey    string
+	Platform    string
+	IsEnabled   bool
+	Secret      *string
+	Target      json.RawMessage
+	Settings    json.RawMessage
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type SavePartnerConfigParams struct {
+	WorkspaceID string
+	Provider    string
+	GroupKey    string
+	Platform    string
+	IsEnabled   bool
+	Secret      *string
+	Target      json.RawMessage
+	Settings    json.RawMessage
+}
+
+type PartnerRewardRule struct {
+	WorkspaceID  string
+	Provider     string
+	GroupKey     string
+	ExternalType string
+	Reward       Reward
+	Position     int32
+	IsEnabled    bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type SavePartnerRewardRuleParams struct {
+	WorkspaceID  string
+	Provider     string
+	GroupKey     string
+	ExternalType string
+	Reward       Reward
+	Position     int32
+	IsEnabled    bool
+}
+
+type PartnerIssue struct {
+	ID             uint64
+	WorkspaceID    string
+	Provider       string
+	GroupKey       string
+	Platform       string
+	ExternalID     string
+	ExternalType   string
+	IssueKey       string
+	AppID          int64
+	PlatformID     int64
+	PlatformUserID string
+	PublicPayload  json.RawMessage
+	PrivatePayload json.RawMessage
+	Status         string
+	IssuedAt       time.Time
+	CompletedAt    *time.Time
+	ClaimedAt      *time.Time
+	ExpiresAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type CreatePartnerIssueParams struct {
+	Identity       Identity
+	Provider       string
+	GroupKey       string
+	Platform       string
+	ExternalID     string
+	ExternalType   string
+	IssueKey       string
+	PublicPayload  json.RawMessage
+	PrivatePayload json.RawMessage
+	ExpiresAt      *time.Time
+	Now            time.Time
+}
+
+type PartnerClaimResult struct {
+	Status      string
+	Issue       PartnerIssue
+	Rewards     []Reward
+	OperationID string
+}
+
+type PartnerStatsDaily struct {
+	Date                 time.Time
+	Provider             string
+	GroupKey             string
+	ExternalType         string
+	IssuedCount          uint64
+	CompletedCount       uint64
+	ClaimedCount         uint64
+	FailedCount          uint64
+	FakeCount            uint64
+	ExpiredCount         uint64
+	UniqueIssuedUsers    uint64
+	UniqueCompletedUsers uint64
+	UniqueClaimers       uint64
 }

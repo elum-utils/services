@@ -268,3 +268,152 @@ CREATE TABLE IF NOT EXISTS task_stats_daily_overview (
     PRIMARY KEY (workspace_id, stats_date),
     KEY task_stats_daily_overview_date_idx (stats_date, workspace_id)
 );
+
+CREATE TABLE IF NOT EXISTS task_partner_config (
+    workspace_id VARCHAR(64) NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    platform VARCHAR(64) NOT NULL,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    secret TEXT NULL,
+    target JSON NULL,
+    settings JSON NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, provider, group_key, platform),
+    KEY task_partner_config_list_idx (workspace_id, is_enabled, provider, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_reward_rule (
+    workspace_id VARCHAR(64) NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    external_type VARCHAR(64) NOT NULL DEFAULT '*',
+    reward_key VARCHAR(150) NOT NULL,
+    reward_type ENUM('quantity', 'duration') NOT NULL DEFAULT 'quantity',
+    quantity BIGINT NOT NULL,
+    duration_unit ENUM('second', 'minute', 'hour', 'day', 'week', 'month', 'year') NULL,
+    position INT NOT NULL DEFAULT 0,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, provider, group_key, external_type, reward_key),
+    KEY task_partner_reward_rule_list_idx (workspace_id, provider, group_key, external_type, is_enabled, position),
+    CONSTRAINT task_partner_reward_rule_positive_quantity_chk CHECK (quantity > 0),
+    CONSTRAINT task_partner_reward_rule_type_chk CHECK (
+        (reward_type = 'quantity' AND duration_unit IS NULL)
+        OR (reward_type = 'duration' AND duration_unit IS NOT NULL)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_issue (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    workspace_id VARCHAR(64) NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    platform VARCHAR(64) NOT NULL,
+    external_id VARCHAR(255) NOT NULL,
+    external_type VARCHAR(64) NOT NULL,
+    issue_key VARCHAR(255) NOT NULL,
+    app_id BIGINT NOT NULL,
+    platform_id BIGINT NOT NULL,
+    platform_user_id VARCHAR(255) NOT NULL,
+    public_payload JSON NULL,
+    private_payload JSON NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'issued',
+    issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME NULL,
+    claimed_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY task_partner_issue_key_uq (workspace_id, issue_key),
+    UNIQUE KEY task_partner_issue_workspace_id_uq (workspace_id, id),
+    KEY task_partner_issue_user_idx (workspace_id, app_id, platform_id, platform_user_id, provider, group_key, status),
+    KEY task_partner_issue_external_idx (workspace_id, provider, group_key, external_type, external_id),
+    KEY task_partner_issue_expire_idx (workspace_id, expires_at, status)
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_reward_grant (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    workspace_id VARCHAR(64) NOT NULL,
+    issue_id BIGINT UNSIGNED NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    external_type VARCHAR(64) NOT NULL,
+    app_id BIGINT NOT NULL,
+    platform_id BIGINT NOT NULL,
+    platform_user_id VARCHAR(255) NOT NULL,
+    operation_id VARCHAR(128) NOT NULL,
+    reward_snapshot JSON NOT NULL,
+    claimed_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY task_partner_reward_grant_issue_uq (workspace_id, issue_id),
+    UNIQUE KEY task_partner_reward_grant_operation_uq (workspace_id, operation_id),
+    KEY task_partner_reward_grant_user_idx (workspace_id, app_id, platform_id, platform_user_id, claimed_at),
+    CONSTRAINT task_partner_reward_grant_issue_fk
+        FOREIGN KEY (workspace_id, issue_id)
+        REFERENCES task_partner_issue (workspace_id, id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_stats_event (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    workspace_id VARCHAR(64) NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    external_type VARCHAR(64) NOT NULL,
+    issue_id BIGINT UNSIGNED NULL,
+    external_id VARCHAR(255) NULL,
+    app_id BIGINT NOT NULL,
+    platform_id BIGINT NOT NULL,
+    platform_user_id VARCHAR(255) NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    event_key VARCHAR(255) NOT NULL,
+    status VARCHAR(64) NULL,
+    payload JSON NULL,
+    occurred_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY task_partner_stats_event_key_uq (workspace_id, event_key),
+    KEY task_partner_stats_event_daily_idx (workspace_id, occurred_at, provider, group_key, external_type, event_type),
+    KEY task_partner_stats_event_issue_idx (workspace_id, issue_id, event_type)
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_stats_daily (
+    workspace_id VARCHAR(64) NOT NULL,
+    stats_date DATE NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    external_type VARCHAR(64) NOT NULL,
+    issued_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    completed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    claimed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    failed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    fake_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    expired_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    unique_issued_users BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    unique_completed_users BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    unique_claimers BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, stats_date, provider, group_key, external_type),
+    KEY task_partner_stats_daily_date_idx (workspace_id, stats_date, provider, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_stats_unique_user (
+    workspace_id VARCHAR(64) NOT NULL,
+    stats_date DATE NOT NULL,
+    provider VARCHAR(64) NOT NULL,
+    group_key VARCHAR(100) NOT NULL,
+    external_type VARCHAR(64) NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    app_id BIGINT NOT NULL,
+    platform_id BIGINT NOT NULL,
+    platform_user_id VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (
+        workspace_id, stats_date, provider, group_key, external_type,
+        event_type, app_id, platform_id, platform_user_id
+    )
+);

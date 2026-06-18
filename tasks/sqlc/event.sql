@@ -160,3 +160,88 @@ ON DUPLICATE KEY UPDATE
     unique_participants = VALUES(unique_participants),
     unique_claimers = VALUES(unique_claimers),
     updated_at = NOW();
+
+DROP EVENT IF EXISTS task_partner_refresh_daily_stats;
+CREATE EVENT task_partner_refresh_daily_stats
+ON SCHEDULE
+    EVERY '1' DAY
+    STARTS '2025-11-08 00:07:00'
+DO
+INSERT INTO task_partner_stats_daily (
+    workspace_id,
+    stats_date,
+    provider,
+    group_key,
+    external_type,
+    issued_count,
+    completed_count,
+    claimed_count,
+    failed_count,
+    fake_count,
+    expired_count,
+    unique_issued_users,
+    unique_completed_users,
+    unique_claimers
+)
+SELECT
+    event_counts.workspace_id,
+    event_counts.stats_date,
+    event_counts.provider,
+    event_counts.group_key,
+    event_counts.external_type,
+    event_counts.issued_count,
+    event_counts.completed_count,
+    event_counts.claimed_count,
+    event_counts.failed_count,
+    event_counts.fake_count,
+    event_counts.expired_count,
+    COALESCE(unique_counts.unique_issued_users, 0),
+    COALESCE(unique_counts.unique_completed_users, 0),
+    COALESCE(unique_counts.unique_claimers, 0)
+FROM (
+    SELECT
+        workspace_id,
+        DATE(occurred_at) AS stats_date,
+        provider,
+        group_key,
+        external_type,
+        SUM(event_type = 'issued') AS issued_count,
+        SUM(event_type = 'completed') AS completed_count,
+        SUM(event_type = 'claimed') AS claimed_count,
+        SUM(event_type = 'failed') AS failed_count,
+        SUM(event_type = 'fake' OR status IN ('fake', 'fraud_suspected')) AS fake_count,
+        SUM(event_type = 'expired' OR status IN ('expired', 'offer_expired')) AS expired_count
+    FROM task_partner_stats_event
+    WHERE occurred_at >= CURRENT_DATE - INTERVAL 2 DAY
+    GROUP BY workspace_id, DATE(occurred_at), provider, group_key, external_type
+) event_counts
+LEFT JOIN (
+    SELECT
+        workspace_id,
+        stats_date,
+        provider,
+        group_key,
+        external_type,
+        SUM(event_type = 'issued') AS unique_issued_users,
+        SUM(event_type = 'completed') AS unique_completed_users,
+        SUM(event_type = 'claimed') AS unique_claimers
+    FROM task_partner_stats_unique_user
+    WHERE stats_date >= CURRENT_DATE - INTERVAL 2 DAY
+    GROUP BY workspace_id, stats_date, provider, group_key, external_type
+) unique_counts
+    ON unique_counts.workspace_id = event_counts.workspace_id
+   AND unique_counts.stats_date = event_counts.stats_date
+   AND unique_counts.provider = event_counts.provider
+   AND unique_counts.group_key = event_counts.group_key
+   AND unique_counts.external_type = event_counts.external_type
+ON DUPLICATE KEY UPDATE
+    issued_count = VALUES(issued_count),
+    completed_count = VALUES(completed_count),
+    claimed_count = VALUES(claimed_count),
+    failed_count = VALUES(failed_count),
+    fake_count = VALUES(fake_count),
+    expired_count = VALUES(expired_count),
+    unique_issued_users = VALUES(unique_issued_users),
+    unique_completed_users = VALUES(unique_completed_users),
+    unique_claimers = VALUES(unique_claimers),
+    updated_at = NOW();

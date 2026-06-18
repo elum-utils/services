@@ -139,8 +139,11 @@ func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options 
 	return &Tasks{
 		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithOptions(rootCtx, db, repositoryOptions),
 		Integration: integration.NewWithOptions(rootCtx, db, integrationOptions(options, repositoryOptions)),
-		User:        user.NewWithOptions(rootCtx, db, repositoryOptions),
-		callbacks:   callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), client: db, ownsClient: ownsClient,
+		User: user.NewWithServiceOptions(rootCtx, db, user.Options{
+			RepositoryOptions: repositoryOptions,
+			PartnerProviders:  options.PartnerProviders,
+		}),
+		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), client: db, ownsClient: ownsClient,
 		rootCtx: rootCtx, rootCancel: cancel,
 	}
 }

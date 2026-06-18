@@ -127,3 +127,42 @@ type DailyOverviewModel struct {
 	UniqueParticipants uint64    `json:"unique_participants"`
 	UniqueClaimers     uint64    `json:"unique_claimers"`
 }
+
+type PartnerConfigModel struct {
+	WorkspaceID string          `json:"workspace_id"`
+	Provider    string          `json:"provider"`
+	GroupKey    string          `json:"group_key"`
+	Platform    string          `json:"platform"`
+	IsEnabled   bool            `json:"is_enabled"`
+	Secret      *string         `json:"secret,omitempty"`
+	Target      json.RawMessage `json:"target,omitempty"`
+	Settings    json.RawMessage `json:"settings,omitempty"`
+	CreatedAt   time.Time       `json:"created_at,omitempty"`
+	UpdatedAt   time.Time       `json:"updated_at,omitempty"`
+}
+
+type SavePartnerRewardRuleParams struct {
+	WorkspaceID  string      `json:"workspace_id"`
+	Provider     string      `json:"provider"`
+	GroupKey     string      `json:"group_key"`
+	ExternalType string      `json:"external_type"`
+	Reward       RewardModel `json:"reward"`
+	Position     int32       `json:"position"`
+	IsEnabled    bool        `json:"is_enabled"`
+}
+
+type PartnerDailyStatsModel struct {
+	Date                 time.Time `json:"date"`
+	Provider             string    `json:"provider"`
+	GroupKey             string    `json:"group_key"`
+	ExternalType         string    `json:"external_type"`
+	IssuedCount          uint64    `json:"issued_count"`
+	CompletedCount       uint64    `json:"completed_count"`
+	ClaimedCount         uint64    `json:"claimed_count"`
+	FailedCount          uint64    `json:"failed_count"`
+	FakeCount            uint64    `json:"fake_count"`
+	ExpiredCount         uint64    `json:"expired_count"`
+	UniqueIssuedUsers    uint64    `json:"unique_issued_users"`
+	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
+	UniqueClaimers       uint64    `json:"unique_claimers"`
+}

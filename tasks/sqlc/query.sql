@@ -724,3 +724,154 @@ ON DUPLICATE KEY UPDATE
     unique_participants = VALUES(unique_participants),
     unique_claimers = VALUES(unique_claimers),
     updated_at = NOW();
+
+-- name: AdminUpsertPartnerConfig :exec
+INSERT INTO task_partner_config (
+    workspace_id, provider, group_key, platform, is_enabled, secret, target, settings
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    is_enabled = VALUES(is_enabled),
+    secret = VALUES(secret),
+    target = VALUES(target),
+    settings = VALUES(settings);
+
+-- name: AdminGetPartnerConfig :one
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ? AND provider = ? AND group_key = ? AND platform = ?
+LIMIT 1;
+
+-- name: AdminListPartnerConfigs :many
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ?
+ORDER BY provider, group_key, platform;
+
+-- name: AdminUpsertPartnerRewardRule :exec
+INSERT INTO task_partner_reward_rule (
+    workspace_id, provider, group_key, external_type, reward_key,
+    reward_type, quantity, duration_unit, position, is_enabled
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    reward_type = VALUES(reward_type),
+    quantity = VALUES(quantity),
+    duration_unit = VALUES(duration_unit),
+    position = VALUES(position),
+    is_enabled = VALUES(is_enabled);
+
+-- name: AdminDeletePartnerRewardRule :execrows
+DELETE FROM task_partner_reward_rule
+WHERE workspace_id = ? AND provider = ? AND group_key = ? AND external_type = ? AND reward_key = ?;
+
+-- name: ListPartnerRewardRules :many
+SELECT workspace_id, provider, group_key, external_type, reward_key,
+       reward_type, quantity, duration_unit, position, is_enabled, created_at, updated_at
+FROM task_partner_reward_rule
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND external_type IN (?, '*')
+  AND is_enabled = TRUE
+ORDER BY CASE WHEN external_type = ? THEN 0 ELSE 1 END, position, reward_key;
+
+-- name: CreatePartnerIssue :execlastid
+INSERT INTO task_partner_issue (
+    workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?)
+ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    public_payload = VALUES(public_payload),
+    private_payload = VALUES(private_payload),
+    expires_at = VALUES(expires_at),
+    updated_at = CURRENT_TIMESTAMP;
+
+-- name: GetPartnerIssueByID :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND id = ?
+LIMIT 1;
+
+-- name: GetPartnerIssueByIDForUpdate :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND id = ?
+LIMIT 1
+FOR UPDATE;
+
+-- name: ListPartnerIssuesForUser :many
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND status IN ('issued', 'completed')
+  AND (expires_at IS NULL OR expires_at > ?)
+ORDER BY issued_at DESC, id DESC;
+
+-- name: CompletePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'completed', completed_at = ?, updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'issued';
+
+-- name: ClaimPartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'claimed', claimed_at = ?, updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'completed';
+
+-- name: InsertPartnerRewardGrant :execrows
+INSERT IGNORE INTO task_partner_reward_grant (
+    workspace_id, issue_id, provider, group_key, external_type,
+    app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: InsertPartnerStatsEvent :execrows
+INSERT IGNORE INTO task_partner_stats_event (
+    workspace_id, provider, group_key, external_type, issue_id, external_id,
+    app_id, platform_id, platform_user_id, event_type, event_key, status, payload, occurred_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: InsertPartnerStatsUniqueUser :execrows
+INSERT IGNORE INTO task_partner_stats_unique_user (
+    workspace_id, stats_date, provider, group_key, external_type, event_type,
+    app_id, platform_id, platform_user_id
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?);
+
+-- name: IncrementPartnerStatsDaily :exec
+INSERT INTO task_partner_stats_daily (
+    workspace_id, stats_date, provider, group_key, external_type,
+    issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+    unique_issued_users, unique_completed_users, unique_claimers
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    issued_count = issued_count + VALUES(issued_count),
+    completed_count = completed_count + VALUES(completed_count),
+    claimed_count = claimed_count + VALUES(claimed_count),
+    failed_count = failed_count + VALUES(failed_count),
+    fake_count = fake_count + VALUES(fake_count),
+    expired_count = expired_count + VALUES(expired_count),
+    unique_issued_users = unique_issued_users + VALUES(unique_issued_users),
+    unique_completed_users = unique_completed_users + VALUES(unique_completed_users),
+    unique_claimers = unique_claimers + VALUES(unique_claimers);
+
+-- name: AdminListPartnerDailyStats :many
+SELECT workspace_id, stats_date, provider, group_key, external_type,
+       issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+       unique_issued_users, unique_completed_users, unique_claimers, updated_at
+FROM task_partner_stats_daily
+WHERE workspace_id = ?
+  AND stats_date >= ?
+  AND stats_date < ?
+  AND (? = '' OR provider = ?)
+  AND (? = '' OR group_key = ?)
+ORDER BY stats_date, provider, group_key, external_type;

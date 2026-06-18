@@ -11,6 +11,12 @@ import (
 type User struct {
 	rootCtx    context.Context
 	repository *repository.Repository
+	providers  map[string]PartnerProvider
+}
+
+type Options struct {
+	RepositoryOptions repository.Options
+	PartnerProviders  map[string]PartnerProvider
 }
 
 func New(ctx context.Context, db *sqlwrap.Client) *User {
@@ -19,6 +25,14 @@ func New(ctx context.Context, db *sqlwrap.Client) *User {
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options repository.Options) *User {
 	return &User{rootCtx: contextutil.Normalize(ctx), repository: repository.NewWithOptions(db, options)}
+}
+
+func NewWithServiceOptions(ctx context.Context, db *sqlwrap.Client, options Options) *User {
+	return &User{
+		rootCtx:    contextutil.Normalize(ctx),
+		repository: repository.NewWithOptions(db, options.RepositoryOptions),
+		providers:  defaultPartnerProviders(options.PartnerProviders),
+	}
 }
 
 func (u *User) Close() error {
@@ -33,4 +47,28 @@ func (u *User) withContext(ctx context.Context) (context.Context, context.Cancel
 		return contextutil.Merge(context.Background(), ctx)
 	}
 	return contextutil.Merge(u.rootCtx, ctx)
+}
+
+func clonePartnerProviders(values map[string]PartnerProvider) map[string]PartnerProvider {
+	result := make(map[string]PartnerProvider, len(values))
+	for key, value := range values {
+		result[key] = value
+	}
+	return result
+}
+
+func defaultPartnerProviders(overrides map[string]PartnerProvider) map[string]PartnerProvider {
+	result := map[string]PartnerProvider{
+		"flyer":   FlyerProvider{},
+		"subgram": SubGramProvider{},
+		"tgrass":  TgrassProvider{},
+	}
+	for key, value := range overrides {
+		if value == nil {
+			delete(result, key)
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }

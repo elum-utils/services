@@ -80,6 +80,33 @@ func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams
 	return result.LastInsertId()
 }
 
+const adminDeletePartnerRewardRule = `-- name: AdminDeletePartnerRewardRule :execrows
+DELETE FROM task_partner_reward_rule
+WHERE workspace_id = ? AND provider = ? AND group_key = ? AND external_type = ? AND reward_key = ?
+`
+
+type AdminDeletePartnerRewardRuleParams struct {
+	WorkspaceID  string `json:"workspace_id"`
+	Provider     string `json:"provider"`
+	GroupKey     string `json:"group_key"`
+	ExternalType string `json:"external_type"`
+	RewardKey    string `json:"reward_key"`
+}
+
+func (q *Queries) AdminDeletePartnerRewardRule(ctx context.Context, arg AdminDeletePartnerRewardRuleParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminDeletePartnerRewardRuleStmt, adminDeletePartnerRewardRule,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.RewardKey,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const adminDeleteReward = `-- name: AdminDeleteReward :execrows
 DELETE FROM task_reward
 WHERE workspace_id = ? AND task_id = ? AND reward_key = ?
@@ -116,6 +143,43 @@ func (q *Queries) AdminDeleteTask(ctx context.Context, arg AdminDeleteTaskParams
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const adminGetPartnerConfig = `-- name: AdminGetPartnerConfig :one
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ? AND provider = ? AND group_key = ? AND platform = ?
+LIMIT 1
+`
+
+type AdminGetPartnerConfigParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+	GroupKey    string `json:"group_key"`
+	Platform    string `json:"platform"`
+}
+
+func (q *Queries) AdminGetPartnerConfig(ctx context.Context, arg AdminGetPartnerConfigParams) (TaskPartnerConfig, error) {
+	row := q.queryRow(ctx, q.adminGetPartnerConfigStmt, adminGetPartnerConfig,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+	)
+	var i TaskPartnerConfig
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.IsEnabled,
+		&i.Secret,
+		&i.Target,
+		&i.Settings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const adminGetSingleTaskStats = `-- name: AdminGetSingleTaskStats :one
@@ -378,6 +442,117 @@ func (q *Queries) AdminGetTaskStats(ctx context.Context, arg AdminGetTaskStatsPa
 		&i.UniqueClaimers,
 	)
 	return i, err
+}
+
+const adminListPartnerConfigs = `-- name: AdminListPartnerConfigs :many
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ?
+ORDER BY provider, group_key, platform
+`
+
+func (q *Queries) AdminListPartnerConfigs(ctx context.Context, workspaceID string) ([]TaskPartnerConfig, error) {
+	rows, err := q.query(ctx, q.adminListPartnerConfigsStmt, adminListPartnerConfigs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerConfig
+	for rows.Next() {
+		var i TaskPartnerConfig
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.Platform,
+			&i.IsEnabled,
+			&i.Secret,
+			&i.Target,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListPartnerDailyStats = `-- name: AdminListPartnerDailyStats :many
+SELECT workspace_id, stats_date, provider, group_key, external_type,
+       issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+       unique_issued_users, unique_completed_users, unique_claimers, updated_at
+FROM task_partner_stats_daily
+WHERE workspace_id = ?
+  AND stats_date >= ?
+  AND stats_date < ?
+  AND (? = '' OR provider = ?)
+  AND (? = '' OR group_key = ?)
+ORDER BY stats_date, provider, group_key, external_type
+`
+
+type AdminListPartnerDailyStatsParams struct {
+	WorkspaceID string      `json:"workspace_id"`
+	StatsDate   time.Time   `json:"stats_date"`
+	StatsDate_2 time.Time   `json:"stats_date_2"`
+	Column4     interface{} `json:"column_4"`
+	Provider    string      `json:"provider"`
+	Column6     interface{} `json:"column_6"`
+	GroupKey    string      `json:"group_key"`
+}
+
+func (q *Queries) AdminListPartnerDailyStats(ctx context.Context, arg AdminListPartnerDailyStatsParams) ([]TaskPartnerStatsDaily, error) {
+	rows, err := q.query(ctx, q.adminListPartnerDailyStatsStmt, adminListPartnerDailyStats,
+		arg.WorkspaceID,
+		arg.StatsDate,
+		arg.StatsDate_2,
+		arg.Column4,
+		arg.Provider,
+		arg.Column6,
+		arg.GroupKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerStatsDaily
+	for rows.Next() {
+		var i TaskPartnerStatsDaily
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.StatsDate,
+			&i.Provider,
+			&i.GroupKey,
+			&i.ExternalType,
+			&i.IssuedCount,
+			&i.CompletedCount,
+			&i.ClaimedCount,
+			&i.FailedCount,
+			&i.FakeCount,
+			&i.ExpiredCount,
+			&i.UniqueIssuedUsers,
+			&i.UniqueCompletedUsers,
+			&i.UniqueClaimers,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListTaskDailyOverview = `-- name: AdminListTaskDailyOverview :many
@@ -888,6 +1063,84 @@ func (q *Queries) AdminUpsertGroupLocalization(ctx context.Context, arg AdminUps
 	return err
 }
 
+const adminUpsertPartnerConfig = `-- name: AdminUpsertPartnerConfig :exec
+INSERT INTO task_partner_config (
+    workspace_id, provider, group_key, platform, is_enabled, secret, target, settings
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    is_enabled = VALUES(is_enabled),
+    secret = VALUES(secret),
+    target = VALUES(target),
+    settings = VALUES(settings)
+`
+
+type AdminUpsertPartnerConfigParams struct {
+	WorkspaceID string          `json:"workspace_id"`
+	Provider    string          `json:"provider"`
+	GroupKey    string          `json:"group_key"`
+	Platform    string          `json:"platform"`
+	IsEnabled   bool            `json:"is_enabled"`
+	Secret      sql.NullString  `json:"secret"`
+	Target      json.RawMessage `json:"target"`
+	Settings    json.RawMessage `json:"settings"`
+}
+
+func (q *Queries) AdminUpsertPartnerConfig(ctx context.Context, arg AdminUpsertPartnerConfigParams) error {
+	_, err := q.exec(ctx, q.adminUpsertPartnerConfigStmt, adminUpsertPartnerConfig,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.IsEnabled,
+		arg.Secret,
+		arg.Target,
+		arg.Settings,
+	)
+	return err
+}
+
+const adminUpsertPartnerRewardRule = `-- name: AdminUpsertPartnerRewardRule :exec
+INSERT INTO task_partner_reward_rule (
+    workspace_id, provider, group_key, external_type, reward_key,
+    reward_type, quantity, duration_unit, position, is_enabled
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    reward_type = VALUES(reward_type),
+    quantity = VALUES(quantity),
+    duration_unit = VALUES(duration_unit),
+    position = VALUES(position),
+    is_enabled = VALUES(is_enabled)
+`
+
+type AdminUpsertPartnerRewardRuleParams struct {
+	WorkspaceID  string                                `json:"workspace_id"`
+	Provider     string                                `json:"provider"`
+	GroupKey     string                                `json:"group_key"`
+	ExternalType string                                `json:"external_type"`
+	RewardKey    string                                `json:"reward_key"`
+	RewardType   TaskPartnerRewardRuleRewardType       `json:"reward_type"`
+	Quantity     int64                                 `json:"quantity"`
+	DurationUnit NullTaskPartnerRewardRuleDurationUnit `json:"duration_unit"`
+	Position     int32                                 `json:"position"`
+	IsEnabled    bool                                  `json:"is_enabled"`
+}
+
+func (q *Queries) AdminUpsertPartnerRewardRule(ctx context.Context, arg AdminUpsertPartnerRewardRuleParams) error {
+	_, err := q.exec(ctx, q.adminUpsertPartnerRewardRuleStmt, adminUpsertPartnerRewardRule,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.RewardKey,
+		arg.RewardType,
+		arg.Quantity,
+		arg.DurationUnit,
+		arg.Position,
+		arg.IsEnabled,
+	)
+	return err
+}
+
 const adminUpsertReward = `-- name: AdminUpsertReward :exec
 INSERT INTO task_reward (
     workspace_id, task_id, reward_key, reward_type, quantity, duration_unit, position
@@ -971,6 +1224,46 @@ func (q *Queries) AdminUpsertTaskLocalization(ctx context.Context, arg AdminUpse
 	return err
 }
 
+const claimPartnerIssue = `-- name: ClaimPartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'claimed', claimed_at = ?, updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'completed'
+`
+
+type ClaimPartnerIssueParams struct {
+	ClaimedAt   sql.NullTime `json:"claimed_at"`
+	WorkspaceID string       `json:"workspace_id"`
+	ID          uint64       `json:"id"`
+}
+
+func (q *Queries) ClaimPartnerIssue(ctx context.Context, arg ClaimPartnerIssueParams) (int64, error) {
+	result, err := q.exec(ctx, q.claimPartnerIssueStmt, claimPartnerIssue, arg.ClaimedAt, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const completePartnerIssue = `-- name: CompletePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'completed', completed_at = ?, updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'issued'
+`
+
+type CompletePartnerIssueParams struct {
+	CompletedAt sql.NullTime `json:"completed_at"`
+	WorkspaceID string       `json:"workspace_id"`
+	ID          uint64       `json:"id"`
+}
+
+func (q *Queries) CompletePartnerIssue(ctx context.Context, arg CompletePartnerIssueParams) (int64, error) {
+	result, err := q.exec(ctx, q.completePartnerIssueStmt, completePartnerIssue, arg.CompletedAt, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countProgressEventsByExternalKey = `-- name: CountProgressEventsByExternalKey :one
 SELECT COUNT(*)
 FROM task_progress_event
@@ -1003,6 +1296,59 @@ func (q *Queries) CountProgressEventsByExternalKey(ctx context.Context, arg Coun
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createPartnerIssue = `-- name: CreatePartnerIssue :execlastid
+INSERT INTO task_partner_issue (
+    workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?)
+ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    public_payload = VALUES(public_payload),
+    private_payload = VALUES(private_payload),
+    expires_at = VALUES(expires_at),
+    updated_at = CURRENT_TIMESTAMP
+`
+
+type CreatePartnerIssueParams struct {
+	WorkspaceID    string          `json:"workspace_id"`
+	Provider       string          `json:"provider"`
+	GroupKey       string          `json:"group_key"`
+	Platform       string          `json:"platform"`
+	ExternalID     string          `json:"external_id"`
+	ExternalType   string          `json:"external_type"`
+	IssueKey       string          `json:"issue_key"`
+	AppID          int64           `json:"app_id"`
+	PlatformID     int64           `json:"platform_id"`
+	PlatformUserID string          `json:"platform_user_id"`
+	PublicPayload  json.RawMessage `json:"public_payload"`
+	PrivatePayload json.RawMessage `json:"private_payload"`
+	IssuedAt       time.Time       `json:"issued_at"`
+	ExpiresAt      sql.NullTime    `json:"expires_at"`
+}
+
+func (q *Queries) CreatePartnerIssue(ctx context.Context, arg CreatePartnerIssueParams) (int64, error) {
+	result, err := q.exec(ctx, q.createPartnerIssueStmt, createPartnerIssue,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.ExternalID,
+		arg.ExternalType,
+		arg.IssueKey,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.PublicPayload,
+		arg.PrivatePayload,
+		arg.IssuedAt,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 const ensureProgress = `-- name: EnsureProgress :execlastid
@@ -1685,6 +2031,91 @@ func (q *Queries) GetNextSequenceTaskID(ctx context.Context, arg GetNextSequence
 	return id, err
 }
 
+const getPartnerIssueByID = `-- name: GetPartnerIssueByID :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND id = ?
+LIMIT 1
+`
+
+type GetPartnerIssueByIDParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueByIDParams) (TaskPartnerIssue, error) {
+	row := q.queryRow(ctx, q.getPartnerIssueByIDStmt, getPartnerIssueByID, arg.WorkspaceID, arg.ID)
+	var i TaskPartnerIssue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.ExternalID,
+		&i.ExternalType,
+		&i.IssueKey,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PublicPayload,
+		&i.PrivatePayload,
+		&i.Status,
+		&i.IssuedAt,
+		&i.CompletedAt,
+		&i.ClaimedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPartnerIssueByIDForUpdate = `-- name: GetPartnerIssueByIDForUpdate :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND id = ?
+LIMIT 1
+FOR UPDATE
+`
+
+type GetPartnerIssueByIDForUpdateParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartnerIssueByIDForUpdateParams) (TaskPartnerIssue, error) {
+	row := q.queryRow(ctx, q.getPartnerIssueByIDForUpdateStmt, getPartnerIssueByIDForUpdate, arg.WorkspaceID, arg.ID)
+	var i TaskPartnerIssue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.ExternalID,
+		&i.ExternalType,
+		&i.IssueKey,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PublicPayload,
+		&i.PrivatePayload,
+		&i.Status,
+		&i.IssuedAt,
+		&i.CompletedAt,
+		&i.ClaimedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSequenceStateForUpdate = `-- name: GetSequenceStateForUpdate :one
 SELECT current_task_id, status
 FROM task_sequence_state
@@ -1720,6 +2151,186 @@ func (q *Queries) GetSequenceStateForUpdate(ctx context.Context, arg GetSequence
 	var i GetSequenceStateForUpdateRow
 	err := row.Scan(&i.CurrentTaskID, &i.Status)
 	return i, err
+}
+
+const incrementPartnerStatsDaily = `-- name: IncrementPartnerStatsDaily :exec
+INSERT INTO task_partner_stats_daily (
+    workspace_id, stats_date, provider, group_key, external_type,
+    issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+    unique_issued_users, unique_completed_users, unique_claimers
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    issued_count = issued_count + VALUES(issued_count),
+    completed_count = completed_count + VALUES(completed_count),
+    claimed_count = claimed_count + VALUES(claimed_count),
+    failed_count = failed_count + VALUES(failed_count),
+    fake_count = fake_count + VALUES(fake_count),
+    expired_count = expired_count + VALUES(expired_count),
+    unique_issued_users = unique_issued_users + VALUES(unique_issued_users),
+    unique_completed_users = unique_completed_users + VALUES(unique_completed_users),
+    unique_claimers = unique_claimers + VALUES(unique_claimers)
+`
+
+type IncrementPartnerStatsDailyParams struct {
+	WorkspaceID          string    `json:"workspace_id"`
+	DATE                 time.Time `json:"DATE"`
+	Provider             string    `json:"provider"`
+	GroupKey             string    `json:"group_key"`
+	ExternalType         string    `json:"external_type"`
+	IssuedCount          uint64    `json:"issued_count"`
+	CompletedCount       uint64    `json:"completed_count"`
+	ClaimedCount         uint64    `json:"claimed_count"`
+	FailedCount          uint64    `json:"failed_count"`
+	FakeCount            uint64    `json:"fake_count"`
+	ExpiredCount         uint64    `json:"expired_count"`
+	UniqueIssuedUsers    uint64    `json:"unique_issued_users"`
+	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
+	UniqueClaimers       uint64    `json:"unique_claimers"`
+}
+
+func (q *Queries) IncrementPartnerStatsDaily(ctx context.Context, arg IncrementPartnerStatsDailyParams) error {
+	_, err := q.exec(ctx, q.incrementPartnerStatsDailyStmt, incrementPartnerStatsDaily,
+		arg.WorkspaceID,
+		arg.DATE,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.IssuedCount,
+		arg.CompletedCount,
+		arg.ClaimedCount,
+		arg.FailedCount,
+		arg.FakeCount,
+		arg.ExpiredCount,
+		arg.UniqueIssuedUsers,
+		arg.UniqueCompletedUsers,
+		arg.UniqueClaimers,
+	)
+	return err
+}
+
+const insertPartnerRewardGrant = `-- name: InsertPartnerRewardGrant :execrows
+INSERT IGNORE INTO task_partner_reward_grant (
+    workspace_id, issue_id, provider, group_key, external_type,
+    app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertPartnerRewardGrantParams struct {
+	WorkspaceID    string          `json:"workspace_id"`
+	IssueID        uint64          `json:"issue_id"`
+	Provider       string          `json:"provider"`
+	GroupKey       string          `json:"group_key"`
+	ExternalType   string          `json:"external_type"`
+	AppID          int64           `json:"app_id"`
+	PlatformID     int64           `json:"platform_id"`
+	PlatformUserID string          `json:"platform_user_id"`
+	OperationID    string          `json:"operation_id"`
+	RewardSnapshot json.RawMessage `json:"reward_snapshot"`
+	ClaimedAt      time.Time       `json:"claimed_at"`
+}
+
+func (q *Queries) InsertPartnerRewardGrant(ctx context.Context, arg InsertPartnerRewardGrantParams) (int64, error) {
+	result, err := q.exec(ctx, q.insertPartnerRewardGrantStmt, insertPartnerRewardGrant,
+		arg.WorkspaceID,
+		arg.IssueID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.OperationID,
+		arg.RewardSnapshot,
+		arg.ClaimedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const insertPartnerStatsEvent = `-- name: InsertPartnerStatsEvent :execrows
+INSERT IGNORE INTO task_partner_stats_event (
+    workspace_id, provider, group_key, external_type, issue_id, external_id,
+    app_id, platform_id, platform_user_id, event_type, event_key, status, payload, occurred_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertPartnerStatsEventParams struct {
+	WorkspaceID    string          `json:"workspace_id"`
+	Provider       string          `json:"provider"`
+	GroupKey       string          `json:"group_key"`
+	ExternalType   string          `json:"external_type"`
+	IssueID        sql.NullInt64   `json:"issue_id"`
+	ExternalID     sql.NullString  `json:"external_id"`
+	AppID          int64           `json:"app_id"`
+	PlatformID     int64           `json:"platform_id"`
+	PlatformUserID string          `json:"platform_user_id"`
+	EventType      string          `json:"event_type"`
+	EventKey       string          `json:"event_key"`
+	Status         sql.NullString  `json:"status"`
+	Payload        json.RawMessage `json:"payload"`
+	OccurredAt     time.Time       `json:"occurred_at"`
+}
+
+func (q *Queries) InsertPartnerStatsEvent(ctx context.Context, arg InsertPartnerStatsEventParams) (int64, error) {
+	result, err := q.exec(ctx, q.insertPartnerStatsEventStmt, insertPartnerStatsEvent,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.IssueID,
+		arg.ExternalID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.EventType,
+		arg.EventKey,
+		arg.Status,
+		arg.Payload,
+		arg.OccurredAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const insertPartnerStatsUniqueUser = `-- name: InsertPartnerStatsUniqueUser :execrows
+INSERT IGNORE INTO task_partner_stats_unique_user (
+    workspace_id, stats_date, provider, group_key, external_type, event_type,
+    app_id, platform_id, platform_user_id
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertPartnerStatsUniqueUserParams struct {
+	WorkspaceID    string    `json:"workspace_id"`
+	DATE           time.Time `json:"DATE"`
+	Provider       string    `json:"provider"`
+	GroupKey       string    `json:"group_key"`
+	ExternalType   string    `json:"external_type"`
+	EventType      string    `json:"event_type"`
+	AppID          int64     `json:"app_id"`
+	PlatformID     int64     `json:"platform_id"`
+	PlatformUserID string    `json:"platform_user_id"`
+}
+
+func (q *Queries) InsertPartnerStatsUniqueUser(ctx context.Context, arg InsertPartnerStatsUniqueUserParams) (int64, error) {
+	result, err := q.exec(ctx, q.insertPartnerStatsUniqueUserStmt, insertPartnerStatsUniqueUser,
+		arg.WorkspaceID,
+		arg.DATE,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.EventType,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertProgressEvent = `-- name: InsertProgressEvent :execrows
@@ -1971,6 +2582,149 @@ func (q *Queries) ListCurrentProgressForUserForUpdate(ctx context.Context, arg L
 			&i.ClaimedAt,
 			&i.OperationID,
 			&i.RewardsSnapshot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartnerIssuesForUser = `-- name: ListPartnerIssuesForUser :many
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND app_id = ?
+  AND platform_id = ?
+  AND platform_user_id = ?
+  AND status IN ('issued', 'completed')
+  AND (expires_at IS NULL OR expires_at > ?)
+ORDER BY issued_at DESC, id DESC
+`
+
+type ListPartnerIssuesForUserParams struct {
+	WorkspaceID    string       `json:"workspace_id"`
+	Provider       string       `json:"provider"`
+	GroupKey       string       `json:"group_key"`
+	Platform       string       `json:"platform"`
+	AppID          int64        `json:"app_id"`
+	PlatformID     int64        `json:"platform_id"`
+	PlatformUserID string       `json:"platform_user_id"`
+	ExpiresAt      sql.NullTime `json:"expires_at"`
+}
+
+func (q *Queries) ListPartnerIssuesForUser(ctx context.Context, arg ListPartnerIssuesForUserParams) ([]TaskPartnerIssue, error) {
+	rows, err := q.query(ctx, q.listPartnerIssuesForUserStmt, listPartnerIssuesForUser,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerIssue
+	for rows.Next() {
+		var i TaskPartnerIssue
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.Platform,
+			&i.ExternalID,
+			&i.ExternalType,
+			&i.IssueKey,
+			&i.AppID,
+			&i.PlatformID,
+			&i.PlatformUserID,
+			&i.PublicPayload,
+			&i.PrivatePayload,
+			&i.Status,
+			&i.IssuedAt,
+			&i.CompletedAt,
+			&i.ClaimedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartnerRewardRules = `-- name: ListPartnerRewardRules :many
+SELECT workspace_id, provider, group_key, external_type, reward_key,
+       reward_type, quantity, duration_unit, position, is_enabled, created_at, updated_at
+FROM task_partner_reward_rule
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND external_type IN (?, '*')
+  AND is_enabled = TRUE
+ORDER BY CASE WHEN external_type = ? THEN 0 ELSE 1 END, position, reward_key
+`
+
+type ListPartnerRewardRulesParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	Provider       string `json:"provider"`
+	GroupKey       string `json:"group_key"`
+	ExternalType   string `json:"external_type"`
+	ExternalType_2 string `json:"external_type_2"`
+}
+
+func (q *Queries) ListPartnerRewardRules(ctx context.Context, arg ListPartnerRewardRulesParams) ([]TaskPartnerRewardRule, error) {
+	rows, err := q.query(ctx, q.listPartnerRewardRulesStmt, listPartnerRewardRules,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.ExternalType,
+		arg.ExternalType_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerRewardRule
+	for rows.Next() {
+		var i TaskPartnerRewardRule
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.ExternalType,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.Quantity,
+			&i.DurationUnit,
+			&i.Position,
+			&i.IsEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

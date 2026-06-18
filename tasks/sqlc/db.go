@@ -27,11 +27,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminCreateTaskStmt, err = db.PrepareContext(ctx, adminCreateTask); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminCreateTask: %w", err)
 	}
+	if q.adminDeletePartnerRewardRuleStmt, err = db.PrepareContext(ctx, adminDeletePartnerRewardRule); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminDeletePartnerRewardRule: %w", err)
+	}
 	if q.adminDeleteRewardStmt, err = db.PrepareContext(ctx, adminDeleteReward); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminDeleteReward: %w", err)
 	}
 	if q.adminDeleteTaskStmt, err = db.PrepareContext(ctx, adminDeleteTask); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminDeleteTask: %w", err)
+	}
+	if q.adminGetPartnerConfigStmt, err = db.PrepareContext(ctx, adminGetPartnerConfig); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminGetPartnerConfig: %w", err)
 	}
 	if q.adminGetSingleTaskStatsStmt, err = db.PrepareContext(ctx, adminGetSingleTaskStats); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetSingleTaskStats: %w", err)
@@ -41,6 +47,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.adminGetTaskStatsStmt, err = db.PrepareContext(ctx, adminGetTaskStats); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetTaskStats: %w", err)
+	}
+	if q.adminListPartnerConfigsStmt, err = db.PrepareContext(ctx, adminListPartnerConfigs); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminListPartnerConfigs: %w", err)
+	}
+	if q.adminListPartnerDailyStatsStmt, err = db.PrepareContext(ctx, adminListPartnerDailyStats); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminListPartnerDailyStats: %w", err)
 	}
 	if q.adminListTaskDailyOverviewStmt, err = db.PrepareContext(ctx, adminListTaskDailyOverview); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListTaskDailyOverview: %w", err)
@@ -63,6 +75,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminUpsertGroupLocalizationStmt, err = db.PrepareContext(ctx, adminUpsertGroupLocalization); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertGroupLocalization: %w", err)
 	}
+	if q.adminUpsertPartnerConfigStmt, err = db.PrepareContext(ctx, adminUpsertPartnerConfig); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminUpsertPartnerConfig: %w", err)
+	}
+	if q.adminUpsertPartnerRewardRuleStmt, err = db.PrepareContext(ctx, adminUpsertPartnerRewardRule); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminUpsertPartnerRewardRule: %w", err)
+	}
 	if q.adminUpsertRewardStmt, err = db.PrepareContext(ctx, adminUpsertReward); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertReward: %w", err)
 	}
@@ -72,8 +90,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminUpsertTaskLocalizationStmt, err = db.PrepareContext(ctx, adminUpsertTaskLocalization); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertTaskLocalization: %w", err)
 	}
+	if q.claimPartnerIssueStmt, err = db.PrepareContext(ctx, claimPartnerIssue); err != nil {
+		return nil, fmt.Errorf("error preparing query ClaimPartnerIssue: %w", err)
+	}
+	if q.completePartnerIssueStmt, err = db.PrepareContext(ctx, completePartnerIssue); err != nil {
+		return nil, fmt.Errorf("error preparing query CompletePartnerIssue: %w", err)
+	}
 	if q.countProgressEventsByExternalKeyStmt, err = db.PrepareContext(ctx, countProgressEventsByExternalKey); err != nil {
 		return nil, fmt.Errorf("error preparing query CountProgressEventsByExternalKey: %w", err)
+	}
+	if q.createPartnerIssueStmt, err = db.PrepareContext(ctx, createPartnerIssue); err != nil {
+		return nil, fmt.Errorf("error preparing query CreatePartnerIssue: %w", err)
 	}
 	if q.ensureProgressStmt, err = db.PrepareContext(ctx, ensureProgress); err != nil {
 		return nil, fmt.Errorf("error preparing query EnsureProgress: %w", err)
@@ -102,8 +129,26 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getNextSequenceTaskIDStmt, err = db.PrepareContext(ctx, getNextSequenceTaskID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetNextSequenceTaskID: %w", err)
 	}
+	if q.getPartnerIssueByIDStmt, err = db.PrepareContext(ctx, getPartnerIssueByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPartnerIssueByID: %w", err)
+	}
+	if q.getPartnerIssueByIDForUpdateStmt, err = db.PrepareContext(ctx, getPartnerIssueByIDForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPartnerIssueByIDForUpdate: %w", err)
+	}
 	if q.getSequenceStateForUpdateStmt, err = db.PrepareContext(ctx, getSequenceStateForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetSequenceStateForUpdate: %w", err)
+	}
+	if q.incrementPartnerStatsDailyStmt, err = db.PrepareContext(ctx, incrementPartnerStatsDaily); err != nil {
+		return nil, fmt.Errorf("error preparing query IncrementPartnerStatsDaily: %w", err)
+	}
+	if q.insertPartnerRewardGrantStmt, err = db.PrepareContext(ctx, insertPartnerRewardGrant); err != nil {
+		return nil, fmt.Errorf("error preparing query InsertPartnerRewardGrant: %w", err)
+	}
+	if q.insertPartnerStatsEventStmt, err = db.PrepareContext(ctx, insertPartnerStatsEvent); err != nil {
+		return nil, fmt.Errorf("error preparing query InsertPartnerStatsEvent: %w", err)
+	}
+	if q.insertPartnerStatsUniqueUserStmt, err = db.PrepareContext(ctx, insertPartnerStatsUniqueUser); err != nil {
+		return nil, fmt.Errorf("error preparing query InsertPartnerStatsUniqueUser: %w", err)
 	}
 	if q.insertProgressEventStmt, err = db.PrepareContext(ctx, insertProgressEvent); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertProgressEvent: %w", err)
@@ -116,6 +161,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listCurrentProgressForUserForUpdateStmt, err = db.PrepareContext(ctx, listCurrentProgressForUserForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query ListCurrentProgressForUserForUpdate: %w", err)
+	}
+	if q.listPartnerIssuesForUserStmt, err = db.PrepareContext(ctx, listPartnerIssuesForUser); err != nil {
+		return nil, fmt.Errorf("error preparing query ListPartnerIssuesForUser: %w", err)
+	}
+	if q.listPartnerRewardRulesStmt, err = db.PrepareContext(ctx, listPartnerRewardRules); err != nil {
+		return nil, fmt.Errorf("error preparing query ListPartnerRewardRules: %w", err)
 	}
 	if q.listRecordCatalogStmt, err = db.PrepareContext(ctx, listRecordCatalog); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRecordCatalog: %w", err)
@@ -157,6 +208,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminCreateTaskStmt: %w", cerr)
 		}
 	}
+	if q.adminDeletePartnerRewardRuleStmt != nil {
+		if cerr := q.adminDeletePartnerRewardRuleStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminDeletePartnerRewardRuleStmt: %w", cerr)
+		}
+	}
 	if q.adminDeleteRewardStmt != nil {
 		if cerr := q.adminDeleteRewardStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminDeleteRewardStmt: %w", cerr)
@@ -165,6 +221,11 @@ func (q *Queries) Close() error {
 	if q.adminDeleteTaskStmt != nil {
 		if cerr := q.adminDeleteTaskStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminDeleteTaskStmt: %w", cerr)
+		}
+	}
+	if q.adminGetPartnerConfigStmt != nil {
+		if cerr := q.adminGetPartnerConfigStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminGetPartnerConfigStmt: %w", cerr)
 		}
 	}
 	if q.adminGetSingleTaskStatsStmt != nil {
@@ -180,6 +241,16 @@ func (q *Queries) Close() error {
 	if q.adminGetTaskStatsStmt != nil {
 		if cerr := q.adminGetTaskStatsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminGetTaskStatsStmt: %w", cerr)
+		}
+	}
+	if q.adminListPartnerConfigsStmt != nil {
+		if cerr := q.adminListPartnerConfigsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminListPartnerConfigsStmt: %w", cerr)
+		}
+	}
+	if q.adminListPartnerDailyStatsStmt != nil {
+		if cerr := q.adminListPartnerDailyStatsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminListPartnerDailyStatsStmt: %w", cerr)
 		}
 	}
 	if q.adminListTaskDailyOverviewStmt != nil {
@@ -217,6 +288,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminUpsertGroupLocalizationStmt: %w", cerr)
 		}
 	}
+	if q.adminUpsertPartnerConfigStmt != nil {
+		if cerr := q.adminUpsertPartnerConfigStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminUpsertPartnerConfigStmt: %w", cerr)
+		}
+	}
+	if q.adminUpsertPartnerRewardRuleStmt != nil {
+		if cerr := q.adminUpsertPartnerRewardRuleStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminUpsertPartnerRewardRuleStmt: %w", cerr)
+		}
+	}
 	if q.adminUpsertRewardStmt != nil {
 		if cerr := q.adminUpsertRewardStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminUpsertRewardStmt: %w", cerr)
@@ -232,9 +313,24 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminUpsertTaskLocalizationStmt: %w", cerr)
 		}
 	}
+	if q.claimPartnerIssueStmt != nil {
+		if cerr := q.claimPartnerIssueStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing claimPartnerIssueStmt: %w", cerr)
+		}
+	}
+	if q.completePartnerIssueStmt != nil {
+		if cerr := q.completePartnerIssueStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing completePartnerIssueStmt: %w", cerr)
+		}
+	}
 	if q.countProgressEventsByExternalKeyStmt != nil {
 		if cerr := q.countProgressEventsByExternalKeyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing countProgressEventsByExternalKeyStmt: %w", cerr)
+		}
+	}
+	if q.createPartnerIssueStmt != nil {
+		if cerr := q.createPartnerIssueStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createPartnerIssueStmt: %w", cerr)
 		}
 	}
 	if q.ensureProgressStmt != nil {
@@ -282,9 +378,39 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getNextSequenceTaskIDStmt: %w", cerr)
 		}
 	}
+	if q.getPartnerIssueByIDStmt != nil {
+		if cerr := q.getPartnerIssueByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPartnerIssueByIDStmt: %w", cerr)
+		}
+	}
+	if q.getPartnerIssueByIDForUpdateStmt != nil {
+		if cerr := q.getPartnerIssueByIDForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPartnerIssueByIDForUpdateStmt: %w", cerr)
+		}
+	}
 	if q.getSequenceStateForUpdateStmt != nil {
 		if cerr := q.getSequenceStateForUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getSequenceStateForUpdateStmt: %w", cerr)
+		}
+	}
+	if q.incrementPartnerStatsDailyStmt != nil {
+		if cerr := q.incrementPartnerStatsDailyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing incrementPartnerStatsDailyStmt: %w", cerr)
+		}
+	}
+	if q.insertPartnerRewardGrantStmt != nil {
+		if cerr := q.insertPartnerRewardGrantStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing insertPartnerRewardGrantStmt: %w", cerr)
+		}
+	}
+	if q.insertPartnerStatsEventStmt != nil {
+		if cerr := q.insertPartnerStatsEventStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing insertPartnerStatsEventStmt: %w", cerr)
+		}
+	}
+	if q.insertPartnerStatsUniqueUserStmt != nil {
+		if cerr := q.insertPartnerStatsUniqueUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing insertPartnerStatsUniqueUserStmt: %w", cerr)
 		}
 	}
 	if q.insertProgressEventStmt != nil {
@@ -305,6 +431,16 @@ func (q *Queries) Close() error {
 	if q.listCurrentProgressForUserForUpdateStmt != nil {
 		if cerr := q.listCurrentProgressForUserForUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listCurrentProgressForUserForUpdateStmt: %w", cerr)
+		}
+	}
+	if q.listPartnerIssuesForUserStmt != nil {
+		if cerr := q.listPartnerIssuesForUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listPartnerIssuesForUserStmt: %w", cerr)
+		}
+	}
+	if q.listPartnerRewardRulesStmt != nil {
+		if cerr := q.listPartnerRewardRulesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listPartnerRewardRulesStmt: %w", cerr)
 		}
 	}
 	if q.listRecordCatalogStmt != nil {
@@ -397,11 +533,15 @@ type Queries struct {
 	db                                      DBTX
 	tx                                      *sql.Tx
 	adminCreateTaskStmt                     *sql.Stmt
+	adminDeletePartnerRewardRuleStmt        *sql.Stmt
 	adminDeleteRewardStmt                   *sql.Stmt
 	adminDeleteTaskStmt                     *sql.Stmt
+	adminGetPartnerConfigStmt               *sql.Stmt
 	adminGetSingleTaskStatsStmt             *sql.Stmt
 	adminGetTaskStmt                        *sql.Stmt
 	adminGetTaskStatsStmt                   *sql.Stmt
+	adminListPartnerConfigsStmt             *sql.Stmt
+	adminListPartnerDailyStatsStmt          *sql.Stmt
 	adminListTaskDailyOverviewStmt          *sql.Stmt
 	adminListTaskDailyStatsStmt             *sql.Stmt
 	adminListTasksStmt                      *sql.Stmt
@@ -409,10 +549,15 @@ type Queries struct {
 	adminUpdateTaskStmt                     *sql.Stmt
 	adminUpsertGroupStmt                    *sql.Stmt
 	adminUpsertGroupLocalizationStmt        *sql.Stmt
+	adminUpsertPartnerConfigStmt            *sql.Stmt
+	adminUpsertPartnerRewardRuleStmt        *sql.Stmt
 	adminUpsertRewardStmt                   *sql.Stmt
 	adminUpsertSequenceStmt                 *sql.Stmt
 	adminUpsertTaskLocalizationStmt         *sql.Stmt
+	claimPartnerIssueStmt                   *sql.Stmt
+	completePartnerIssueStmt                *sql.Stmt
 	countProgressEventsByExternalKeyStmt    *sql.Stmt
+	createPartnerIssueStmt                  *sql.Stmt
 	ensureProgressStmt                      *sql.Stmt
 	getClaimBundleByIDForUpdateStmt         *sql.Stmt
 	getClaimBundleByKeyForUpdateStmt        *sql.Stmt
@@ -422,11 +567,19 @@ type Queries struct {
 	getIntegrationCheckTaskByIDStmt         *sql.Stmt
 	getIntegrationCheckTaskByKeyStmt        *sql.Stmt
 	getNextSequenceTaskIDStmt               *sql.Stmt
+	getPartnerIssueByIDStmt                 *sql.Stmt
+	getPartnerIssueByIDForUpdateStmt        *sql.Stmt
 	getSequenceStateForUpdateStmt           *sql.Stmt
+	incrementPartnerStatsDailyStmt          *sql.Stmt
+	insertPartnerRewardGrantStmt            *sql.Stmt
+	insertPartnerStatsEventStmt             *sql.Stmt
+	insertPartnerStatsUniqueUserStmt        *sql.Stmt
 	insertProgressEventStmt                 *sql.Stmt
 	listActiveTaskBundlesStmt               *sql.Stmt
 	listCurrentProgressForUserStmt          *sql.Stmt
 	listCurrentProgressForUserForUpdateStmt *sql.Stmt
+	listPartnerIssuesForUserStmt            *sql.Stmt
+	listPartnerRewardRulesStmt              *sql.Stmt
 	listRecordCatalogStmt                   *sql.Stmt
 	listRecordTasksStmt                     *sql.Stmt
 	listRewardsStmt                         *sql.Stmt
@@ -444,11 +597,15 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		db:                                      tx,
 		tx:                                      tx,
 		adminCreateTaskStmt:                     q.adminCreateTaskStmt,
+		adminDeletePartnerRewardRuleStmt:        q.adminDeletePartnerRewardRuleStmt,
 		adminDeleteRewardStmt:                   q.adminDeleteRewardStmt,
 		adminDeleteTaskStmt:                     q.adminDeleteTaskStmt,
+		adminGetPartnerConfigStmt:               q.adminGetPartnerConfigStmt,
 		adminGetSingleTaskStatsStmt:             q.adminGetSingleTaskStatsStmt,
 		adminGetTaskStmt:                        q.adminGetTaskStmt,
 		adminGetTaskStatsStmt:                   q.adminGetTaskStatsStmt,
+		adminListPartnerConfigsStmt:             q.adminListPartnerConfigsStmt,
+		adminListPartnerDailyStatsStmt:          q.adminListPartnerDailyStatsStmt,
 		adminListTaskDailyOverviewStmt:          q.adminListTaskDailyOverviewStmt,
 		adminListTaskDailyStatsStmt:             q.adminListTaskDailyStatsStmt,
 		adminListTasksStmt:                      q.adminListTasksStmt,
@@ -456,10 +613,15 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpdateTaskStmt:                     q.adminUpdateTaskStmt,
 		adminUpsertGroupStmt:                    q.adminUpsertGroupStmt,
 		adminUpsertGroupLocalizationStmt:        q.adminUpsertGroupLocalizationStmt,
+		adminUpsertPartnerConfigStmt:            q.adminUpsertPartnerConfigStmt,
+		adminUpsertPartnerRewardRuleStmt:        q.adminUpsertPartnerRewardRuleStmt,
 		adminUpsertRewardStmt:                   q.adminUpsertRewardStmt,
 		adminUpsertSequenceStmt:                 q.adminUpsertSequenceStmt,
 		adminUpsertTaskLocalizationStmt:         q.adminUpsertTaskLocalizationStmt,
+		claimPartnerIssueStmt:                   q.claimPartnerIssueStmt,
+		completePartnerIssueStmt:                q.completePartnerIssueStmt,
 		countProgressEventsByExternalKeyStmt:    q.countProgressEventsByExternalKeyStmt,
+		createPartnerIssueStmt:                  q.createPartnerIssueStmt,
 		ensureProgressStmt:                      q.ensureProgressStmt,
 		getClaimBundleByIDForUpdateStmt:         q.getClaimBundleByIDForUpdateStmt,
 		getClaimBundleByKeyForUpdateStmt:        q.getClaimBundleByKeyForUpdateStmt,
@@ -469,11 +631,19 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getIntegrationCheckTaskByIDStmt:         q.getIntegrationCheckTaskByIDStmt,
 		getIntegrationCheckTaskByKeyStmt:        q.getIntegrationCheckTaskByKeyStmt,
 		getNextSequenceTaskIDStmt:               q.getNextSequenceTaskIDStmt,
+		getPartnerIssueByIDStmt:                 q.getPartnerIssueByIDStmt,
+		getPartnerIssueByIDForUpdateStmt:        q.getPartnerIssueByIDForUpdateStmt,
 		getSequenceStateForUpdateStmt:           q.getSequenceStateForUpdateStmt,
+		incrementPartnerStatsDailyStmt:          q.incrementPartnerStatsDailyStmt,
+		insertPartnerRewardGrantStmt:            q.insertPartnerRewardGrantStmt,
+		insertPartnerStatsEventStmt:             q.insertPartnerStatsEventStmt,
+		insertPartnerStatsUniqueUserStmt:        q.insertPartnerStatsUniqueUserStmt,
 		insertProgressEventStmt:                 q.insertProgressEventStmt,
 		listActiveTaskBundlesStmt:               q.listActiveTaskBundlesStmt,
 		listCurrentProgressForUserStmt:          q.listCurrentProgressForUserStmt,
 		listCurrentProgressForUserForUpdateStmt: q.listCurrentProgressForUserForUpdateStmt,
+		listPartnerIssuesForUserStmt:            q.listPartnerIssuesForUserStmt,
+		listPartnerRewardRulesStmt:              q.listPartnerRewardRulesStmt,
 		listRecordCatalogStmt:                   q.listRecordCatalogStmt,
 		listRecordTasksStmt:                     q.listRecordTasksStmt,
 		listRewardsStmt:                         q.listRewardsStmt,
