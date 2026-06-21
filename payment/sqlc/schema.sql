@@ -789,7 +789,7 @@ VALUES
     ('VOTE', 'VK Votes', 'platform_currency', 0, NULL, NULL, NULL, 1),
     ('XTR', 'Telegram Stars', 'platform_currency', 0, NULL, NULL, NULL, 1),
     ('RUB', 'Russian Ruble', 'fiat', 2, NULL, NULL, NULL, 1),
-    ('TON', 'Toncoin', 'crypto_native', 9, 'ton', 'mainnet', 'EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c', 1),
+    ('TON', 'Toncoin', 'crypto_native', 9, 'ton', 'mainnet', NULL, 1),
     ('USDT_TON', 'Tether USD on TON', 'crypto_jetton', 6, 'ton', 'mainnet', 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', 1),
     ('TSTON_TON', 'Tonstakers TON', 'crypto_jetton', 9, 'ton', 'mainnet', 'EQC98_qAmNEptUtPc7W6xdHh_ZHrBUFpw5Ft_IzNU20QAJav', 1),
     ('UTYA_TON', 'Utya', 'crypto_jetton', 9, 'ton', 'mainnet', 'EQBaCgUwOoc6gHCNln_oJzb0mVs79YG7wYoavh-o1ItaneLA', 1),

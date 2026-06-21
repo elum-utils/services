@@ -1,0 +1,375 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+
+	controlsqlc "github.com/elum-utils/services/control/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/google/uuid"
+)
+
+func (r *Repository) CreateAccount(ctx context.Context, id, displayName string) (Account, error) {
+	if id = normalizeID(id); id == "" {
+		id = uuid.NewString()
+	}
+	if err := r.q.CreateAccount(ctx, controlsqlc.CreateAccountParams{ID: id, DisplayName: displayName}); err != nil {
+		return Account{}, err
+	}
+	return r.GetAccount(ctx, id)
+}
+
+func (r *Repository) GetAccount(ctx context.Context, id string) (Account, error) {
+	row, err := r.q.GetAccount(ctx, normalizeID(id))
+	if err != nil {
+		return Account{}, noRows(err, ErrAccountNotFound)
+	}
+	return Account{ID: row.ID, DisplayName: row.DisplayName, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+}
+
+func (r *Repository) CreateWorkspace(ctx context.Context, workspaceID, slug, title, actorID string) (Workspace, error) {
+	if err := required(workspaceID, slug, title, actorID); err != nil {
+		return Workspace{}, err
+	}
+	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries {
+		return controlsqlc.New(tx)
+	}, func(_ *sql.Tx, q *controlsqlc.Queries) error {
+		if err := q.CreateWorkspace(ctx, controlsqlc.CreateWorkspaceParams{ID: workspaceID, Slug: slug, Title: title, CreatedBy: actorID}); err != nil {
+			return err
+		}
+		if err := q.AddWorkspaceMember(ctx, controlsqlc.AddWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: actorID}); err != nil {
+			return err
+		}
+		ownerID := uuid.NewString()
+		if err := q.CreateRole(ctx, controlsqlc.CreateRoleParams{ID: ownerID, WorkspaceID: workspaceID, Code: "owner", Title: "Owner", Position: 1, IsOwner: true}); err != nil {
+			return err
+		}
+		if err := q.AddRoleMember(ctx, controlsqlc.AddRoleMemberParams{RoleID: ownerID, AccountID: actorID}); err != nil {
+			return err
+		}
+		return q.TouchAuthVersion(ctx, controlsqlc.TouchAuthVersionParams{WorkspaceID: workspaceID, Version: newAuthVersion()})
+	})
+	if err != nil {
+		return Workspace{}, err
+	}
+	return r.GetWorkspace(ctx, workspaceID)
+}
+
+func (r *Repository) GetWorkspace(ctx context.Context, workspaceID string) (Workspace, error) {
+	row, err := r.q.GetWorkspace(ctx, normalizeID(workspaceID))
+	if err != nil {
+		return Workspace{}, noRows(err, ErrWorkspaceNotFound)
+	}
+	return Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: string(row.Status), CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+}
+
+func (r *Repository) ListWorkspaces(ctx context.Context, accountID string, limit, offset int32) ([]Workspace, error) {
+	if err := required(accountID); err != nil {
+		return nil, err
+	}
+	rows, err := r.q.ListWorkspacesForAccount(ctx, controlsqlc.ListWorkspacesForAccountParams{AccountID: accountID, Limit: limit, Offset: offset})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Workspace, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: string(row.Status), CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return result, nil
+}
+
+func (r *Repository) CreateRole(ctx context.Context, actorID string, role Role) (Role, error) {
+	if err := required(actorID, role.ID, role.WorkspaceID, role.Code, role.Title); err != nil {
+		return Role{}, err
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, role.Position); err != nil {
+		return Role{}, err
+	}
+	if err := r.q.CreateRole(ctx, controlsqlc.CreateRoleParams{ID: role.ID, WorkspaceID: role.WorkspaceID, Code: role.Code, Title: role.Title, Description: role.Description, Position: role.Position, IsOwner: false}); err != nil {
+		return Role{}, err
+	}
+	_ = r.touchAuthVersion(ctx, role.WorkspaceID)
+	return r.GetRole(ctx, role.WorkspaceID, role.ID)
+}
+
+func (r *Repository) GetRole(ctx context.Context, workspaceID, roleID string) (Role, error) {
+	row, err := r.q.GetRole(ctx, controlsqlc.GetRoleParams{WorkspaceID: workspaceID, ID: roleID})
+	if err != nil {
+		return Role{}, noRows(err, ErrRoleNotFound)
+	}
+	return Role{ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Title: row.Title, Description: row.Description, Position: row.Position, IsOwner: row.IsOwner, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+}
+
+func (r *Repository) ListRoles(ctx context.Context, workspaceID string) ([]Role, error) {
+	rows, err := r.q.ListRoles(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Role, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, Role{ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Title: row.Title, Description: row.Description, Position: row.Position, IsOwner: row.IsOwner, MemberCount: row.MemberCount, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return result, nil
+}
+
+func (r *Repository) AssignRole(ctx context.Context, actorID, workspaceID, accountID, roleID string) error {
+	role, err := r.GetRole(ctx, workspaceID, roleID)
+	if err != nil {
+		return err
+	}
+	if err := r.requireActorHigher(ctx, actorID, workspaceID, accountID, role.Position); err != nil {
+		return err
+	}
+	if role.IsOwner {
+		return ErrRoleHierarchy
+	}
+	active, err := r.q.IsActiveWorkspaceMember(ctx, controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
+	if err != nil {
+		return err
+	}
+	if !active {
+		return ErrForbidden
+	}
+	if err := r.q.AddRoleMember(ctx, controlsqlc.AddRoleMemberParams{RoleID: roleID, AccountID: accountID}); err != nil {
+		return err
+	}
+	return r.touchAuthVersion(ctx, workspaceID)
+}
+
+func (r *Repository) RemoveRole(ctx context.Context, actorID, workspaceID, accountID, roleID string) (int64, error) {
+	role, err := r.GetRole(ctx, workspaceID, roleID)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.requireActorHigher(ctx, actorID, workspaceID, accountID, role.Position); err != nil || role.IsOwner {
+		if err != nil {
+			return 0, err
+		}
+		return 0, ErrRoleHierarchy
+	}
+	rows, err := r.q.RemoveRoleMember(ctx, controlsqlc.RemoveRoleMemberParams{RoleID: roleID, AccountID: accountID})
+	if err != nil || rows == 0 {
+		return rows, err
+	}
+	return rows, r.touchAuthVersion(ctx, workspaceID)
+}
+
+func (r *Repository) UpdateRole(ctx context.Context, actorID string, role Role) (int64, error) {
+	current, err := r.GetRole(ctx, role.WorkspaceID, role.ID)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, current.Position); err != nil || current.IsOwner {
+		if err != nil {
+			return 0, err
+		}
+		return 0, ErrRoleHierarchy
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, role.Position); err != nil {
+		return 0, err
+	}
+	rows, err := r.q.UpdateRole(ctx, controlsqlc.UpdateRoleParams{Title: role.Title, Description: role.Description, Position: role.Position, ID: role.ID, WorkspaceID: role.WorkspaceID})
+	if err != nil || rows == 0 {
+		return rows, err
+	}
+	return rows, r.touchAuthVersion(ctx, role.WorkspaceID)
+}
+
+func (r *Repository) DeleteRole(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	role, err := r.GetRole(ctx, workspaceID, roleID)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, workspaceID, role.Position); err != nil || role.IsOwner {
+		if err != nil {
+			return 0, err
+		}
+		return 0, ErrRoleHierarchy
+	}
+	rows, err := r.q.DeleteRole(ctx, controlsqlc.DeleteRoleParams{ID: roleID, WorkspaceID: workspaceID})
+	if err != nil || rows == 0 {
+		return rows, err
+	}
+	return rows, r.touchAuthVersion(ctx, workspaceID)
+}
+
+func (r *Repository) SetPermission(ctx context.Context, actorID, workspaceID, roleID, methodKey string, enabled bool) error {
+	role, err := r.GetRole(ctx, workspaceID, roleID)
+	if err != nil {
+		return err
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, workspaceID, role.Position); err != nil || role.IsOwner {
+		if err != nil {
+			return err
+		}
+		return ErrRoleHierarchy
+	}
+	if _, err := r.q.GetMethod(ctx, methodKey); err != nil {
+		return noRows(err, ErrMethodNotFound)
+	}
+	if enabled {
+		err = r.q.SetRolePermission(ctx, controlsqlc.SetRolePermissionParams{RoleID: roleID, MethodKey: methodKey})
+	} else {
+		_, err = r.q.DeleteRolePermission(ctx, controlsqlc.DeleteRolePermissionParams{RoleID: roleID, MethodKey: methodKey})
+	}
+	if err != nil {
+		return err
+	}
+	return r.touchAuthVersion(ctx, workspaceID)
+}
+
+func (r *Repository) ListPermissions(ctx context.Context, workspaceID, roleID string) ([]string, error) {
+	rows, err := r.q.ListRolePermissions(ctx, controlsqlc.ListRolePermissionsParams{WorkspaceID: workspaceID, RoleID: roleID})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, row.MethodKey)
+	}
+	return result, nil
+}
+
+func (r *Repository) ClearPermissions(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	role, err := r.GetRole(ctx, workspaceID, roleID)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.requireHigherThanPosition(ctx, actorID, workspaceID, role.Position); err != nil || role.IsOwner {
+		if err != nil {
+			return 0, err
+		}
+		return 0, ErrRoleHierarchy
+	}
+	rows, err := r.q.ClearRolePermissions(ctx, roleID)
+	if err != nil || rows == 0 {
+		return rows, err
+	}
+	return rows, r.touchAuthVersion(ctx, workspaceID)
+}
+
+func (r *Repository) RegisterMethod(ctx context.Context, method Method) error {
+	if err := required(method.Key, method.Service, method.GroupKey, method.Title); err != nil {
+		return err
+	}
+	if method.SchemaRevision == 0 {
+		method.SchemaRevision = 1
+	}
+	if existing, err := r.GetMethod(ctx, method.Key); err == nil && existing.Service != method.Service {
+		return ErrMethodOwner
+	} else if err != nil && !errors.Is(err, ErrMethodNotFound) {
+		return err
+	}
+	if err := r.q.UpsertMethod(ctx, controlsqlc.UpsertMethodParams{MethodKey: method.Key, Service: method.Service, GroupKey: method.GroupKey, Title: method.Title, WorkspaceScoped: method.WorkspaceScoped, IsSensitive: method.Sensitive, SchemaRevision: method.SchemaRevision}); err != nil {
+		return err
+	}
+	return r.db.BumpCacheVersion("control", "method-registry")
+}
+
+func (r *Repository) ListMethods(ctx context.Context) ([]Method, error) {
+	rows, err := r.q.ListMethods(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Method, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Title: row.Title, WorkspaceScoped: row.WorkspaceScoped, Sensitive: row.IsSensitive, SchemaRevision: row.SchemaRevision, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return result, nil
+}
+
+func (r *Repository) GetMethod(ctx context.Context, methodKey string) (Method, error) {
+	row, err := r.q.GetMethod(ctx, methodKey)
+	if err != nil {
+		return Method{}, noRows(err, ErrMethodNotFound)
+	}
+	return Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Title: row.Title, WorkspaceScoped: row.WorkspaceScoped, Sensitive: row.IsSensitive, SchemaRevision: row.SchemaRevision, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+}
+
+func (r *Repository) CheckAccess(ctx context.Context, accountID, workspaceID, methodKey string) (bool, error) {
+	if err := required(accountID, workspaceID, methodKey); err != nil {
+		return false, err
+	}
+	methodVersion := r.db.CacheVersion("control", "method-registry")
+	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+		KeyParts: []any{"control", "access", methodVersion, workspaceID, accountID, methodKey}, Timeout: r.timeout,
+		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
+		CacheVersionScope: []any{"control", "access", workspaceID},
+	}, func(ctx context.Context) (bool, error) {
+		return r.q.CheckAccess(ctx, controlsqlc.CheckAccessParams{AccountID: accountID, WorkspaceID: workspaceID, MethodKey: methodKey})
+	})
+}
+
+func (r *Repository) touchAuthVersion(ctx context.Context, workspaceID string) error {
+	if err := r.q.TouchAuthVersion(ctx, controlsqlc.TouchAuthVersionParams{WorkspaceID: workspaceID, Version: newAuthVersion()}); err != nil {
+		return err
+	}
+	return r.db.BumpCacheVersion("control", "access", workspaceID)
+}
+
+func newAuthVersion() string { return strings.ReplaceAll(uuid.NewString(), "-", "") }
+
+func (r *Repository) requireHigherThanPosition(ctx context.Context, actorID, workspaceID string, targetPosition int32) error {
+	position, err := r.accountPosition(ctx, actorID, workspaceID)
+	if err != nil || position >= targetPosition {
+		if err != nil {
+			return err
+		}
+		return ErrRoleHierarchy
+	}
+	return nil
+}
+
+func (r *Repository) requireActorHigher(ctx context.Context, actorID, workspaceID, targetAccountID string, changedRolePosition int32) error {
+	actorPosition, err := r.accountPosition(ctx, actorID, workspaceID)
+	if err != nil {
+		return err
+	}
+	targetPosition, err := r.accountPosition(ctx, targetAccountID, workspaceID)
+	if err != nil || actorPosition >= targetPosition || actorPosition >= changedRolePosition {
+		if err != nil {
+			return err
+		}
+		return ErrRoleHierarchy
+	}
+	return nil
+}
+
+func (r *Repository) accountPosition(ctx context.Context, accountID, workspaceID string) (int32, error) {
+	value, err := r.q.GetAccountPosition(ctx, controlsqlc.GetAccountPositionParams{WorkspaceID: workspaceID, AccountID: accountID})
+	if err != nil {
+		return 0, err
+	}
+	switch value := value.(type) {
+	case int64:
+		return int32(value), nil
+	case uint64:
+		return int32(value), nil
+	case int32:
+		return value, nil
+	case int:
+		return int32(value), nil
+	case []byte:
+		var position int32
+		if _, err := fmt.Sscan(string(value), &position); err != nil {
+			return 0, err
+		}
+		return position, nil
+	default:
+		return 0, fmt.Errorf("unexpected account position type %T", value)
+	}
+}
+
+func (r *Repository) requireActiveMember(ctx context.Context, accountID, workspaceID string) error {
+	active, err := r.q.IsActiveWorkspaceMember(ctx, controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
+	if err != nil {
+		return err
+	}
+	if !active {
+		return ErrForbidden
+	}
+	return nil
+}
