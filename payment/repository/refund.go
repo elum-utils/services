@@ -171,7 +171,8 @@ func (r *PaymentRepository) enqueuePaymentRefundedCallback(
 	for _, item := range items {
 		payload.Rewards = append(payload.Rewards, paymentCallbackReward{
 			Key: item.ItemID, Type: string(item.RewardType), Quantity: item.Quantity,
-			Unit: orderDurationUnitPtr(item.DurationUnit),
+			Scale: item.Scale,
+			Unit:  orderDurationUnitPtr(item.DurationUnit),
 		})
 	}
 	if attempt.ProviderPaymentID.Valid {

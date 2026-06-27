@@ -470,6 +470,7 @@ type CpaReward struct {
 	RewardKey    string                    `json:"reward_key"`
 	RewardType   CpaRewardRewardType       `json:"reward_type"`
 	Quantity     int64                     `json:"quantity"`
+	Scale        uint16                    `json:"scale"`
 	DurationUnit NullCpaRewardDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                 `json:"created_at"`
 	UpdatedAt    time.Time                 `json:"updated_at"`

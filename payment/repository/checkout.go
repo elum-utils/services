@@ -155,6 +155,7 @@ type paymentCallbackReward struct {
 	Key      string  `json:"key"`
 	Type     string  `json:"type"`
 	Quantity int64   `json:"quantity"`
+	Scale    uint16  `json:"scale"`
 	Unit     *string `json:"unit,omitempty"`
 }
 
@@ -584,6 +585,7 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 				ItemID:        item.ItemID,
 				RewardType:    sqlc.PaymentFulfillmentItemRewardType(item.RewardType),
 				Quantity:      item.Quantity,
+				Scale:         item.Scale,
 				DurationUnit: sqlc.NullPaymentFulfillmentItemDurationUnit{
 					PaymentFulfillmentItemDurationUnit: sqlc.PaymentFulfillmentItemDurationUnit(
 						orderDurationUnitValue(item.DurationUnit),
@@ -642,7 +644,8 @@ func (r *PaymentRepository) enqueuePaymentFulfilledCallback(
 	for _, item := range items {
 		payload.Rewards = append(payload.Rewards, paymentCallbackReward{
 			Key: item.ItemID, Type: string(item.RewardType), Quantity: item.Quantity,
-			Unit: orderDurationUnitPtr(item.DurationUnit),
+			Scale: item.Scale,
+			Unit:  orderDurationUnitPtr(item.DurationUnit),
 		})
 	}
 	if attempt.ProviderPaymentID.Valid {

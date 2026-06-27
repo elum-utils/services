@@ -192,6 +192,7 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskI
 			WorkspaceID: workspaceID, TaskID: taskID, RewardKey: reward.Key,
 			RewardType: tasksqlc.TaskRewardRewardType(reward.Type),
 			Quantity:   reward.Quantity,
+			Scale:      reward.Scale,
 			DurationUnit: tasksqlc.NullTaskRewardDurationUnit{
 				TaskRewardDurationUnit: tasksqlc.TaskRewardDurationUnit(taskStringValue(reward.Unit)),
 				Valid:                  reward.Unit != nil,

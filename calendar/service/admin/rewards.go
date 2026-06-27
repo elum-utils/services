@@ -15,6 +15,7 @@ type SaveRewardParams struct {
 	Key         string
 	Type        string
 	Quantity    int64
+	Scale       uint16
 	Unit        *string
 	Position    uint32
 }
@@ -28,7 +29,7 @@ func (a *Admin) CreateReward(ctx context.Context, params SaveRewardParams) (uint
 	return a.repository.UpsertReward(mergedCtx, params.WorkspaceID, params.CalendarID,
 		params.StepID, repository.Reward{
 			Key: params.Key, Type: normalizedRewardType(params.Type),
-			Quantity: params.Quantity, Unit: params.Unit,
+			Quantity: params.Quantity, Scale: params.Scale, Unit: params.Unit,
 		}, params.Position)
 }
 
@@ -44,7 +45,7 @@ func (a *Admin) UpdateReward(ctx context.Context, params SaveRewardParams) (int6
 	return a.repository.UpdateReward(mergedCtx, params.WorkspaceID, params.CalendarID,
 		params.StepID, params.ID, repository.Reward{
 			Key: params.Key, Type: normalizedRewardType(params.Type),
-			Quantity: params.Quantity, Unit: params.Unit,
+			Quantity: params.Quantity, Scale: params.Scale, Unit: params.Unit,
 		},
 		params.Position)
 }
@@ -57,7 +58,7 @@ func (a *Admin) GetReward(ctx context.Context, workspaceID, calendarID string, i
 		return user.RewardModel{}, err
 	}
 	return user.RewardModel{
-		Key: value.Key, Type: value.Type, Quantity: value.Quantity, Unit: value.Unit,
+		Key: value.Key, Type: value.Type, Quantity: value.Quantity, Scale: value.Scale, Unit: value.Unit,
 	}, nil
 }
 

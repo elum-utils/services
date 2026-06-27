@@ -115,6 +115,7 @@ type ProductItem struct {
 	ID           string  `json:"id"`
 	RewardType   string  `json:"reward_type"`
 	Quantity     int64   `json:"quantity"`
+	Scale        uint16  `json:"scale"`
 	DurationUnit *string `json:"duration_unit,omitempty"`
 	Type         *string `json:"type,omitempty"`
 	Title        string  `json:"title"`

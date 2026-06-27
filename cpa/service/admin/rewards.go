@@ -13,6 +13,7 @@ type UpsertRewardParams struct {
 	Key         string
 	Type        string
 	Quantity    int64
+	Scale       uint16
 	Unit        *string
 }
 
@@ -29,6 +30,7 @@ func (a *Admin) UpsertReward(ctx context.Context, params UpsertRewardParams) err
 		Key:         params.Key,
 		Type:        rewardType,
 		Quantity:    params.Quantity,
+		Scale:       params.Scale,
 		Unit:        params.Unit,
 	})
 }

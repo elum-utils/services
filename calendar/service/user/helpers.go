@@ -19,7 +19,7 @@ func mapCalendar(value repository.Calendar) CalendarModel {
 		item := StepModel{ID: step.ID, Position: step.Position, Rewards: make([]RewardModel, 0, len(step.Rewards))}
 		for _, reward := range step.Rewards {
 			item.Rewards = append(item.Rewards, RewardModel{
-				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Unit: reward.Unit,
+				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 			})
 		}
 		result.Steps = append(result.Steps, item)
@@ -45,7 +45,7 @@ func mapRecord(value repository.RecordResult) RecordResult {
 	}
 	for _, reward := range value.Rewards {
 		result.Rewards = append(result.Rewards, RewardModel{
-			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Unit: reward.Unit,
+			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 		})
 	}
 	return result

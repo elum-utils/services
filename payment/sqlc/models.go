@@ -1441,6 +1441,7 @@ type PaymentFulfillmentItem struct {
 	ItemID        string                                 `json:"item_id"`
 	RewardType    PaymentFulfillmentItemRewardType       `json:"reward_type"`
 	Quantity      int64                                  `json:"quantity"`
+	Scale         uint16                                 `json:"scale"`
 	DurationUnit  NullPaymentFulfillmentItemDurationUnit `json:"duration_unit"`
 	CreatedAt     time.Time                              `json:"created_at"`
 }
@@ -1503,6 +1504,7 @@ type PaymentOrderItem struct {
 	ItemID       string                           `json:"item_id"`
 	RewardType   PaymentOrderItemRewardType       `json:"reward_type"`
 	Quantity     int64                            `json:"quantity"`
+	Scale        uint16                           `json:"scale"`
 	DurationUnit NullPaymentOrderItemDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                        `json:"created_at"`
 }
@@ -1614,6 +1616,7 @@ type PaymentProductCache struct {
 	PriceStartsAt        time.Time                           `json:"price_starts_at"`
 	PriceEndsAt          time.Time                           `json:"price_ends_at"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -1642,6 +1645,7 @@ type PaymentProductItem struct {
 	ItemID       string                             `json:"item_id"`
 	RewardType   PaymentProductItemRewardType       `json:"reward_type"`
 	Quantity     int64                              `json:"quantity"`
+	Scale        uint16                             `json:"scale"`
 	DurationUnit NullPaymentProductItemDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                          `json:"created_at"`
 	UpdatedAt    time.Time                          `json:"updated_at"`

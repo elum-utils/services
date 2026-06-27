@@ -25,7 +25,7 @@ func mapDefinition(row calendarsqlc.CalendarDefinition) Calendar {
 func appendStep(steps []Step, stepID sql.NullInt64, position sql.NullInt32,
 	rewardID sql.NullInt64, rewardKey sql.NullString,
 	rewardType calendarsqlc.NullCalendarRewardRewardType, rewardCount sql.NullInt64,
-	rewardUnit calendarsqlc.NullCalendarRewardDurationUnit,
+	rewardScale sql.NullInt16, rewardUnit calendarsqlc.NullCalendarRewardDurationUnit,
 ) []Step {
 	if !stepID.Valid {
 		return steps
@@ -39,10 +39,18 @@ func appendStep(steps []Step, stepID sql.NullInt64, position sql.NullInt32,
 		index := len(steps) - 1
 		steps[index].Rewards = append(steps[index].Rewards, Reward{
 			Key: rewardKey.String, Type: string(rewardType.CalendarRewardRewardType),
-			Quantity: rewardCount.Int64, Unit: calendarDurationUnitPtr(rewardUnit),
+			Quantity: rewardCount.Int64, Scale: uint16FromNull(rewardScale),
+			Unit: calendarDurationUnitPtr(rewardUnit),
 		})
 	}
 	return steps
+}
+
+func uint16FromNull(value sql.NullInt16) uint16 {
+	if !value.Valid || value.Int16 < 0 {
+		return 0
+	}
+	return uint16(value.Int16)
 }
 
 func calendarDurationUnitPtr(value calendarsqlc.NullCalendarRewardDurationUnit) *string {

@@ -46,6 +46,53 @@ FROM task_definition
 WHERE workspace_id = ? AND id = ?
 LIMIT 1;
 
+-- name: AdminGetTaskByKey :one
+SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
+       start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
+FROM task_definition
+WHERE workspace_id = ? AND `key` = ? AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: AdminListGroups :many
+SELECT workspace_id, `key`, position, is_active, deleted_at, created_at, updated_at
+FROM task_group
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY position, `key`;
+
+-- name: AdminListGroupLocalizations :many
+SELECT workspace_id, group_key, locale, title, description, created_at, updated_at
+FROM task_group_localization
+WHERE workspace_id = ?
+ORDER BY group_key, locale;
+
+-- name: AdminListSequences :many
+SELECT workspace_id, `key`, position, is_active, deleted_at, created_at, updated_at
+FROM task_sequence
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY position, `key`;
+
+-- name: AdminListTaskLocalizations :many
+SELECT workspace_id, task_id, locale, title, description, created_at, updated_at
+FROM task_localization
+WHERE workspace_id = ?
+ORDER BY task_id, locale;
+
+-- name: AdminListAllRewards :many
+SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position, created_at, updated_at
+FROM task_reward
+WHERE workspace_id = ?
+ORDER BY task_id, position, id;
+
+-- name: AdminListPartnerRewardRules :many
+SELECT workspace_id, provider, group_key, external_type, reward_key,
+       reward_type, quantity, scale, duration_unit, position, is_enabled, created_at, updated_at
+FROM task_partner_reward_rule
+WHERE workspace_id = ?
+ORDER BY group_key, provider, external_type, position, reward_key;
+
 -- name: AdminListTasks :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
        task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
@@ -68,6 +115,16 @@ WHERE workspace_id = ? AND group_key = ? AND deleted_at IS NULL
 ORDER BY position, id
 LIMIT ? OFFSET ?;
 
+-- name: ExportListTasks :many
+SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
+       start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
+FROM task_definition
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY group_key, position, id;
+
 -- name: AdminUpsertTaskLocalization :exec
 INSERT INTO task_localization (workspace_id, task_id, locale, title, description)
 VALUES (?, ?, ?, ?, ?)
@@ -75,12 +132,13 @@ ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description)
 
 -- name: AdminUpsertReward :exec
 INSERT INTO task_reward (
-    workspace_id, task_id, reward_key, reward_type, quantity, duration_unit, position
+    workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position);
 
@@ -269,13 +327,13 @@ WHERE workspace_id = ?
   AND external_event_key = ?;
 
 -- name: ListRewards :many
-SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, duration_unit, position, created_at, updated_at
+SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position, created_at, updated_at
 FROM task_reward
 WHERE workspace_id = ? AND task_id = ?
 ORDER BY position, id;
 
 -- name: ListRewardsCatalog :many
-SELECT reward_key, reward_type, quantity, duration_unit
+SELECT reward_key, reward_type, quantity, scale, duration_unit
 FROM task_reward
 WHERE workspace_id = ? AND task_id = ?
 ORDER BY position, id;
@@ -284,7 +342,7 @@ ORDER BY position, id;
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.id = ?
@@ -294,7 +352,7 @@ ORDER BY r.position, r.id;
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.`key` = ?
@@ -323,7 +381,7 @@ SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_po
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit, r.position AS reward_position
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit, r.position AS reward_position
 FROM task_definition t
 LEFT JOIN task_progress p
   ON p.workspace_id = t.workspace_id AND p.task_id = t.id
@@ -341,7 +399,7 @@ SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_po
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit, r.position AS reward_position
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit, r.position AS reward_position
 FROM task_definition t
 LEFT JOIN task_progress p
   ON p.workspace_id = t.workspace_id AND p.task_id = t.id
@@ -358,7 +416,7 @@ SELECT t.id, t.`key`, t.group_key,
        t.payload, t.target, t.image_url, t.start_at, t.end_at,
        l.locale, l.title, l.description,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t FORCE INDEX (task_definition_visible_user_list_idx)
 LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id = t.id AND l.locale = ?
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
@@ -750,11 +808,12 @@ ORDER BY provider, group_key, platform;
 -- name: AdminUpsertPartnerRewardRule :exec
 INSERT INTO task_partner_reward_rule (
     workspace_id, provider, group_key, external_type, reward_key,
-    reward_type, quantity, duration_unit, position, is_enabled
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    reward_type, quantity, scale, duration_unit, position, is_enabled
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position),
     is_enabled = VALUES(is_enabled);
@@ -765,7 +824,7 @@ WHERE workspace_id = ? AND provider = ? AND group_key = ? AND external_type = ? 
 
 -- name: ListPartnerRewardRules :many
 SELECT workspace_id, provider, group_key, external_type, reward_key,
-       reward_type, quantity, duration_unit, position, is_enabled, created_at, updated_at
+       reward_type, quantity, scale, duration_unit, position, is_enabled, created_at, updated_at
 FROM task_partner_reward_rule
 WHERE workspace_id = ?
   AND provider = ?

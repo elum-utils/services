@@ -1049,6 +1049,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit,
     created_at
 FROM payment_fulfillment_item
@@ -1088,6 +1089,7 @@ func (q *Queries) AdminListFulfillmentItems(ctx context.Context, arg AdminListFu
 			&i.ItemID,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.CreatedAt,
 		); err != nil {
@@ -2023,6 +2025,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit,
     created_at,
     updated_at
@@ -2068,6 +2071,7 @@ func (q *Queries) AdminListProductItems(ctx context.Context, arg AdminListProduc
 			&i.ItemID,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -3279,9 +3283,10 @@ INSERT INTO payment_fulfillment_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFulfillmentItemParams struct {
@@ -3290,6 +3295,7 @@ type CreateFulfillmentItemParams struct {
 	ItemID        string                                 `json:"item_id"`
 	RewardType    PaymentFulfillmentItemRewardType       `json:"reward_type"`
 	Quantity      int64                                  `json:"quantity"`
+	Scale         uint16                                 `json:"scale"`
 	DurationUnit  NullPaymentFulfillmentItemDurationUnit `json:"duration_unit"`
 }
 
@@ -3300,6 +3306,7 @@ func (q *Queries) CreateFulfillmentItem(ctx context.Context, arg CreateFulfillme
 		arg.ItemID,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 	)
 	return err
@@ -4469,6 +4476,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 FROM payment_order_item
 WHERE order_id = ?
@@ -4479,6 +4487,7 @@ type GetFulfillmentItemsForOrderRow struct {
 	ItemID       string                           `json:"item_id"`
 	RewardType   PaymentOrderItemRewardType       `json:"reward_type"`
 	Quantity     int64                            `json:"quantity"`
+	Scale        uint16                           `json:"scale"`
 	DurationUnit NullPaymentOrderItemDurationUnit `json:"duration_unit"`
 }
 
@@ -4495,6 +4504,7 @@ func (q *Queries) GetFulfillmentItemsForOrder(ctx context.Context, orderID uint6
 			&i.ItemID,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -4515,6 +4525,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 FROM payment_product_item
 WHERE workspace_id = ?
@@ -4531,6 +4542,7 @@ type GetFulfillmentItemsForProductRow struct {
 	ItemID       string                             `json:"item_id"`
 	RewardType   PaymentProductItemRewardType       `json:"reward_type"`
 	Quantity     int64                              `json:"quantity"`
+	Scale        uint16                             `json:"scale"`
 	DurationUnit NullPaymentProductItemDurationUnit `json:"duration_unit"`
 }
 
@@ -4547,6 +4559,7 @@ func (q *Queries) GetFulfillmentItemsForProduct(ctx context.Context, arg GetFulf
 			&i.ItemID,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -4909,6 +4922,7 @@ SELECT
     pc.user_interval_count,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -4966,6 +4980,7 @@ type GetProductPreviewRowsRow struct {
 	UserIntervalCount    int32                               `json:"user_interval_count"`
 	ItemID               string                              `json:"item_id"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -5004,6 +5019,7 @@ func (q *Queries) GetProductPreviewRows(ctx context.Context, arg GetProductPrevi
 			&i.UserIntervalCount,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -5046,6 +5062,7 @@ SELECT
     p.user_interval_count,
     pi.item_id,
     pi.quantity AS item_quantity,
+    pi.scale AS item_scale,
     pi.reward_type,
     pi.duration_unit,
     i.item_type,
@@ -5113,6 +5130,7 @@ type GetProductPreviewRowsRawRow struct {
 	UserIntervalCount    int32                              `json:"user_interval_count"`
 	ItemID               sql.NullString                     `json:"item_id"`
 	ItemQuantity         sql.NullInt64                      `json:"item_quantity"`
+	ItemScale            sql.NullInt16                      `json:"item_scale"`
 	RewardType           NullPaymentProductItemRewardType   `json:"reward_type"`
 	DurationUnit         NullPaymentProductItemDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                     `json:"item_type"`
@@ -5158,6 +5176,7 @@ func (q *Queries) GetProductPreviewRowsRaw(ctx context.Context, arg GetProductPr
 			&i.UserIntervalCount,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -5225,6 +5244,7 @@ SELECT
     pc.discount_amount_minor,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -5290,6 +5310,7 @@ type GetProductRowsRow struct {
 	DiscountAmountMinor  uint64                              `json:"discount_amount_minor"`
 	ItemID               string                              `json:"item_id"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -5338,6 +5359,7 @@ func (q *Queries) GetProductRows(ctx context.Context, arg GetProductRowsParams) 
 			&i.DiscountAmountMinor,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -5384,6 +5406,7 @@ SELECT
     pp.discount_amount_minor,
     pi.item_id,
     pi.quantity AS item_quantity,
+    pi.scale AS item_scale,
     pi.reward_type,
     pi.duration_unit,
     i.item_type,
@@ -5465,6 +5488,7 @@ type GetProductRowsRawRow struct {
 	DiscountAmountMinor  uint64                             `json:"discount_amount_minor"`
 	ItemID               sql.NullString                     `json:"item_id"`
 	ItemQuantity         sql.NullInt64                      `json:"item_quantity"`
+	ItemScale            sql.NullInt16                      `json:"item_scale"`
 	RewardType           NullPaymentProductItemRewardType   `json:"reward_type"`
 	DurationUnit         NullPaymentProductItemDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                     `json:"item_type"`
@@ -5515,6 +5539,7 @@ func (q *Queries) GetProductRowsRaw(ctx context.Context, arg GetProductRowsRawPa
 			&i.DiscountAmountMinor,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -6169,6 +6194,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -6228,6 +6254,7 @@ type ListProductCatalogCacheRowsRow struct {
 	PriceEndsAt          time.Time                           `json:"price_ends_at"`
 	ItemID               string                              `json:"item_id"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -6283,6 +6310,7 @@ func (q *Queries) ListProductCatalogCacheRows(ctx context.Context, arg ListProdu
 			&i.PriceEndsAt,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -6404,6 +6432,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -6457,6 +6486,7 @@ type ListProductPreviewCatalogCacheRowsRow struct {
 	PriceEndsAt          time.Time                           `json:"price_ends_at"`
 	ItemID               string                              `json:"item_id"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -6503,6 +6533,7 @@ func (q *Queries) ListProductPreviewCatalogCacheRows(ctx context.Context, arg Li
 			&i.PriceEndsAt,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -6761,6 +6792,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -6821,6 +6853,7 @@ type ListProductsCatalogCacheRowsRow struct {
 	PriceEndsAt          time.Time                           `json:"price_ends_at"`
 	ItemID               string                              `json:"item_id"`
 	ItemQuantity         int64                               `json:"item_quantity"`
+	ItemScale            uint16                              `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -6872,6 +6905,7 @@ func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProd
 			&i.PriceEndsAt,
 			&i.ItemID,
 			&i.ItemQuantity,
+			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
 			&i.ItemType,
@@ -7312,6 +7346,7 @@ INSERT INTO payment_product_cache (
     price_starts_at,
     price_ends_at,
     item_quantity,
+    item_scale,
     reward_type,
     duration_unit,
     item_type,
@@ -7354,6 +7389,7 @@ SELECT
     pp.starts_at AS price_starts_at,
     pp.ends_at AS price_ends_at,
     COALESCE(pi.quantity, 0) AS item_quantity,
+    COALESCE(pi.scale, 0) AS item_scale,
     COALESCE(pi.reward_type, 'quantity') AS reward_type,
     pi.duration_unit,
     i.item_type,
@@ -7447,6 +7483,7 @@ INSERT INTO payment_product_cache (
     price_starts_at,
     price_ends_at,
     item_quantity,
+    item_scale,
     reward_type,
     duration_unit,
     item_type,
@@ -7489,6 +7526,7 @@ SELECT
     pp.starts_at AS price_starts_at,
     pp.ends_at AS price_ends_at,
     COALESCE(pi.quantity, 0) AS item_quantity,
+    COALESCE(pi.scale, 0) AS item_scale,
     COALESCE(pi.reward_type, 'quantity') AS reward_type,
     pi.duration_unit,
     i.item_type,
@@ -7802,6 +7840,7 @@ INSERT INTO payment_order_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
 SELECT
@@ -7810,6 +7849,7 @@ SELECT
     pi.item_id,
     pi.reward_type,
     pi.quantity * ?,
+    pi.scale,
     pi.duration_unit
 FROM payment_product_item pi
 WHERE pi.workspace_id = ?
@@ -8474,12 +8514,14 @@ INSERT INTO payment_product_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     updated_at = NOW()
 `
@@ -8490,6 +8532,7 @@ type UpsertProductItemParams struct {
 	ItemID       string                             `json:"item_id"`
 	RewardType   PaymentProductItemRewardType       `json:"reward_type"`
 	Quantity     int64                              `json:"quantity"`
+	Scale        uint16                             `json:"scale"`
 	DurationUnit NullPaymentProductItemDurationUnit `json:"duration_unit"`
 }
 
@@ -8500,6 +8543,7 @@ func (q *Queries) UpsertProductItem(ctx context.Context, arg UpsertProductItemPa
 		arg.ItemID,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 	)
 	return err

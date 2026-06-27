@@ -13,6 +13,7 @@ type SaveRewardParams struct {
 	Key         string
 	Type        string
 	Quantity    int64
+	Scale       uint16
 	Unit        *string
 }
 
@@ -24,7 +25,7 @@ func (a *Admin) UpsertReward(ctx context.Context, params SaveRewardParams) error
 		return err
 	}
 	return a.repository.UpsertReward(mergedCtx, params.WorkspaceID, params.PromoID, repository.Reward{
-		Key: params.Key, Type: rewardType, Quantity: params.Quantity, Unit: params.Unit,
+		Key: params.Key, Type: rewardType, Quantity: params.Quantity, Scale: params.Scale, Unit: params.Unit,
 	})
 }
 
@@ -35,7 +36,7 @@ func (a *Admin) GetReward(ctx context.Context, workspaceID string, promoID uint6
 	if err != nil {
 		return user.RewardModel{}, err
 	}
-	return user.RewardModel{Key: value.Key, Type: value.Type, Quantity: value.Quantity, Unit: value.Unit}, nil
+	return user.RewardModel{Key: value.Key, Type: value.Type, Quantity: value.Quantity, Scale: value.Scale, Unit: value.Unit}, nil
 }
 
 func (a *Admin) ListRewards(ctx context.Context, workspaceID string, promoID uint64) ([]user.RewardModel, error) {
@@ -48,7 +49,7 @@ func (a *Admin) ListRewards(ctx context.Context, workspaceID string, promoID uin
 	result := make([]user.RewardModel, 0, len(values))
 	for _, value := range values {
 		result = append(result, user.RewardModel{
-			Key: value.Key, Type: value.Type, Quantity: value.Quantity, Unit: value.Unit,
+			Key: value.Key, Type: value.Type, Quantity: value.Quantity, Scale: value.Scale, Unit: value.Unit,
 		})
 	}
 	return result, nil

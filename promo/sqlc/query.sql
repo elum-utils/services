@@ -61,6 +61,7 @@ SELECT
     r.reward_key,
     r.reward_type,
     r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
     r.duration_unit
 FROM promo_offer o
 LEFT JOIN promo_localization l
@@ -107,12 +108,13 @@ WHERE workspace_id = ? AND promo_id = ? AND locale = ?;
 
 -- name: AdminUpsertReward :exec
 INSERT INTO promo_reward (
-    workspace_id, promo_id, reward_key, reward_type, quantity, duration_unit
+    workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit);
 
 -- name: AdminGetReward :one

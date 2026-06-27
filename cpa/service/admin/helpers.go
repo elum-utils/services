@@ -33,7 +33,10 @@ func mapOffer(value repository.Offer, localizations []repository.Localization, r
 	for _, reward := range rewards {
 		result.Rewards = append(result.Rewards, user.RewardModel{
 			Key:      reward.Key,
+			Type:     reward.Type,
 			Quantity: reward.Quantity,
+			Scale:    reward.Scale,
+			Unit:     reward.Unit,
 		})
 	}
 	return result

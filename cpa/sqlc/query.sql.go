@@ -548,8 +548,9 @@ SELECT
     o.id AS cpa_id,
     r.reward_key,
     r.reward_type,
-    r.quantity AS reward_quantity
-    , r.duration_unit
+    r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
+    r.duration_unit
 FROM (
     SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
     FROM cpa_offer
@@ -575,6 +576,7 @@ type AdminListOfferBundleRewardsRow struct {
 	RewardKey      string                    `json:"reward_key"`
 	RewardType     CpaRewardRewardType       `json:"reward_type"`
 	RewardQuantity int64                     `json:"reward_quantity"`
+	RewardScale    uint16                    `json:"reward_scale"`
 	DurationUnit   NullCpaRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -593,6 +595,7 @@ func (q *Queries) AdminListOfferBundleRewards(ctx context.Context, arg AdminList
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -827,11 +830,12 @@ func (q *Queries) AdminUpsertOffer(ctx context.Context, arg AdminUpsertOfferPara
 
 const adminUpsertReward = `-- name: AdminUpsertReward :exec
 INSERT INTO cpa_reward (
-    workspace_id, cpa_id, reward_key, reward_type, quantity, duration_unit
-) VALUES (?, ?, ?, ?, ?, ?)
+    workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit)
 `
 
@@ -841,6 +845,7 @@ type AdminUpsertRewardParams struct {
 	RewardKey    string                    `json:"reward_key"`
 	RewardType   CpaRewardRewardType       `json:"reward_type"`
 	Quantity     int64                     `json:"quantity"`
+	Scale        uint16                    `json:"scale"`
 	DurationUnit NullCpaRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -851,6 +856,7 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 		arg.RewardKey,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 	)
 	return err
@@ -1249,6 +1255,7 @@ SELECT
     r.reward_key,
     r.reward_type,
     r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
     r.duration_unit
 FROM cpa_offer o
 LEFT JOIN cpa_localization l
@@ -1307,6 +1314,7 @@ type ListActiveOfferBundlesRow struct {
 	RewardKey             sql.NullString            `json:"reward_key"`
 	RewardType            NullCpaRewardRewardType   `json:"reward_type"`
 	RewardQuantity        sql.NullInt64             `json:"reward_quantity"`
+	RewardScale           sql.NullInt16             `json:"reward_scale"`
 	DurationUnit          NullCpaRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -1352,6 +1360,7 @@ func (q *Queries) ListActiveOfferBundles(ctx context.Context, arg ListActiveOffe
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -1459,7 +1468,7 @@ func (q *Queries) ListLocalizations(ctx context.Context, arg ListLocalizationsPa
 }
 
 const listRewards = `-- name: ListRewards :many
-SELECT id, workspace_id, cpa_id, reward_key, reward_type, quantity, duration_unit, created_at, updated_at
+SELECT id, workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM cpa_reward
 WHERE workspace_id = ? AND cpa_id = ?
 ORDER BY id
@@ -1486,6 +1495,7 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Cpa
 			&i.RewardKey,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.CreatedAt,
 			&i.UpdatedAt,

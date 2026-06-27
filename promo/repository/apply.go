@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	json "github.com/goccy/go-json"
 	"time"
 
@@ -115,11 +116,19 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 				Key:      row.RewardKey.String,
 				Type:     string(row.RewardType.PromoRewardRewardType),
 				Quantity: row.RewardQuantity.Int64,
+				Scale:    uint16FromNull(row.RewardScale),
 				Unit:     promoDurationUnitPtr(row.DurationUnit),
 			})
 		}
 	}
 	return result
+}
+
+func uint16FromNull(value sql.NullInt16) uint16 {
+	if !value.Valid || value.Int16 < 0 {
+		return 0
+	}
+	return uint16(value.Int16)
 }
 
 func mapRedemption(row promosqlc.PromoRedemption) Redemption {

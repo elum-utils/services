@@ -145,6 +145,7 @@ type ProductLimitRule struct {
 type ProductItem struct {
 	ID           string
 	Quantity     int64
+	Scale        uint16
 	RewardType   string
 	DurationUnit *string
 	Type         sql.NullString
@@ -492,6 +493,7 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
+			Scale:        row.ItemScale,
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,
@@ -575,6 +577,7 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
+			Scale:        row.ItemScale,
 			RewardType:   string(row.RewardType),
 			DurationUnit: listProductsDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,
@@ -718,6 +721,7 @@ func mapProductPreviewCatalogRows(rows []sqlc.ListProductPreviewCatalogCacheRows
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
+			Scale:        row.ItemScale,
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,

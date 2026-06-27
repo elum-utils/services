@@ -13,7 +13,7 @@ func TestRewardPayloadJSON(t *testing.T) {
 			AppID:       1, PlatformID: 2, PlatformUserID: "3",
 		},
 		Rewards: []Reward{
-			{Key: "coin", Type: "quantity", Quantity: 10},
+			{Key: "coin", Type: "quantity", Quantity: 10, Scale: 2},
 			{Key: "premium", Type: "duration", Quantity: 1, Unit: &day},
 		},
 	}
@@ -32,6 +32,7 @@ func TestRewardPayloadJSON(t *testing.T) {
 		decoded.PlatformID != value.PlatformID ||
 		decoded.PlatformUserID != value.PlatformUserID ||
 		len(decoded.Rewards) != 2 ||
+		decoded.Rewards[0].Scale != 2 ||
 		decoded.Rewards[1].Unit == nil ||
 		*decoded.Rewards[1].Unit != day {
 		t.Fatalf("unexpected decoded payload: %+v", decoded)

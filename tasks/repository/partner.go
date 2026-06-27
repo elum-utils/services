@@ -96,6 +96,7 @@ func (r *Repository) SavePartnerRewardRule(ctx context.Context, params SavePartn
 			RewardKey:    params.Reward.Key,
 			RewardType:   tasksqlc.TaskPartnerRewardRuleRewardType(rewardType),
 			Quantity:     params.Reward.Quantity,
+			Scale:        params.Reward.Scale,
 			DurationUnit: tasksqlc.NullTaskPartnerRewardRuleDurationUnit{
 				TaskPartnerRewardRuleDurationUnit: tasksqlc.TaskPartnerRewardRuleDurationUnit(taskStringValue(params.Reward.Unit)),
 				Valid:                             params.Reward.Unit != nil,
@@ -137,7 +138,8 @@ func (r *Repository) PartnerRewards(ctx context.Context, workspaceID, provider, 
 		seen[row.RewardKey] = struct{}{}
 		rewards = append(rewards, Reward{
 			Key: row.RewardKey, Type: string(row.RewardType), Quantity: row.Quantity,
-			Unit: nullPartnerDurationUnit(row.DurationUnit),
+			Scale: row.Scale,
+			Unit:  nullPartnerDurationUnit(row.DurationUnit),
 		})
 	}
 	return rewards, nil

@@ -84,12 +84,13 @@ WHERE workspace_id = ? AND calendar_id = ? AND id = ?;
 -- name: AdminUpsertReward :execlastid
 INSERT INTO calendar_reward (
     workspace_id, calendar_id, step_id, item_key,
-    reward_type, item_count, duration_unit, position
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    reward_type, item_count, scale, duration_unit, position
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     reward_type = VALUES(reward_type),
     item_count = VALUES(item_count),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position);
 
@@ -105,6 +106,7 @@ SET step_id = ?,
     item_key = ?,
     reward_type = ?,
     item_count = ?,
+    scale = ?,
     duration_unit = ?,
     position = ?
 WHERE workspace_id = ? AND calendar_id = ? AND id = ?;
@@ -141,6 +143,7 @@ SELECT
     r.item_key AS reward_item_key,
     r.reward_type AS reward_type,
     r.item_count AS reward_item_count,
+    r.scale AS reward_scale,
     r.duration_unit AS reward_duration_unit,
     r.position AS reward_position
 FROM calendar_definition c
@@ -231,6 +234,7 @@ SELECT
     r.item_key AS reward_item_key,
     r.reward_type AS reward_type,
     r.item_count AS reward_item_count,
+    r.scale AS reward_scale,
     r.duration_unit AS reward_duration_unit,
     r.position AS reward_position
 FROM calendar_definition c

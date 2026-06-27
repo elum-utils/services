@@ -113,7 +113,7 @@ func mapPromo(value repository.Promo, localizations []repository.Localization, r
 	}
 	for _, reward := range rewards {
 		result.Rewards = append(result.Rewards, user.RewardModel{
-			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Unit: reward.Unit,
+			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 		})
 	}
 	return result

@@ -50,7 +50,7 @@ func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale s
 		for _, row := range rows {
 			value.Steps = appendStep(value.Steps, row.StepID, row.StepPosition,
 				row.RewardID, row.RewardItemKey, row.RewardType,
-				row.RewardItemCount, row.RewardDurationUnit)
+				row.RewardItemCount, row.RewardScale, row.RewardDurationUnit)
 		}
 		return value, nil
 	})

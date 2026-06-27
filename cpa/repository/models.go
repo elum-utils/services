@@ -57,6 +57,7 @@ type Reward struct {
 	Key         string
 	Type        string
 	Quantity    int64
+	Scale       uint16
 	Unit        *string
 }
 

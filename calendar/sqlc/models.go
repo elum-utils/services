@@ -355,6 +355,7 @@ type CalendarReward struct {
 	ItemKey      string                         `json:"item_key"`
 	RewardType   CalendarRewardRewardType       `json:"reward_type"`
 	ItemCount    int64                          `json:"item_count"`
+	Scale        uint16                         `json:"scale"`
 	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
 	Position     uint32                         `json:"position"`
 	CreatedAt    time.Time                      `json:"created_at"`

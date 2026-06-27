@@ -75,6 +75,7 @@ type ProductItemUpsertParams struct {
 	ItemID       string
 	RewardType   string
 	Quantity     int64
+	Scale        uint16
 	DurationUnit *string
 }
 
@@ -390,6 +391,7 @@ func (r *PaymentRepository) UpsertProductItem(ctx context.Context, params Produc
 			ItemID:      params.ItemID,
 			RewardType:  paymentsqlc.PaymentProductItemRewardType(rewardType),
 			Quantity:    params.Quantity,
+			Scale:       params.Scale,
 			DurationUnit: paymentsqlc.NullPaymentProductItemDurationUnit{
 				PaymentProductItemDurationUnit: paymentsqlc.PaymentProductItemDurationUnit(pointerString(params.DurationUnit)),
 				Valid:                          params.DurationUnit != nil,

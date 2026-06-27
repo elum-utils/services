@@ -94,6 +94,7 @@ func mapRecordBundle(rows []calendarsqlc.GetRecordBundleForUpdateRow) (Calendar,
 			item.RewardItemKey,
 			item.RewardType,
 			item.RewardItemCount,
+			item.RewardScale,
 			item.RewardDurationUnit,
 		)
 	}

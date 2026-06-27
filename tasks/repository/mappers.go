@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"database/sql"
+
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
@@ -29,7 +31,8 @@ func mapClaimTaskByID(rows []tasksqlc.GetClaimBundleByIDForUpdateRow) Task {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
 				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
-				Quantity: item.RewardQuantity.Int64, Unit: taskDurationUnitPtr(item.DurationUnit),
+				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
+				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
 		}
 	}
@@ -60,7 +63,8 @@ func mapClaimTaskByKey(rows []tasksqlc.GetClaimBundleByKeyForUpdateRow) Task {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
 				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
-				Quantity: item.RewardQuantity.Int64, Unit: taskDurationUnitPtr(item.DurationUnit),
+				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
+				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
 		}
 	}
@@ -99,7 +103,8 @@ func mapActiveBundles(rows []tasksqlc.ListActiveTaskBundlesRow) []Task {
 		if row.RewardID.Valid {
 			result[index].Rewards = append(result[index].Rewards, Reward{
 				Key: row.RewardKey.String, Type: string(row.RewardType.TaskRewardRewardType),
-				Quantity: row.RewardQuantity.Int64, Unit: taskDurationUnitPtr(row.DurationUnit),
+				Quantity: row.RewardQuantity.Int64, Scale: uint16FromNull(row.RewardScale),
+				Unit: taskDurationUnitPtr(row.DurationUnit),
 			})
 		}
 	}
@@ -158,7 +163,8 @@ func mapClaimCatalogTaskByID(rows []tasksqlc.GetClaimCatalogByIDRow) Task {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
 				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
-				Quantity: item.RewardQuantity.Int64, Unit: taskDurationUnitPtr(item.DurationUnit),
+				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
+				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
 		}
 	}
@@ -180,7 +186,8 @@ func mapClaimCatalogTaskByKey(rows []tasksqlc.GetClaimCatalogByKeyRow) Task {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
 				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
-				Quantity: item.RewardQuantity.Int64, Unit: taskDurationUnitPtr(item.DurationUnit),
+				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
+				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
 		}
 	}
@@ -193,6 +200,13 @@ func taskDurationUnitPtr(value tasksqlc.NullTaskRewardDurationUnit) *string {
 	}
 	unit := string(value.TaskRewardDurationUnit)
 	return &unit
+}
+
+func uint16FromNull(value sql.NullInt16) uint16 {
+	if !value.Valid || value.Int16 < 0 {
+		return 0
+	}
+	return uint16(value.Int16)
 }
 
 func taskStringValue(value *string) string {

@@ -266,12 +266,14 @@ INSERT INTO payment_product_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     updated_at = NOW();
 
@@ -599,6 +601,7 @@ INSERT INTO payment_product_cache (
     price_starts_at,
     price_ends_at,
     item_quantity,
+    item_scale,
     reward_type,
     duration_unit,
     item_type,
@@ -641,6 +644,7 @@ SELECT
     pp.starts_at AS price_starts_at,
     pp.ends_at AS price_ends_at,
     COALESCE(pi.quantity, 0) AS item_quantity,
+    COALESCE(pi.scale, 0) AS item_scale,
     COALESCE(pi.reward_type, 'quantity') AS reward_type,
     pi.duration_unit,
     i.item_type,
@@ -721,6 +725,7 @@ INSERT INTO payment_product_cache (
     price_starts_at,
     price_ends_at,
     item_quantity,
+    item_scale,
     reward_type,
     duration_unit,
     item_type,
@@ -763,6 +768,7 @@ SELECT
     pp.starts_at AS price_starts_at,
     pp.ends_at AS price_ends_at,
     COALESCE(pi.quantity, 0) AS item_quantity,
+    COALESCE(pi.scale, 0) AS item_scale,
     COALESCE(pi.reward_type, 'quantity') AS reward_type,
     pi.duration_unit,
     i.item_type,
@@ -835,6 +841,7 @@ SELECT
     pc.discount_amount_minor,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -900,6 +907,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -953,6 +961,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -1042,6 +1051,7 @@ SELECT
     pp.discount_amount_minor,
     pi.item_id,
     pi.quantity AS item_quantity,
+    pi.scale AS item_scale,
     pi.reward_type,
     pi.duration_unit,
     i.item_type,
@@ -1109,6 +1119,7 @@ SELECT
     pc.user_interval_count,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -1168,6 +1179,7 @@ SELECT
     pc.price_ends_at,
     pc.item_id,
     pc.item_quantity,
+    pc.item_scale,
     pc.reward_type,
     pc.duration_unit,
     pc.item_type,
@@ -1207,6 +1219,7 @@ SELECT
     p.user_interval_count,
     pi.item_id,
     pi.quantity AS item_quantity,
+    pi.scale AS item_scale,
     pi.reward_type,
     pi.duration_unit,
     i.item_type,
@@ -1522,6 +1535,7 @@ INSERT INTO payment_order_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
 SELECT
@@ -1530,6 +1544,7 @@ SELECT
     pi.item_id,
     pi.reward_type,
     pi.quantity * ?,
+    pi.scale,
     pi.duration_unit
 FROM payment_product_item pi
 WHERE pi.workspace_id = ?
@@ -2095,15 +2110,17 @@ INSERT INTO payment_fulfillment_item (
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetFulfillmentItemsForProduct :many
 SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 FROM payment_product_item
 WHERE workspace_id = ?
@@ -2115,6 +2132,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit
 FROM payment_order_item
 WHERE order_id = ?
@@ -2363,6 +2381,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit,
     created_at,
     updated_at
@@ -2775,6 +2794,7 @@ SELECT
     item_id,
     reward_type,
     quantity,
+    scale,
     duration_unit,
     created_at
 FROM payment_fulfillment_item

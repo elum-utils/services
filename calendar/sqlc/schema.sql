@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS calendar_reward (
     item_key VARCHAR(128) NOT NULL,
     reward_type ENUM('quantity', 'duration') NOT NULL DEFAULT 'quantity',
     item_count BIGINT NOT NULL,
+    scale SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     duration_unit ENUM('second', 'minute', 'hour', 'day', 'week', 'month', 'year') NULL,
     position INT UNSIGNED NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

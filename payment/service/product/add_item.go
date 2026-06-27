@@ -12,6 +12,7 @@ type AddItemParams struct {
 	ItemID       string
 	RewardType   string
 	Quantity     int64
+	Scale        uint16
 	DurationUnit *string
 }
 
@@ -26,6 +27,7 @@ func (a *Product) AddItem(ctx context.Context, params AddItemParams) error {
 		ItemID:       params.ItemID,
 		RewardType:   params.RewardType,
 		Quantity:     params.Quantity,
+		Scale:        params.Scale,
 		DurationUnit: params.DurationUnit,
 	})
 }

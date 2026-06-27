@@ -51,7 +51,8 @@ func (a *Admin) SavePartnerRewardRule(ctx context.Context, params SavePartnerRew
 	return a.repository.SavePartnerRewardRule(mergedCtx, repository.SavePartnerRewardRuleParams{
 		WorkspaceID: params.WorkspaceID, Provider: params.Provider, GroupKey: params.GroupKey,
 		ExternalType: params.ExternalType, Reward: repository.Reward{
-			Key: params.Reward.Key, Type: rewardType, Quantity: params.Reward.Quantity, Unit: params.Reward.Unit,
+			Key: params.Reward.Key, Type: rewardType, Quantity: params.Reward.Quantity,
+			Scale: params.Reward.Scale, Unit: params.Reward.Unit,
 		},
 		Position: params.Position, IsEnabled: params.IsEnabled,
 	})

@@ -140,6 +140,7 @@ type Reward struct {
 	Key      string  `json:"key"`
 	Type     string  `json:"type"`
 	Quantity int64   `json:"quantity"`
+	Scale    uint16  `json:"scale"`
 	Unit     *string `json:"unit,omitempty"`
 }
 

@@ -199,7 +199,7 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 }
 
 const adminGetReward = `-- name: AdminGetReward :one
-SELECT id, workspace_id, calendar_id, step_id, item_key, reward_type, item_count, duration_unit, position, created_at, updated_at
+SELECT id, workspace_id, calendar_id, step_id, item_key, reward_type, item_count, scale, duration_unit, position, created_at, updated_at
 FROM calendar_reward
 WHERE workspace_id = ? AND calendar_id = ? AND id = ?
 LIMIT 1
@@ -222,6 +222,7 @@ func (q *Queries) AdminGetReward(ctx context.Context, arg AdminGetRewardParams) 
 		&i.ItemKey,
 		&i.RewardType,
 		&i.ItemCount,
+		&i.Scale,
 		&i.DurationUnit,
 		&i.Position,
 		&i.CreatedAt,
@@ -575,6 +576,7 @@ SET step_id = ?,
     item_key = ?,
     reward_type = ?,
     item_count = ?,
+    scale = ?,
     duration_unit = ?,
     position = ?
 WHERE workspace_id = ? AND calendar_id = ? AND id = ?
@@ -585,6 +587,7 @@ type AdminUpdateRewardParams struct {
 	ItemKey      string                         `json:"item_key"`
 	RewardType   CalendarRewardRewardType       `json:"reward_type"`
 	ItemCount    int64                          `json:"item_count"`
+	Scale        uint16                         `json:"scale"`
 	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
 	Position     uint32                         `json:"position"`
 	WorkspaceID  string                         `json:"workspace_id"`
@@ -598,6 +601,7 @@ func (q *Queries) AdminUpdateReward(ctx context.Context, arg AdminUpdateRewardPa
 		arg.ItemKey,
 		arg.RewardType,
 		arg.ItemCount,
+		arg.Scale,
 		arg.DurationUnit,
 		arg.Position,
 		arg.WorkspaceID,
@@ -667,12 +671,13 @@ func (q *Queries) AdminUpsertLocalization(ctx context.Context, arg AdminUpsertLo
 const adminUpsertReward = `-- name: AdminUpsertReward :execlastid
 INSERT INTO calendar_reward (
     workspace_id, calendar_id, step_id, item_key,
-    reward_type, item_count, duration_unit, position
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    reward_type, item_count, scale, duration_unit, position
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     reward_type = VALUES(reward_type),
     item_count = VALUES(item_count),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position)
 `
@@ -684,6 +689,7 @@ type AdminUpsertRewardParams struct {
 	ItemKey      string                         `json:"item_key"`
 	RewardType   CalendarRewardRewardType       `json:"reward_type"`
 	ItemCount    int64                          `json:"item_count"`
+	Scale        uint16                         `json:"scale"`
 	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
 	Position     uint32                         `json:"position"`
 }
@@ -696,6 +702,7 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 		arg.ItemKey,
 		arg.RewardType,
 		arg.ItemCount,
+		arg.Scale,
 		arg.DurationUnit,
 		arg.Position,
 	)
@@ -792,6 +799,7 @@ SELECT
     r.item_key AS reward_item_key,
     r.reward_type AS reward_type,
     r.item_count AS reward_item_count,
+    r.scale AS reward_scale,
     r.duration_unit AS reward_duration_unit,
     r.position AS reward_position
 FROM calendar_definition c
@@ -845,6 +853,7 @@ type GetCalendarBundleRow struct {
 	RewardItemKey           sql.NullString                 `json:"reward_item_key"`
 	RewardType              NullCalendarRewardRewardType   `json:"reward_type"`
 	RewardItemCount         sql.NullInt64                  `json:"reward_item_count"`
+	RewardScale             sql.NullInt16                  `json:"reward_scale"`
 	RewardDurationUnit      NullCalendarRewardDurationUnit `json:"reward_duration_unit"`
 	RewardPosition          sql.NullInt32                  `json:"reward_position"`
 }
@@ -890,6 +899,7 @@ func (q *Queries) GetCalendarBundle(ctx context.Context, arg GetCalendarBundlePa
 			&i.RewardItemKey,
 			&i.RewardType,
 			&i.RewardItemCount,
+			&i.RewardScale,
 			&i.RewardDurationUnit,
 			&i.RewardPosition,
 		); err != nil {
@@ -1002,6 +1012,7 @@ SELECT
     r.item_key AS reward_item_key,
     r.reward_type AS reward_type,
     r.item_count AS reward_item_count,
+    r.scale AS reward_scale,
     r.duration_unit AS reward_duration_unit,
     r.position AS reward_position
 FROM calendar_definition c
@@ -1091,6 +1102,7 @@ type GetRecordBundleForUpdateRow struct {
 	RewardItemKey              sql.NullString                 `json:"reward_item_key"`
 	RewardType                 NullCalendarRewardRewardType   `json:"reward_type"`
 	RewardItemCount            sql.NullInt64                  `json:"reward_item_count"`
+	RewardScale                sql.NullInt16                  `json:"reward_scale"`
 	RewardDurationUnit         NullCalendarRewardDurationUnit `json:"reward_duration_unit"`
 	RewardPosition             sql.NullInt32                  `json:"reward_position"`
 }
@@ -1162,6 +1174,7 @@ func (q *Queries) GetRecordBundleForUpdate(ctx context.Context, arg GetRecordBun
 			&i.RewardItemKey,
 			&i.RewardType,
 			&i.RewardItemCount,
+			&i.RewardScale,
 			&i.RewardDurationUnit,
 			&i.RewardPosition,
 		); err != nil {

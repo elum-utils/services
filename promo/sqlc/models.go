@@ -156,6 +156,7 @@ type PromoReward struct {
 	RewardKey    string                      `json:"reward_key"`
 	RewardType   PromoRewardRewardType       `json:"reward_type"`
 	Quantity     int64                       `json:"quantity"`
+	Scale        uint16                      `json:"scale"`
 	DurationUnit NullPromoRewardDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                   `json:"created_at"`
 	UpdatedAt    time.Time                   `json:"updated_at"`

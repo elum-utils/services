@@ -615,6 +615,7 @@ type TaskPartnerRewardRule struct {
 	RewardKey    string                                `json:"reward_key"`
 	RewardType   TaskPartnerRewardRuleRewardType       `json:"reward_type"`
 	Quantity     int64                                 `json:"quantity"`
+	Scale        uint16                                `json:"scale"`
 	DurationUnit NullTaskPartnerRewardRuleDurationUnit `json:"duration_unit"`
 	Position     int32                                 `json:"position"`
 	IsEnabled    bool                                  `json:"is_enabled"`
@@ -712,6 +713,7 @@ type TaskReward struct {
 	RewardKey    string                     `json:"reward_key"`
 	RewardType   TaskRewardRewardType       `json:"reward_type"`
 	Quantity     int64                      `json:"quantity"`
+	Scale        uint16                     `json:"scale"`
 	DurationUnit NullTaskRewardDurationUnit `json:"duration_unit"`
 	Position     int32                      `json:"position"`
 	CreatedAt    time.Time                  `json:"created_at"`

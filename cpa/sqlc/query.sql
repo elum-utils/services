@@ -63,8 +63,9 @@ SELECT
     o.id AS cpa_id,
     r.reward_key,
     r.reward_type,
-    r.quantity AS reward_quantity
-    , r.duration_unit
+    r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
+    r.duration_unit
 FROM (
     SELECT *
     FROM cpa_offer
@@ -114,6 +115,7 @@ SELECT
     r.reward_key,
     r.reward_type,
     r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
     r.duration_unit
 FROM cpa_offer o
 LEFT JOIN cpa_localization l
@@ -166,11 +168,12 @@ WHERE workspace_id = ? AND cpa_id = ? AND locale = ?;
 
 -- name: AdminUpsertReward :exec
 INSERT INTO cpa_reward (
-    workspace_id, cpa_id, reward_key, reward_type, quantity, duration_unit
-) VALUES (?, ?, ?, ?, ?, ?)
+    workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit);
 
 -- name: ListRewards :many

@@ -333,6 +333,58 @@ func (q *Queries) AdminGetTask(ctx context.Context, arg AdminGetTaskParams) (Tas
 	return i, err
 }
 
+const adminGetTaskByKey = `-- name: AdminGetTaskByKey :one
+SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
+       start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
+FROM task_definition
+WHERE workspace_id = ? AND ` + "`" + `key` + "`" + ` = ? AND deleted_at IS NULL
+LIMIT 1
+`
+
+type AdminGetTaskByKeyParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Key         string `json:"key"`
+}
+
+func (q *Queries) AdminGetTaskByKey(ctx context.Context, arg AdminGetTaskByKeyParams) (TaskDefinition, error) {
+	row := q.queryRow(ctx, q.adminGetTaskByKeyStmt, adminGetTaskByKey, arg.WorkspaceID, arg.Key)
+	var i TaskDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.GroupKey,
+		&i.SequenceKey,
+		&i.SequencePosition,
+		&i.TaskKind,
+		&i.ActionKey,
+		&i.ActionKind,
+		&i.ClaimMode,
+		&i.TargetCount,
+		&i.ResetUnit,
+		&i.ResetEvery,
+		&i.Position,
+		&i.Payload,
+		&i.Target,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
+		&i.ImageUrl,
+		&i.IsVisible,
+		&i.IsActive,
+		&i.StartAt,
+		&i.EndAt,
+		&i.DeletedAt,
+		&i.BranchSortKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const adminGetTaskStats = `-- name: AdminGetTaskStats :one
 SELECT
     definitions.tasks_total,
@@ -444,6 +496,124 @@ func (q *Queries) AdminGetTaskStats(ctx context.Context, arg AdminGetTaskStatsPa
 	return i, err
 }
 
+const adminListAllRewards = `-- name: AdminListAllRewards :many
+SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position, created_at, updated_at
+FROM task_reward
+WHERE workspace_id = ?
+ORDER BY task_id, position, id
+`
+
+func (q *Queries) AdminListAllRewards(ctx context.Context, workspaceID string) ([]TaskReward, error) {
+	rows, err := q.query(ctx, q.adminListAllRewardsStmt, adminListAllRewards, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskReward
+	for rows.Next() {
+		var i TaskReward
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.TaskID,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.Quantity,
+			&i.Scale,
+			&i.DurationUnit,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListGroupLocalizations = `-- name: AdminListGroupLocalizations :many
+SELECT workspace_id, group_key, locale, title, description, created_at, updated_at
+FROM task_group_localization
+WHERE workspace_id = ?
+ORDER BY group_key, locale
+`
+
+func (q *Queries) AdminListGroupLocalizations(ctx context.Context, workspaceID string) ([]TaskGroupLocalization, error) {
+	rows, err := q.query(ctx, q.adminListGroupLocalizationsStmt, adminListGroupLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskGroupLocalization
+	for rows.Next() {
+		var i TaskGroupLocalization
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.GroupKey,
+			&i.Locale,
+			&i.Title,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListGroups = `-- name: AdminListGroups :many
+SELECT workspace_id, ` + "`" + `key` + "`" + `, position, is_active, deleted_at, created_at, updated_at
+FROM task_group
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY position, ` + "`" + `key` + "`" + `
+`
+
+func (q *Queries) AdminListGroups(ctx context.Context, workspaceID string) ([]TaskGroup, error) {
+	rows, err := q.query(ctx, q.adminListGroupsStmt, adminListGroups, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskGroup
+	for rows.Next() {
+		var i TaskGroup
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Key,
+			&i.Position,
+			&i.IsActive,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListPartnerConfigs = `-- name: AdminListPartnerConfigs :many
 SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
 FROM task_partner_config
@@ -540,6 +710,89 @@ func (q *Queries) AdminListPartnerDailyStats(ctx context.Context, arg AdminListP
 			&i.UniqueIssuedUsers,
 			&i.UniqueCompletedUsers,
 			&i.UniqueClaimers,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListPartnerRewardRules = `-- name: AdminListPartnerRewardRules :many
+SELECT workspace_id, provider, group_key, external_type, reward_key,
+       reward_type, quantity, scale, duration_unit, position, is_enabled, created_at, updated_at
+FROM task_partner_reward_rule
+WHERE workspace_id = ?
+ORDER BY group_key, provider, external_type, position, reward_key
+`
+
+func (q *Queries) AdminListPartnerRewardRules(ctx context.Context, workspaceID string) ([]TaskPartnerRewardRule, error) {
+	rows, err := q.query(ctx, q.adminListPartnerRewardRulesStmt, adminListPartnerRewardRules, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerRewardRule
+	for rows.Next() {
+		var i TaskPartnerRewardRule
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.ExternalType,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.Quantity,
+			&i.Scale,
+			&i.DurationUnit,
+			&i.Position,
+			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListSequences = `-- name: AdminListSequences :many
+SELECT workspace_id, ` + "`" + `key` + "`" + `, position, is_active, deleted_at, created_at, updated_at
+FROM task_sequence
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY position, ` + "`" + `key` + "`" + `
+`
+
+func (q *Queries) AdminListSequences(ctx context.Context, workspaceID string) ([]TaskSequence, error) {
+	rows, err := q.query(ctx, q.adminListSequencesStmt, adminListSequences, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskSequence
+	for rows.Next() {
+		var i TaskSequence
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Key,
+			&i.Position,
+			&i.IsActive,
+			&i.DeletedAt,
+			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -786,6 +1039,44 @@ func (q *Queries) AdminListTaskDailyStats(ctx context.Context, arg AdminListTask
 			&i.AutoClaimedCount,
 			&i.UniqueParticipants,
 			&i.UniqueClaimers,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListTaskLocalizations = `-- name: AdminListTaskLocalizations :many
+SELECT workspace_id, task_id, locale, title, description, created_at, updated_at
+FROM task_localization
+WHERE workspace_id = ?
+ORDER BY task_id, locale
+`
+
+func (q *Queries) AdminListTaskLocalizations(ctx context.Context, workspaceID string) ([]TaskLocalization, error) {
+	rows, err := q.query(ctx, q.adminListTaskLocalizationsStmt, adminListTaskLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskLocalization
+	for rows.Next() {
+		var i TaskLocalization
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.TaskID,
+			&i.Locale,
+			&i.Title,
+			&i.Description,
+			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -1102,11 +1393,12 @@ func (q *Queries) AdminUpsertPartnerConfig(ctx context.Context, arg AdminUpsertP
 const adminUpsertPartnerRewardRule = `-- name: AdminUpsertPartnerRewardRule :exec
 INSERT INTO task_partner_reward_rule (
     workspace_id, provider, group_key, external_type, reward_key,
-    reward_type, quantity, duration_unit, position, is_enabled
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    reward_type, quantity, scale, duration_unit, position, is_enabled
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position),
     is_enabled = VALUES(is_enabled)
@@ -1120,6 +1412,7 @@ type AdminUpsertPartnerRewardRuleParams struct {
 	RewardKey    string                                `json:"reward_key"`
 	RewardType   TaskPartnerRewardRuleRewardType       `json:"reward_type"`
 	Quantity     int64                                 `json:"quantity"`
+	Scale        uint16                                `json:"scale"`
 	DurationUnit NullTaskPartnerRewardRuleDurationUnit `json:"duration_unit"`
 	Position     int32                                 `json:"position"`
 	IsEnabled    bool                                  `json:"is_enabled"`
@@ -1134,6 +1427,7 @@ func (q *Queries) AdminUpsertPartnerRewardRule(ctx context.Context, arg AdminUps
 		arg.RewardKey,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 		arg.Position,
 		arg.IsEnabled,
@@ -1143,12 +1437,13 @@ func (q *Queries) AdminUpsertPartnerRewardRule(ctx context.Context, arg AdminUps
 
 const adminUpsertReward = `-- name: AdminUpsertReward :exec
 INSERT INTO task_reward (
-    workspace_id, task_id, reward_key, reward_type, quantity, duration_unit, position
+    workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit),
     position = VALUES(position)
 `
@@ -1159,6 +1454,7 @@ type AdminUpsertRewardParams struct {
 	RewardKey    string                     `json:"reward_key"`
 	RewardType   TaskRewardRewardType       `json:"reward_type"`
 	Quantity     int64                      `json:"quantity"`
+	Scale        uint16                     `json:"scale"`
 	DurationUnit NullTaskRewardDurationUnit `json:"duration_unit"`
 	Position     int32                      `json:"position"`
 }
@@ -1170,6 +1466,7 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 		arg.RewardKey,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 		arg.Position,
 	)
@@ -1385,6 +1682,69 @@ func (q *Queries) EnsureProgress(ctx context.Context, arg EnsureProgressParams) 
 	return result.LastInsertId()
 }
 
+const exportListTasks = `-- name: ExportListTasks :many
+SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       reset_every, position, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, is_visible, is_active,
+       start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
+FROM task_definition
+WHERE workspace_id = ? AND deleted_at IS NULL
+ORDER BY group_key, position, id
+`
+
+func (q *Queries) ExportListTasks(ctx context.Context, workspaceID string) ([]TaskDefinition, error) {
+	rows, err := q.query(ctx, q.exportListTasksStmt, exportListTasks, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskDefinition
+	for rows.Next() {
+		var i TaskDefinition
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Key,
+			&i.GroupKey,
+			&i.SequenceKey,
+			&i.SequencePosition,
+			&i.TaskKind,
+			&i.ActionKey,
+			&i.ActionKind,
+			&i.ClaimMode,
+			&i.TargetCount,
+			&i.ResetUnit,
+			&i.ResetEvery,
+			&i.Position,
+			&i.Payload,
+			&i.Target,
+			&i.IntegrationKind,
+			&i.IntegrationProvider,
+			&i.IntegrationPayload,
+			&i.ImageUrl,
+			&i.IsVisible,
+			&i.IsActive,
+			&i.StartAt,
+			&i.EndAt,
+			&i.DeletedAt,
+			&i.BranchSortKey,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getClaimBundleByIDForUpdate = `-- name: GetClaimBundleByIDForUpdate :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
@@ -1392,7 +1752,7 @@ SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequenc
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit, r.position AS reward_position
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit, r.position AS reward_position
 FROM task_definition t
 LEFT JOIN task_progress p
   ON p.workspace_id = t.workspace_id AND p.task_id = t.id
@@ -1445,6 +1805,7 @@ type GetClaimBundleByIDForUpdateRow struct {
 	RewardKey           sql.NullString             `json:"reward_key"`
 	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
 	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	RewardScale         sql.NullInt16              `json:"reward_scale"`
 	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
 	RewardPosition      sql.NullInt32              `json:"reward_position"`
 }
@@ -1497,6 +1858,7 @@ func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimB
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 			&i.RewardPosition,
 		); err != nil {
@@ -1520,7 +1882,7 @@ SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequenc
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit, r.position AS reward_position
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit, r.position AS reward_position
 FROM task_definition t
 LEFT JOIN task_progress p
   ON p.workspace_id = t.workspace_id AND p.task_id = t.id
@@ -1573,6 +1935,7 @@ type GetClaimBundleByKeyForUpdateRow struct {
 	RewardKey           sql.NullString             `json:"reward_key"`
 	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
 	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	RewardScale         sql.NullInt16              `json:"reward_scale"`
 	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
 	RewardPosition      sql.NullInt32              `json:"reward_position"`
 }
@@ -1625,6 +1988,7 @@ func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaim
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 			&i.RewardPosition,
 		); err != nil {
@@ -1645,7 +2009,7 @@ const getClaimCatalogByID = `-- name: GetClaimCatalogByID :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.id = ?
@@ -1679,6 +2043,7 @@ type GetClaimCatalogByIDRow struct {
 	RewardKey           sql.NullString             `json:"reward_key"`
 	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
 	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	RewardScale         sql.NullInt16              `json:"reward_scale"`
 	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -1713,6 +2078,7 @@ func (q *Queries) GetClaimCatalogByID(ctx context.Context, arg GetClaimCatalogBy
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -1732,7 +2098,7 @@ const getClaimCatalogByKey = `-- name: GetClaimCatalogByKey :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
-       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.duration_unit
+       r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.` + "`" + `key` + "`" + ` = ?
@@ -1766,6 +2132,7 @@ type GetClaimCatalogByKeyRow struct {
 	RewardKey           sql.NullString             `json:"reward_key"`
 	RewardType          NullTaskRewardRewardType   `json:"reward_type"`
 	RewardQuantity      sql.NullInt64              `json:"reward_quantity"`
+	RewardScale         sql.NullInt16              `json:"reward_scale"`
 	DurationUnit        NullTaskRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -1800,6 +2167,7 @@ func (q *Queries) GetClaimCatalogByKey(ctx context.Context, arg GetClaimCatalogB
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -2376,7 +2744,7 @@ SELECT t.id, t.` + "`" + `key` + "`" + `, t.group_key,
        t.payload, t.target, t.image_url, t.start_at, t.end_at,
        l.locale, l.title, l.description,
        r.id AS reward_id, r.reward_key, r.reward_type,
-       r.quantity AS reward_quantity, r.duration_unit
+       r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t FORCE INDEX (task_definition_visible_user_list_idx)
 LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id = t.id AND l.locale = ?
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
@@ -2411,6 +2779,7 @@ type ListActiveTaskBundlesRow struct {
 	RewardKey      sql.NullString             `json:"reward_key"`
 	RewardType     NullTaskRewardRewardType   `json:"reward_type"`
 	RewardQuantity sql.NullInt64              `json:"reward_quantity"`
+	RewardScale    sql.NullInt16              `json:"reward_scale"`
 	DurationUnit   NullTaskRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -2444,6 +2813,7 @@ func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskB
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -2681,7 +3051,7 @@ func (q *Queries) ListPartnerIssuesForUser(ctx context.Context, arg ListPartnerI
 
 const listPartnerRewardRules = `-- name: ListPartnerRewardRules :many
 SELECT workspace_id, provider, group_key, external_type, reward_key,
-       reward_type, quantity, duration_unit, position, is_enabled, created_at, updated_at
+       reward_type, quantity, scale, duration_unit, position, is_enabled, created_at, updated_at
 FROM task_partner_reward_rule
 WHERE workspace_id = ?
   AND provider = ?
@@ -2722,6 +3092,7 @@ func (q *Queries) ListPartnerRewardRules(ctx context.Context, arg ListPartnerRew
 			&i.RewardKey,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.Position,
 			&i.IsEnabled,
@@ -2975,7 +3346,7 @@ func (q *Queries) ListRecordTasks(ctx context.Context, arg ListRecordTasksParams
 }
 
 const listRewards = `-- name: ListRewards :many
-SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, duration_unit, position, created_at, updated_at
+SELECT id, workspace_id, task_id, reward_key, reward_type, quantity, scale, duration_unit, position, created_at, updated_at
 FROM task_reward
 WHERE workspace_id = ? AND task_id = ?
 ORDER BY position, id
@@ -3002,6 +3373,7 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Tas
 			&i.RewardKey,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.Position,
 			&i.CreatedAt,
@@ -3021,7 +3393,7 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Tas
 }
 
 const listRewardsCatalog = `-- name: ListRewardsCatalog :many
-SELECT reward_key, reward_type, quantity, duration_unit
+SELECT reward_key, reward_type, quantity, scale, duration_unit
 FROM task_reward
 WHERE workspace_id = ? AND task_id = ?
 ORDER BY position, id
@@ -3036,6 +3408,7 @@ type ListRewardsCatalogRow struct {
 	RewardKey    string                     `json:"reward_key"`
 	RewardType   TaskRewardRewardType       `json:"reward_type"`
 	Quantity     int64                      `json:"quantity"`
+	Scale        uint16                     `json:"scale"`
 	DurationUnit NullTaskRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -3052,6 +3425,7 @@ func (q *Queries) ListRewardsCatalog(ctx context.Context, arg ListRewardsCatalog
 			&i.RewardKey,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err

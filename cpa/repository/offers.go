@@ -188,6 +188,7 @@ func (r *Repository) ListOfferBundles(ctx context.Context, workspaceID string, l
 				Key:         row.RewardKey,
 				Type:        string(row.RewardType),
 				Quantity:    row.RewardQuantity,
+				Scale:       row.RewardScale,
 				Unit:        cpaDurationUnitPtr(row.DurationUnit),
 			})
 		}
@@ -256,6 +257,7 @@ func (r *Repository) ListActiveOfferBundles(ctx context.Context, scope UserScope
 				Key:         row.RewardKey.String,
 				Type:        string(row.RewardType.CpaRewardRewardType),
 				Quantity:    row.RewardQuantity.Int64,
+				Scale:       uint16FromNull(row.RewardScale),
 				Unit:        cpaDurationUnitPtr(row.DurationUnit),
 			})
 		}
@@ -371,6 +373,7 @@ func (r *Repository) UpsertReward(ctx context.Context, value Reward) error {
 		RewardKey:   value.Key,
 		RewardType:  cpasqlc.CpaRewardRewardType(value.Type),
 		Quantity:    value.Quantity,
+		Scale:       value.Scale,
 		DurationUnit: cpasqlc.NullCpaRewardDurationUnit{
 			CpaRewardDurationUnit: cpasqlc.CpaRewardDurationUnit(valueOrEmpty(value.Unit)),
 			Valid:                 value.Unit != nil,
@@ -463,6 +466,7 @@ func mapReward(row cpasqlc.CpaReward) Reward {
 		Key:         row.RewardKey,
 		Type:        string(row.RewardType),
 		Quantity:    row.Quantity,
+		Scale:       row.Scale,
 		Unit:        cpaDurationUnitPtr(row.DurationUnit),
 	}
 }
@@ -529,6 +533,13 @@ func nullInt16Ptr(value sql.NullInt16) *int16 {
 		return nil
 	}
 	return &value.Int16
+}
+
+func uint16FromNull(value sql.NullInt16) uint16 {
+	if !value.Valid || value.Int16 < 0 {
+		return 0
+	}
+	return uint16(value.Int16)
 }
 
 func normalizePage(limit, offset int32) (int32, int32) {

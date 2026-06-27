@@ -225,7 +225,7 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID, calendarID s
 	id, err := r.q.AdminUpsertReward(ctx, calendarsqlc.AdminUpsertRewardParams{
 		WorkspaceID: workspaceID, CalendarID: calendarID, StepID: stepID,
 		ItemKey: reward.Key, RewardType: calendarsqlc.CalendarRewardRewardType(reward.Type),
-		ItemCount: reward.Quantity, DurationUnit: calendarsqlc.NullCalendarRewardDurationUnit{
+		ItemCount: reward.Quantity, Scale: reward.Scale, DurationUnit: calendarsqlc.NullCalendarRewardDurationUnit{
 			CalendarRewardDurationUnit: calendarsqlc.CalendarRewardDurationUnit(calendarStringValue(reward.Unit)),
 			Valid:                      reward.Unit != nil,
 		}, Position: position,
@@ -241,6 +241,7 @@ func (r *Repository) UpdateReward(ctx context.Context, workspaceID, calendarID s
 		StepID: stepID, ItemKey: reward.Key,
 		RewardType: calendarsqlc.CalendarRewardRewardType(reward.Type),
 		ItemCount:  reward.Quantity,
+		Scale:      reward.Scale,
 		DurationUnit: calendarsqlc.NullCalendarRewardDurationUnit{
 			CalendarRewardDurationUnit: calendarsqlc.CalendarRewardDurationUnit(calendarStringValue(reward.Unit)),
 			Valid:                      reward.Unit != nil,
@@ -271,7 +272,8 @@ func (r *Repository) GetReward(ctx context.Context, workspaceID, calendarID stri
 		}
 		return Reward{
 			Key: row.ItemKey, Type: string(row.RewardType), Quantity: row.ItemCount,
-			Unit: calendarDurationUnitPtr(row.DurationUnit),
+			Scale: row.Scale,
+			Unit:  calendarDurationUnitPtr(row.DurationUnit),
 		}, nil
 	})
 }

@@ -3,6 +3,8 @@ package admin
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	"github.com/elum-utils/services/tasks/repository"
 )
 
 type SaveTaskParams struct {
@@ -63,6 +65,7 @@ type RewardModel struct {
 	Key      string  `json:"key"`
 	Type     string  `json:"type"`
 	Quantity int64   `json:"quantity"`
+	Scale    uint16  `json:"scale"`
 	Unit     *string `json:"unit,omitempty"`
 }
 
@@ -166,3 +169,23 @@ type PartnerDailyStatsModel struct {
 	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
 	UniqueClaimers       uint64    `json:"unique_claimers"`
 }
+
+type ExportPackage = repository.ExportPackage
+type ExportRequest = repository.ExportRequest
+type ExportManifest = repository.ExportManifest
+type ExportManifestSection = repository.ExportManifestSection
+type ExportGroup = repository.ExportGroup
+type ExportText = repository.ExportText
+type ExportSequence = repository.ExportSequence
+type ExportTask = repository.ExportTask
+type ExportReset = repository.ExportReset
+type ExportIntegration = repository.ExportIntegration
+type ExportReward = repository.ExportReward
+type ExportPartnerConfig = repository.ExportPartnerConfig
+type ExportSecret = repository.ExportSecret
+type ExportPartnerRewardRule = repository.ExportPartnerRewardRule
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult

@@ -13,6 +13,7 @@ func mapProduct(product repository.Product) *ProductModel {
 			ID:           item.ID,
 			RewardType:   item.RewardType,
 			Quantity:     item.Quantity,
+			Scale:        item.Scale,
 			DurationUnit: item.DurationUnit,
 			Type:         sqlwrap.NullStringPtr(item.Type),
 			Title:        item.Title,

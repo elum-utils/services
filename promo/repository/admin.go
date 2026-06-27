@@ -190,6 +190,7 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, promo
 	if err := r.q.AdminUpsertReward(ctx, promosqlc.AdminUpsertRewardParams{
 		WorkspaceID: workspaceID, PromoID: promoID, RewardKey: reward.Key,
 		RewardType: promosqlc.PromoRewardRewardType(reward.Type), Quantity: reward.Quantity,
+		Scale: reward.Scale,
 		DurationUnit: promosqlc.NullPromoRewardDurationUnit{
 			PromoRewardDurationUnit: promosqlc.PromoRewardDurationUnit(stringValue(reward.Unit)),
 			Valid:                   reward.Unit != nil,
@@ -245,6 +246,7 @@ func mapReward(row promosqlc.PromoReward) Reward {
 		Key:      row.RewardKey,
 		Type:     string(row.RewardType),
 		Quantity: row.Quantity,
+		Scale:    row.Scale,
 		Unit:     promoDurationUnitPtr(row.DurationUnit),
 	}
 }

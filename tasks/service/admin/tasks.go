@@ -74,7 +74,7 @@ func (a *Admin) UpsertReward(ctx context.Context, workspaceID string, taskID uin
 		return err
 	}
 	return a.repository.UpsertReward(mergedCtx, workspaceID, taskID, repository.Reward{
-		Key: reward.Key, Type: rewardType, Quantity: reward.Quantity, Unit: reward.Unit,
+		Key: reward.Key, Type: rewardType, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 	}, position)
 }
 

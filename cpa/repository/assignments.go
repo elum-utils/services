@@ -421,6 +421,7 @@ func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rew
 			Key:      reward.Key,
 			Type:     reward.Type,
 			Quantity: reward.Quantity,
+			Scale:    reward.Scale,
 			Unit:     reward.Unit,
 		})
 	}
@@ -457,6 +458,7 @@ type callbackReward struct {
 	Key      string  `json:"key"`
 	Type     string  `json:"type"`
 	Quantity int64   `json:"quantity"`
+	Scale    uint16  `json:"scale"`
 	Unit     *string `json:"unit,omitempty"`
 }
 

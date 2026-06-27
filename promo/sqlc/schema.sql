@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS promo_reward (
     reward_key VARCHAR(128) NOT NULL,
     reward_type ENUM('quantity', 'duration') NOT NULL DEFAULT 'quantity',
     quantity BIGINT NOT NULL,
+    scale SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     duration_unit ENUM('second', 'minute', 'hour', 'day', 'week', 'month', 'year') NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

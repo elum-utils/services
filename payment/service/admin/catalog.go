@@ -228,6 +228,7 @@ func (a *Admin) UpsertProductItem(ctx context.Context, params paymentsqlc.Upsert
 		ItemID:       params.ItemID,
 		RewardType:   string(params.RewardType),
 		Quantity:     params.Quantity,
+		Scale:        params.Scale,
 		DurationUnit: paymentProductItemDurationUnitPtr(params.DurationUnit),
 	})
 }

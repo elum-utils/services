@@ -150,7 +150,7 @@ func (q *Queries) AdminGetPromo(ctx context.Context, arg AdminGetPromoParams) (P
 }
 
 const adminGetReward = `-- name: AdminGetReward :one
-SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, duration_unit, created_at, updated_at
+SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM promo_reward
 WHERE workspace_id = ? AND promo_id = ? AND reward_key = ?
 LIMIT 1
@@ -172,6 +172,7 @@ func (q *Queries) AdminGetReward(ctx context.Context, arg AdminGetRewardParams) 
 		&i.RewardKey,
 		&i.RewardType,
 		&i.Quantity,
+		&i.Scale,
 		&i.DurationUnit,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -505,12 +506,13 @@ func (q *Queries) AdminUpsertLocalization(ctx context.Context, arg AdminUpsertLo
 
 const adminUpsertReward = `-- name: AdminUpsertReward :exec
 INSERT INTO promo_reward (
-    workspace_id, promo_id, reward_key, reward_type, quantity, duration_unit
+    workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     reward_type = VALUES(reward_type),
     quantity = VALUES(quantity),
+    scale = VALUES(scale),
     duration_unit = VALUES(duration_unit)
 `
 
@@ -520,6 +522,7 @@ type AdminUpsertRewardParams struct {
 	RewardKey    string                      `json:"reward_key"`
 	RewardType   PromoRewardRewardType       `json:"reward_type"`
 	Quantity     int64                       `json:"quantity"`
+	Scale        uint16                      `json:"scale"`
 	DurationUnit NullPromoRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -530,6 +533,7 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 		arg.RewardKey,
 		arg.RewardType,
 		arg.Quantity,
+		arg.Scale,
 		arg.DurationUnit,
 	)
 	return err
@@ -593,6 +597,7 @@ SELECT
     r.reward_key,
     r.reward_type,
     r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
     r.duration_unit
 FROM promo_offer o
 LEFT JOIN promo_localization l
@@ -649,6 +654,7 @@ type GetApplyBundleForUpdateRow struct {
 	RewardKey                sql.NullString              `json:"reward_key"`
 	RewardType               NullPromoRewardRewardType   `json:"reward_type"`
 	RewardQuantity           sql.NullInt64               `json:"reward_quantity"`
+	RewardScale              sql.NullInt16               `json:"reward_scale"`
 	DurationUnit             NullPromoRewardDurationUnit `json:"duration_unit"`
 }
 
@@ -694,6 +700,7 @@ func (q *Queries) GetApplyBundleForUpdate(ctx context.Context, arg GetApplyBundl
 			&i.RewardKey,
 			&i.RewardType,
 			&i.RewardQuantity,
+			&i.RewardScale,
 			&i.DurationUnit,
 		); err != nil {
 			return nil, err
@@ -752,7 +759,7 @@ func (q *Queries) GetRedemption(ctx context.Context, arg GetRedemptionParams) (P
 }
 
 const listRewards = `-- name: ListRewards :many
-SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, duration_unit, created_at, updated_at
+SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM promo_reward
 WHERE workspace_id = ? AND promo_id = ?
 ORDER BY id
@@ -779,6 +786,7 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Pro
 			&i.RewardKey,
 			&i.RewardType,
 			&i.Quantity,
+			&i.Scale,
 			&i.DurationUnit,
 			&i.CreatedAt,
 			&i.UpdatedAt,

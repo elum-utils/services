@@ -50,7 +50,7 @@ func mapPromo(result repository.ApplyResult) PromoModel {
 	}
 	for _, reward := range result.Rewards {
 		model.Rewards = append(model.Rewards, RewardModel{
-			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Unit: reward.Unit,
+			Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 		})
 	}
 	return model

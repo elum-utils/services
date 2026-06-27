@@ -166,6 +166,7 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 				Key:      row.RewardKey,
 				Type:     string(row.RewardType),
 				Quantity: row.Quantity,
+				Scale:    row.Scale,
 				Unit:     taskDurationUnitPtr(row.DurationUnit),
 			})
 		}
