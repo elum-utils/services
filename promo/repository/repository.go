@@ -17,6 +17,7 @@ type Repository struct {
 	db        *sqlwrap.Client
 	q         *promosqlc.Queries
 	callbacks *callbackutil.Store
+	executor  promosqlc.DBTX
 	timeout   time.Duration
 	cacheL1   time.Duration
 	cacheL2   time.Duration
@@ -39,10 +40,11 @@ func New(db *sqlwrap.Client) *Repository {
 
 func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	timeout := queryTimeout(options.QueryTimeout)
-	q := promosqlc.New(db.WithQueryTimeout(timeout))
+	executor := db.WithQueryTimeout(timeout)
+	q := promosqlc.New(executor)
 	return &Repository{
 		db: db, q: q, callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.PromoTable),
-		timeout: timeout, cacheL1: options.CacheL1Delay, cacheL2: options.CacheL2Delay,
+		executor: executor, timeout: timeout, cacheL1: options.CacheL1Delay, cacheL2: options.CacheL2Delay,
 	}
 }
 
@@ -72,7 +74,7 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
 		txRepo := &Repository{
 			db: r.db, q: r.q.WithTx(tx), callbacks: r.callbacks.WithTx(tx),
-			timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
+			executor: tx, timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
 		}
 		return struct{}{}, fn(txRepo)
 	})

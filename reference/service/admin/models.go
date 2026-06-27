@@ -3,6 +3,8 @@ package admin
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	"github.com/elum-utils/services/reference/repository"
 )
 
 const DangerousTypeConfirmation = "CHANGE_REFERENCE_TYPE"
@@ -77,3 +79,13 @@ type StatsModel struct {
 	QuantityItems   uint64 `json:"quantity_items"`
 	DurationItems   uint64 `json:"duration_items"`
 }
+
+type ExportRequest = repository.ExportRequest
+type ExportPackage = repository.ExportPackage
+type ExportItem = repository.ExportItem
+type ExportText = repository.ExportText
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult

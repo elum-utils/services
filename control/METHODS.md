@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `Admin.CompleteAuth(ctx, params)` | `AuthIdentityParams{Provider, Subject, DisplayName, Payload, IP, UserAgent, BindToIP, ExpiresAt}`. | Принимает identity от уже проверенного OAuth-adapter-а, находит или создаёт account и создаёт session либо 2FA challenge. |
 | `Admin.CompleteTwoFactor(ctx, challenge, code, ip)` | Одноразовый challenge token, TOTP/backup-код, IP. | Завершает вход с 2FA и выдаёт session token. |
+| `Admin.CreateAccount(ctx, id, displayName)` | `id`, `displayName`. | Создаёт account оператора напрямую; нужен для административной инициализации или ручного bootstrap-сценария. |
 | `Admin.GetAccount(ctx, accountID)` | `accountID` оператора. | Возвращает профиль оператора. |
 | `Admin.ListIdentities(ctx, accountID)` | `accountID` текущего оператора. | Возвращает внешние аккаунты, привязанные к оператору. |
 | `Admin.BindIdentity(ctx, accountID, params)` | `accountID`, проверенная `AuthIdentityParams`. | Привязывает дополнительный аккаунт GitHub, GitLab, Google, VK или Yandex. |
@@ -38,35 +39,9 @@
 | `Admin.ListRolePermissions(ctx, workspaceID, roleID)` | `workspaceID`, `roleID`. | Возвращает включённые method keys роли. |
 | `Admin.SetRolePermission(ctx, params)` | `SetRolePermissionParams{ActorID, WorkspaceID, RoleID, MethodKey, Enabled}`. | Включает или выключает method key у роли, если роль строго ниже actor. |
 | `Admin.ClearRolePermissions(ctx, params)` | `ClearRolePermissionsParams{ActorID, WorkspaceID, RoleID}`. | Удаляет все включённые methods роли, если роль строго ниже actor. |
+| `Admin.RegisterMethod(ctx, params)` | `RegisterMethodParams{Key, Service, GroupKey}`. | Регистрирует method/access key из статического manifest-а сервиса. Используется для инициализации каталога доступов, а не для произвольного создания прав из UI. |
 | `Admin.ListMethods(ctx)` | Нет параметров. | Возвращает все зарегистрированные методы для административного интерфейса. |
 | `Admin.GetMethod(ctx, methodKey)` | `methodKey`. | Возвращает публичные метаданные зарегистрированного метода. |
+| `Admin.ListAccess(ctx, locale)` | `locale`. | Возвращает локализованный каталог access: сервисы, группы и access-keys в правильном порядке для UI управления ролями. |
 | `Admin.AppendAudit(ctx, params)` | `AuditEventParams{WorkspaceID, ActorID, MethodKey, TargetType, TargetID, BeforeData, AfterData, Result, RequestID}`. | Добавляет событие аудита после административного действия. |
 | `Admin.ListAudit(ctx, workspaceID, page)` | `workspaceID`, `Page{Limit, Offset}`. | Возвращает аудит workspace с пагинацией. |
-
-## adapters
-
-Это не доменный слой и не отдельный API control, а готовые функции для
-REST/gateway слоя. Они скрывают provider-specific авторизацию и возвращают
-`admin.AuthIdentityParams`, которые REST handler уже сам передаёт в
-`Admin.CompleteAuth`.
-
-| Метод | Что принимаем | Что делает |
-| --- | --- | --- |
-| `auth.Google(ctx, params)` | `OAuth2AuthParams{ClientID, ClientSecret, Code, AccessToken, RedirectURI, IP, UserAgent, BindToIP, ExpiresAt, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Проверяет Google OAuth/OpenID Connect ввод и возвращает `admin.AuthIdentityParams` для `Admin.CompleteAuth`. |
-| `auth.GitHub(ctx, params)` | `OAuth2AuthParams{ClientID, ClientSecret, Code, AccessToken, RedirectURI, IP, UserAgent, BindToIP, ExpiresAt, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Проверяет GitHub OAuth ввод и возвращает `admin.AuthIdentityParams`. |
-| `auth.GitLab(ctx, params)` | `OAuth2AuthParams{ClientID, ClientSecret, Code, AccessToken, RedirectURI, IP, UserAgent, BindToIP, ExpiresAt, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Проверяет GitLab OAuth ввод и возвращает `admin.AuthIdentityParams`. |
-| `auth.Yandex(ctx, params)` | `OAuth2AuthParams{ClientID, ClientSecret, Code, AccessToken, RedirectURI, IP, UserAgent, BindToIP, ExpiresAt, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Проверяет Yandex OAuth ввод и возвращает `admin.AuthIdentityParams`. |
-| `auth.VKID(ctx, params)` | `OAuth2AuthParams{ClientID, ClientSecret, Code, AccessToken, RedirectURI, IP, UserAgent, BindToIP, ExpiresAt, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Проверяет VK ID ввод и возвращает `admin.AuthIdentityParams`. |
-| `auth.TelegramWebApp(ctx, params)` | `TelegramWebAppAuthParams{BotToken, InitData, IP, UserAgent, BindToIP, ExpiresAt, MaxAge, Now}`. | Проверяет Telegram WebApp `initData`, подпись и срок действия, затем возвращает `admin.AuthIdentityParams`. |
-| `auth.TONConnectPayload(secret, ttl)` | Secret backend-а и TTL payload-а. | Генерирует payload/nonce для запроса `ton_proof` у кошелька. |
-| `auth.TONConnect(ctx, params)` | `TONConnectAuthParams{Address, Network, PublicKey, WalletStateInit, Proof, ExpectedPayload или PayloadSecret, ExpectedDomain, ExpectedNetwork, Client, IP, UserAgent, BindToIP, ExpiresAt, MaxAge}`. | Проверяет TON Connect `ton_proof` по спецификации: payload, domain, timestamp, stateInit/address, wallet public key и Ed25519 signature. Возвращает `admin.AuthIdentityParams`. |
-| `auth.New(admin, providers...)` | `control.Admin`-совместимый сервис и список provider-ов. | Создаёт auth adapter, который можно использовать внутри REST handler-а. |
-| `Auth.Register(provider)` | Provider с методами `Provider()` и `Resolve(ctx, request)`. | Регистрирует дополнительный способ авторизации. |
-| `Auth.Authenticate(ctx, request)` | `Request{Provider, Code, AccessToken, RedirectURI, State, RawData, IP, UserAgent, BindToIP, ExpiresAt}`. | Выбирает provider, проверяет внешний ввод, нормализует identity и вызывает `Admin.CompleteAuth`. |
-| `auth.NewGoogle(config)` | `OAuth2ProviderConfig{ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Создаёт provider Google OAuth/OpenID Connect с дефолтными endpoint-ами и mapping-ом. |
-| `auth.NewGitHub(config)` | `OAuth2ProviderConfig{ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Создаёт provider GitHub OAuth с дефолтными endpoint-ами и mapping-ом. |
-| `auth.NewGitLab(config)` | `OAuth2ProviderConfig{ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Создаёт provider GitLab OAuth с дефолтными endpoint-ами и mapping-ом. |
-| `auth.NewYandex(config)` | `OAuth2ProviderConfig{ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Создаёт provider Yandex OAuth с дефолтными endpoint-ами и mapping-ом. |
-| `auth.NewVKID(config)` | `OAuth2ProviderConfig{ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Создаёт отдельный provider VK ID; при отличиях VK flow можно переопределить endpoint-ы или заменить реализацию без изменения `Auth.Authenticate`. |
-| `auth.NewOAuth2(config)` | `OAuth2Config{Provider, ClientID, ClientSecret, TokenURL, UserInfoURL, Mapping, HTTPClient, Timeout}`. | Низкоуровневый building block для нестандартных OAuth2-провайдеров. |
-| `auth.NewTelegramWebApp(config)` | `TelegramWebAppConfig{Provider, BotToken, MaxAge, Now}`. | Создаёт provider для Telegram WebApp `initData`: проверяет подпись, срок действия и достаёт пользователя. |

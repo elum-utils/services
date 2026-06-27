@@ -4,6 +4,7 @@ import (
 	json "github.com/goccy/go-json"
 	"time"
 
+	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
 )
 
@@ -54,3 +55,14 @@ type DailyStatsModel struct {
 	RedemptionCount uint64    `json:"redemption_count"`
 	UniqueUsers     uint64    `json:"unique_users"`
 }
+
+type ExportRequest = repository.ExportRequest
+type ExportPackage = repository.ExportPackage
+type ExportPromo = repository.ExportPromo
+type ExportText = repository.ExportText
+type ExportReward = repository.ExportReward
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult

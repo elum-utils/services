@@ -21,10 +21,13 @@
 | `Admin.GetLocalization(ctx, workspaceID, promoID, locale)` | `workspaceID`, `promoID`, `locale`. | Возвращает локализацию. |
 | `Admin.ListLocalizations(ctx, workspaceID, promoID)` | `workspaceID`, `promoID`. | Возвращает локализации промокода. |
 | `Admin.DeleteLocalization(ctx, workspaceID, promoID, locale)` | `workspaceID`, `promoID`, `locale`. | Удаляет локализацию. |
-| `Admin.UpsertReward(ctx, params)` | `SaveRewardParams{WorkspaceID, PromoID, Key, Type, Quantity, Unit}`. | Создает или обновляет награду промокода. |
+| `Admin.UpsertReward(ctx, params)` | `SaveRewardParams{WorkspaceID, PromoID, Key, Type, Quantity, Scale, Unit}`. | Создает или обновляет награду промокода. `Scale` задает точность дробной валюты, например `25/scale=2` = `0.25`. |
 | `Admin.GetReward(ctx, workspaceID, promoID, key)` | `workspaceID`, `promoID`, `key`. | Возвращает награду. |
 | `Admin.ListRewards(ctx, workspaceID, promoID)` | `workspaceID`, `promoID`. | Возвращает награды промокода. |
 | `Admin.DeleteReward(ctx, workspaceID, promoID, key)` | `workspaceID`, `promoID`, `key`. | Удаляет награду. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Now}`. | Экспортирует промокоды workspace в `promo.export.v1`: payload, target, локализации, награды и лимиты активаций. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает элементы и возвращает конфликты по нормализованному `Code` без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует промокоды в workspace пачками в транзакции и сбрасывает кеш promo. |
 | `Admin.GetStats(ctx, workspaceID, promoID)` | `workspaceID`, `promoID`. | Возвращает статистику активаций промокода. |
 | `Admin.GetUserRedemption(ctx, identity, promoID)` | `Identity`, `promoID`. | Возвращает активацию промокода конкретным пользователем. |
 | `Admin.ListRedemptions(ctx, workspaceID, promoID, page)` | `workspaceID`, `promoID`, `Page`. | Возвращает список активаций. |
@@ -36,4 +39,3 @@
 | `Admin.MarkCallbackEventOK(ctx, id)` | `id`. | Помечает callback-событие успешным. |
 | `Admin.MarkCallbackEventReject(ctx, id, reason)` | `id`, `reason`. | Помечает callback-событие отклоненным. |
 | `Admin.ResetExpiredCallbackProcessing(ctx)` | Только `ctx`. | Сбрасывает зависшие callback-события в обработке. |
-

@@ -10,6 +10,20 @@ import (
 
 const AssetRateSourceDexScreener = repository.AssetRateSourceDexScreener
 
+type ExportRequest = repository.ExportRequest
+type ExportPackage = repository.ExportPackage
+type ExportProductGroup = repository.ExportProductGroup
+type ExportText = repository.ExportText
+type ExportProduct = repository.ExportProduct
+type ExportItem = repository.ExportItem
+type ExportProductItem = repository.ExportProductItem
+type ExportPrice = repository.ExportPrice
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult
+
 type PageParams struct {
 	Limit  int32
 	Offset int32

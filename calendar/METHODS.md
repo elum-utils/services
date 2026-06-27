@@ -25,10 +25,13 @@
 | `Admin.CreateStep(ctx, params)` | `SaveStepParams{WorkspaceID, CalendarID, Position}`. | Создает шаг календаря. |
 | `Admin.UpdateStep(ctx, params)` | `SaveStepParams{WorkspaceID, CalendarID, ID, Position}`. | Обновляет шаг календаря. |
 | `Admin.DeleteStep(ctx, workspaceID, calendarID, id)` | `workspaceID`, `calendarID`, `id`. | Удаляет шаг календаря. |
-| `Admin.CreateReward(ctx, params)` | `SaveRewardParams{WorkspaceID, CalendarID, StepID, Key, Type, Quantity, Unit, Position}`. | Создает награду шага. |
+| `Admin.CreateReward(ctx, params)` | `SaveRewardParams{WorkspaceID, CalendarID, StepID, Key, Type, Quantity, Scale, Unit, Position}`. | Создает награду шага. `Scale` задает точность дробной валюты, например `25/scale=2` = `0.25`. |
 | `Admin.UpdateReward(ctx, params)` | `SaveRewardParams` с обязательным `ID`. | Обновляет награду шага. |
 | `Admin.GetReward(ctx, workspaceID, calendarID, id)` | `workspaceID`, `calendarID`, `id`. | Возвращает награду. |
 | `Admin.DeleteReward(ctx, workspaceID, calendarID, id)` | `workspaceID`, `calendarID`, `id`. | Удаляет награду. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Now}`. | Экспортирует календари workspace в `calendar.export.v1`: определения, локализации, шаги и награды. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает элементы и возвращает конфликты по `calendar.Type` без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует календари в workspace пачками в транзакции; при новом workspace генерирует новые `calendarID` и переносит связи шагов/наград. |
 | `Admin.UpsertLocalization(ctx, params)` | `SaveLocalizationParams{WorkspaceID, CalendarID, Locale, Title, Description}`. | Создает или обновляет локализацию календаря. |
 | `Admin.GetLocalization(ctx, workspaceID, calendarID, locale)` | `workspaceID`, `calendarID`, `locale`. | Возвращает локализацию. |
 | `Admin.ListLocalizations(ctx, workspaceID, calendarID)` | `workspaceID`, `calendarID`. | Возвращает локализации календаря. |
@@ -43,4 +46,3 @@
 | `Admin.MarkCallbackEventOK(ctx, id)` | `id`. | Помечает callback-событие успешным. |
 | `Admin.MarkCallbackEventReject(ctx, id, reason)` | `id`, `reason`. | Помечает callback-событие отклоненным. |
 | `Admin.ResetExpiredCallbackProcessing(ctx)` | Только `ctx`. | Сбрасывает зависшие callback-события в обработке. |
-

@@ -3,6 +3,7 @@ package admin
 import serviceerrors "github.com/elum-utils/services/errors"
 
 var (
+	ErrRepositoryNotConfigured       = serviceerrors.New(serviceerrors.CodeNotReady, "cpa admin repository is not configured")
 	ErrLocalizationRequired          = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa admin locale and title are required")
 	ErrOfferScopeRequired            = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa admin workspace and offer id are required")
 	ErrOfferPayloadInvalid           = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa admin payload must be valid JSON")

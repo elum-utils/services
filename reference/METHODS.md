@@ -25,5 +25,7 @@
 | `Admin.GetLocalization(ctx, workspaceID, key, locale)` | `workspaceID`, `key`, `locale`. | Возвращает локализацию. |
 | `Admin.ListLocalizations(ctx, workspaceID, key)` | `workspaceID`, `key`. | Возвращает локализации item. |
 | `Admin.DeleteLocalization(ctx, workspaceID, key, locale)` | `workspaceID`, `key`, `locale`. | Удаляет локализацию. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Now, OnlyNotDeleted}`. | Экспортирует справочник workspace в `reference.export.v1`: items, payload, активность, признак удаления и локализации. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает items/localizations и возвращает конфликты по `item.Key` без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует справочник пачками в транзакции: сначала items, затем localizations, после чего обновляет версии кеша reference. |
 | `Admin.GetStats(ctx, workspaceID)` | `workspaceID`. | Возвращает статистику справочника. |
-

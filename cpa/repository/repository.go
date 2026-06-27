@@ -26,6 +26,7 @@ type Repository struct {
 	db        *sqlwrap.Client
 	q         *cpasqlc.Queries
 	callbacks *callbackutil.Store
+	executor  cpasqlc.DBTX
 	inTx      bool
 	timeout   time.Duration
 	cacheL1   time.Duration
@@ -49,10 +50,12 @@ func New(db *sqlwrap.Client) *Repository {
 
 func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	timeout := queryTimeout(options.QueryTimeout)
+	executor := db.WithQueryTimeout(timeout)
 	return &Repository{
 		db:        db,
-		q:         cpasqlc.New(db.WithQueryTimeout(timeout)),
+		q:         cpasqlc.New(executor),
 		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.CPATable),
+		executor:  executor,
 		timeout:   timeout,
 		cacheL1:   options.CacheL1Delay,
 		cacheL2:   options.CacheL2Delay,
@@ -87,6 +90,7 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 			db:        r.db,
 			q:         r.q.WithTx(tx),
 			callbacks: r.callbacks.WithTx(tx),
+			executor:  tx,
 			inTx:      true,
 			timeout:   r.timeout,
 			cacheL1:   r.cacheL1,

@@ -6,8 +6,8 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.ListProducts(ctx, params)` | `ListProductsParams{WorkspaceID, AppID, PlatformID, PlatformUserID, AssetCode, Locale}`. | Возвращает доступные пользователю продукты с ценой, лимитами и item-ами. |
-| `User.GetProduct(ctx, params)` | `GetProductParams{WorkspaceID, AppID, PlatformID, PlatformUserID, ProductID, AssetCode, Locale}`. | Возвращает один продукт для пользователя. |
+| `User.ListProducts(ctx, params)` | `ListProductsParams{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country, AssetCode, Locale}`. | Возвращает доступные пользователю продукты с учетом target-фильтра, цены, лимитов и item-ов. |
+| `User.GetProduct(ctx, params)` | `GetProductParams{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country, ProductID, AssetCode, Locale}`. | Возвращает один продукт для пользователя с учетом target-фильтра. |
 | `User.GetProductByKey(ctx, params)` | `GetProductByKeyParams{Key, AssetCode, Locale}`. | Возвращает продукт по purchase key. |
 | `User.ListAssets(ctx)` | Только `ctx`. | Возвращает список платежных assets. |
 | `User.GetUSDTPrice(ctx, assetCode)` | `assetCode`. | Возвращает курс asset к USDT. |
@@ -28,6 +28,9 @@
 | `Admin.AttachProductItem(ctx, params)` | `AttachProductItemParams` alias `product.AddItemParams`. | Привязывает item к продукту. |
 | `Admin.CreateCatalogPrice(ctx, params)` | `CreateCatalogPriceParams` alias `product.CreatePriceParams`. | Создает цену продукта. |
 | `Admin.UpdateCatalogPrice(ctx, params)` | `UpdateCatalogPriceParams` alias `product.UpdatePriceParams`. | Обновляет цену продукта. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Now}`. | Экспортирует каталог payment workspace в `payment.export.v1`: группы, продукты, target, локализации, items, связи product-item и цены. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает элементы и возвращает конфликты по group/product/item ключам без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует каталог payment пачками в транзакции, затем один раз перестраивает product cache workspace. |
 | `Admin.ConfigureAsset(ctx, params)` | `ConfigureAssetParams` alias `asset.UpsertParams`. | Создает или обновляет платежный asset. |
 | `Admin.ConfigureProviderAsset(ctx, params)` | `ConfigureProviderAssetParams` alias `asset.ProviderUpsertParams`. | Создает или обновляет связь провайдера и asset. |
 | `Admin.ListProductGroups(ctx, params)` | `ProductGroupListParams{WorkspaceID, Page}`. | Возвращает группы продуктов. |

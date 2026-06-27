@@ -18,13 +18,17 @@
 | `Admin.UpsertGroup(ctx, workspaceID, key, position, active)` | `workspaceID`, `key`, `position`, `active`. | Создает или обновляет группу задач. |
 | `Admin.UpsertGroupLocalization(ctx, workspaceID, key, locale, title, description)` | Данные локализации группы. | Создает или обновляет локализацию группы. |
 | `Admin.UpsertSequence(ctx, workspaceID, key, position, active)` | `workspaceID`, `key`, `position`, `active`. | Создает или обновляет последовательность задач. |
-| `Admin.SaveTask(ctx, params)` | `SaveTaskParams{ID, WorkspaceID, Key, GroupKey, SequenceKey, SequencePosition, ActionKey, ActionKind, ClaimMode, TargetCount, ResetUnit, ResetEvery, Position, Payload, ImageURL, IsVisible, IsActive, StartAt, EndAt}`. | Создает или обновляет задачу. |
+| `Admin.SaveTask(ctx, params)` | `SaveTaskParams{ID, WorkspaceID, Key, GroupKey, SequenceKey, SequencePosition, TaskKind, ActionKey, ActionKind, ClaimMode, TargetCount, ResetUnit, ResetEvery, Position, Payload, Target, IntegrationKind, IntegrationProvider, IntegrationPayload, ImageURL, IsVisible, IsActive, StartAt, EndAt}`. | Создает или обновляет задачу, включая target-фильтр отображения и закрытый integration payload. |
 | `Admin.DeleteTask(ctx, workspaceID, id)` | `workspaceID`, `id`. | Удаляет задачу. |
 | `Admin.GetTask(ctx, workspaceID, id)` | `workspaceID`, `id`. | Возвращает задачу. |
 | `Admin.ListTasks(ctx, workspaceID, groupKey, limit, offset)` | `workspaceID`, `groupKey`, `limit`, `offset`. | Возвращает список задач, опционально по группе. |
 | `Admin.UpsertTaskLocalization(ctx, workspaceID, taskID, locale, title, description)` | Данные локализации задачи. | Создает или обновляет локализацию задачи. |
-| `Admin.UpsertReward(ctx, workspaceID, taskID, reward, position)` | `RewardModel{Key, Type, Quantity, Unit}`, `position`. | Создает или обновляет награду задачи. |
+| `Admin.UpsertReward(ctx, workspaceID, taskID, reward, position)` | `RewardModel{Key, Type, Quantity, Scale, Unit}`, `position`. | Создает или обновляет награду задачи. `Scale` задает точность дробной валюты, например `25/scale=2` = `0.25`. |
 | `Admin.DeleteReward(ctx, workspaceID, taskID, key)` | `workspaceID`, `taskID`, `key`. | Удаляет награду задачи. |
+| `Admin.ExportManifest(ctx)` | Только `ctx`. | Возвращает manifest доступных секций export/import для tasks. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Sections, GroupKeys, IncludeSecrets, Now}`. | Экспортирует задачи в `tasks.export.v1`: группы, последовательности, задачи, локализации, награды, target, интеграционные настройки, партнерские настройки и правила наград согласно выбранным секциям. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает элементы и возвращает конфликты без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует выбранные секции задач пачками в транзакции и обновляет связи групп, задач, локализаций, наград, интеграций и партнеров. |
 | `Admin.SavePartnerConfig(ctx, params)` | `PartnerConfigModel{WorkspaceID, Provider, GroupKey, Platform, IsEnabled, Secret, Target, Settings}`. | Создает или обновляет настройки партнера, включая секреты и target. |
 | `Admin.GetPartnerConfig(ctx, workspaceID, provider, groupKey, platform)` | Ключи конфигурации партнера. | Возвращает конфигурацию партнера. |
 | `Admin.ListPartnerConfigs(ctx, workspaceID)` | `workspaceID`. | Возвращает все конфигурации партнеров workspace. |

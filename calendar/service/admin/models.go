@@ -3,6 +3,7 @@ package admin
 import (
 	"time"
 
+	"github.com/elum-utils/services/calendar/repository"
 	"github.com/elum-utils/services/calendar/service/user"
 )
 
@@ -37,3 +38,15 @@ type DailyStatsModel struct {
 	GrantCount     uint64    `json:"grant_count"`
 	UniqueUsers    uint64    `json:"unique_users"`
 }
+
+type ExportRequest = repository.ExportRequest
+type ExportPackage = repository.ExportPackage
+type ExportCalendar = repository.ExportCalendar
+type ExportText = repository.ExportText
+type ExportStep = repository.ExportStep
+type ExportReward = repository.ExportReward
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult

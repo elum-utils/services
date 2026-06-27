@@ -27,11 +27,12 @@ type Options struct {
 }
 
 type Repository struct {
-	db      *sqlwrap.Client
-	q       *refsqlc.Queries
-	timeout time.Duration
-	cacheL1 time.Duration
-	cacheL2 time.Duration
+	db       *sqlwrap.Client
+	q        *refsqlc.Queries
+	executor refsqlc.DBTX
+	timeout  time.Duration
+	cacheL1  time.Duration
+	cacheL2  time.Duration
 }
 
 func New(db *sqlwrap.Client) *Repository {
@@ -46,8 +47,9 @@ func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	if timeout <= 0 {
 		timeout = time.Second
 	}
+	executor := db.WithQueryTimeout(timeout)
 	return &Repository{
-		db: db, q: refsqlc.New(db.WithQueryTimeout(timeout)),
+		db: db, q: refsqlc.New(executor), executor: executor,
 		timeout: timeout, cacheL1: options.CacheL1Delay, cacheL2: options.CacheL2Delay,
 	}
 }
@@ -59,6 +61,7 @@ func NewPreparedWithOptions(ctx context.Context, db *sqlwrap.Client, options Opt
 		return nil, err
 	}
 	repository.q = q
+	repository.executor = db.WithQueryTimeout(repository.timeout)
 	return repository, nil
 }
 
@@ -67,6 +70,17 @@ func (r *Repository) Close() error {
 		return nil
 	}
 	return r.q.Close()
+}
+
+func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
+	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
+		txRepo := &Repository{
+			db: r.db, q: r.q.WithTx(tx), executor: tx,
+			timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
+		}
+		return struct{}{}, fn(txRepo)
+	})
+	return err
 }
 
 func (r *Repository) Bootstrap(ctx context.Context) error {

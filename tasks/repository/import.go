@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
@@ -91,41 +93,7 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	}
 	result := ImportResult{}
 	err = r.WithTx(ctx, func(txRepo *Repository) error {
-		for _, sequence := range req.Package.Sequences {
-			exists := previewHasConflict(preview, "sequence", sequence.Key)
-			if exists && strategy == ImportConflictSkip {
-				result.Skipped.Sequences++
-				continue
-			}
-			if err := txRepo.UpsertSequence(ctx, workspaceID, sequence.Key, sequence.Position, sequence.IsActive); err != nil {
-				return err
-			}
-			result.Imported.Sequences++
-		}
-		for _, group := range req.Package.Groups {
-			groupExists := previewHasConflict(preview, "group", group.Key)
-			if groupExists && strategy == ImportConflictSkip {
-				result.Skipped.Groups++
-			} else {
-				if err := txRepo.UpsertGroup(ctx, workspaceID, group.Key, group.Position, group.IsActive); err != nil {
-					return err
-				}
-				result.Imported.Groups++
-				for locale, text := range group.Localization {
-					if err := txRepo.UpsertGroupLocalization(ctx, workspaceID, group.Key, locale, text.Title, text.Description); err != nil {
-						return err
-					}
-					result.Imported.GroupLocalizations++
-				}
-			}
-			if err := txRepo.importTasks(ctx, workspaceID, group, strategy, preview, &result); err != nil {
-				return err
-			}
-			if err := txRepo.importPartnerSettings(ctx, workspaceID, group, strategy, req.Secrets, preview, &result); err != nil {
-				return err
-			}
-		}
-		return nil
+		return txRepo.importBulk(ctx, workspaceID, req, strategy, preview, &result)
 	})
 	if err != nil {
 		return ImportResult{}, err
@@ -133,96 +101,337 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	return result, r.invalidateTaskCache(ctx, workspaceID)
 }
 
-func (r *Repository) importTasks(ctx context.Context, workspaceID string, group ExportGroup, strategy string, preview ImportPreview, result *ImportResult) error {
-	for _, task := range group.Tasks {
-		exists := previewHasConflict(preview, "task", task.Key)
-		if exists && strategy == ImportConflictSkip {
-			result.Skipped.Tasks++
-			continue
-		}
-		var id uint64
-		if exists {
-			row, err := r.q.AdminGetTaskByKey(ctx, tasksqlc.AdminGetTaskByKeyParams{WorkspaceID: workspaceID, Key: task.Key})
-			if err != nil {
-				return err
-			}
-			id = row.ID
-		}
-		savedID, err := r.SaveTask(ctx, SaveTaskParams{
-			ID: id, WorkspaceID: workspaceID, Key: task.Key, GroupKey: group.Key,
-			SequenceKey: task.SequenceKey, SequencePosition: task.SequencePosition,
-			TaskKind: task.TaskKind, ActionKey: task.ActionKey, ActionKind: task.ActionKind,
-			ClaimMode: task.ClaimMode, TargetCount: task.TargetCount,
-			ResetUnit: task.Reset.Unit, ResetEvery: task.Reset.Every, Position: task.Position,
-			Payload: task.Payload, Target: task.Target,
-			IntegrationKind: task.Integration.Kind, IntegrationProvider: task.Integration.Provider,
-			IntegrationPayload: task.Integration.Payload,
-			ImageURL:           task.ImageURL, IsVisible: task.IsVisible, IsActive: task.IsActive,
-			StartAt: task.StartAt, EndAt: task.EndAt,
-		})
-		if err != nil {
-			return err
-		}
-		result.Imported.Tasks++
-		for locale, text := range task.Localization {
-			if err := r.UpsertTaskLocalization(ctx, workspaceID, savedID, locale, text.Title, text.Description); err != nil {
-				return err
-			}
-			result.Imported.TaskLocalizations++
-		}
-		for _, reward := range task.Rewards {
-			if err := r.UpsertReward(ctx, workspaceID, savedID, Reward{
-				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
-			}, reward.Position); err != nil {
-				return err
-			}
-			result.Imported.Rewards++
-		}
+func (r *Repository) importBulk(ctx context.Context, workspaceID string, req ImportRequest, strategy string, preview ImportPreview, result *ImportResult) error {
+	if err := r.importSequencesBulk(ctx, workspaceID, req.Package.Sequences, strategy, preview, result); err != nil {
+		return err
 	}
-	return nil
+	if err := r.importGroupsBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result); err != nil {
+		return err
+	}
+	taskIDs, err := r.importTasksBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result)
+	if err != nil {
+		return err
+	}
+	if err := r.importTaskLocalizationsBulk(ctx, workspaceID, req.Package.Groups, taskIDs, strategy, preview, result); err != nil {
+		return err
+	}
+	if err := r.importRewardsBulk(ctx, workspaceID, req.Package.Groups, taskIDs, strategy, preview, result); err != nil {
+		return err
+	}
+	if err := r.importPartnerConfigsBulk(ctx, workspaceID, req.Package.Groups, strategy, req.Secrets, preview, result); err != nil {
+		return err
+	}
+	return r.importPartnerRewardRulesBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result)
 }
 
-func (r *Repository) importPartnerSettings(ctx context.Context, workspaceID string, group ExportGroup, strategy string, secrets map[string]string, preview ImportPreview, result *ImportResult) error {
-	for _, config := range group.PartnerConfigs {
-		key := partnerConfigImportKey(config.Provider, group.Key, config.Platform)
-		exists := previewHasConflict(preview, "partner_config", key)
+func (r *Repository) importSequencesBulk(ctx context.Context, workspaceID string, sequences []ExportSequence, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0, len(sequences))
+	for _, sequence := range sequences {
+		exists := previewHasConflict(preview, "sequence", sequence.Key)
 		if exists && strategy == ImportConflictSkip {
-			result.Skipped.PartnerConfigs++
+			result.Skipped.Sequences++
 			continue
 		}
-		var secret *string
-		if config.Secret != nil {
-			value := secrets[config.Secret.Key]
-			secret = &value
-		}
-		if err := r.SavePartnerConfig(ctx, SavePartnerConfigParams{
-			WorkspaceID: workspaceID, Provider: config.Provider, GroupKey: group.Key, Platform: config.Platform,
-			IsEnabled: config.IsEnabled, Secret: secret, Target: config.Target, Settings: config.Settings,
-		}); err != nil {
-			return err
-		}
-		result.Imported.PartnerConfigs++
+		rows = append(rows, []any{workspaceID, sequence.Key, sequence.Position, sequence.IsActive})
+		result.Imported.Sequences++
 	}
-	for _, rule := range group.PartnerRewardRules {
-		key := partnerRewardImportKey(rule.Provider, group.Key, rule.ExternalType, rule.Reward.Key)
-		exists := previewHasConflict(preview, "partner_reward_rule", key)
+	return r.execImportBulk(ctx, "task_sequence",
+		[]string{"workspace_id", "`key`", "position", "is_active"},
+		rows,
+		"position = VALUES(position), is_active = VALUES(is_active), deleted_at = NULL, updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importGroupsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) error {
+	groupRows := make([][]any, 0, len(groups))
+	localizationRows := make([][]any, 0, len(groups)*2)
+	for _, group := range groups {
+		exists := previewHasConflict(preview, "group", group.Key)
 		if exists && strategy == ImportConflictSkip {
-			result.Skipped.PartnerRewards++
+			result.Skipped.Groups++
 			continue
 		}
-		if err := r.SavePartnerRewardRule(ctx, SavePartnerRewardRuleParams{
-			WorkspaceID: workspaceID, Provider: rule.Provider, GroupKey: group.Key, ExternalType: rule.ExternalType,
-			Reward: Reward{
-				Key: rule.Reward.Key, Type: rule.Reward.Type, Quantity: rule.Reward.Quantity,
-				Scale: rule.Reward.Scale, Unit: rule.Reward.Unit,
-			},
-			Position: rule.Position, IsEnabled: rule.IsEnabled,
-		}); err != nil {
-			return err
+		groupRows = append(groupRows, []any{workspaceID, group.Key, group.Position, group.IsActive})
+		result.Imported.Groups++
+		for locale, text := range group.Localization {
+			localizationRows = append(localizationRows, []any{workspaceID, group.Key, locale, text.Title, text.Description})
+			result.Imported.GroupLocalizations++
 		}
-		result.Imported.PartnerRewards++
 	}
-	return nil
+	if err := r.execImportBulk(ctx, "task_group",
+		[]string{"workspace_id", "`key`", "position", "is_active"},
+		groupRows,
+		"position = VALUES(position), is_active = VALUES(is_active), deleted_at = NULL, updated_at = NOW()",
+	); err != nil {
+		return err
+	}
+	return r.execImportBulk(ctx, "task_group_localization",
+		[]string{"workspace_id", "group_key", "locale", "title", "description"},
+		localizationRows,
+		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) (map[string]uint64, error) {
+	rows := make([][]any, 0)
+	needed := make(map[string]struct{})
+	for _, group := range groups {
+		for _, task := range group.Tasks {
+			exists := previewHasConflict(preview, "task", task.Key)
+			if exists && strategy == ImportConflictSkip {
+				result.Skipped.Tasks++
+				continue
+			}
+			needed[task.Key] = struct{}{}
+			rows = append(rows, []any{
+				workspaceID,
+				task.Key,
+				group.Key,
+				nullString(task.SequenceKey),
+				nullInt32FromUint32(task.SequencePosition),
+				defaultString(task.TaskKind, TaskKindInternal),
+				task.ActionKey,
+				task.ActionKind,
+				defaultString(task.ClaimMode, ClaimModeManual),
+				task.TargetCount,
+				defaultString(task.Reset.Unit, ResetNever),
+				defaultUint32(task.Reset.Every, 1),
+				task.Position,
+				defaultJSON(task.Payload, "{}"),
+				defaultJSON(task.Target, "null"),
+				nullString(task.Integration.Kind),
+				nullString(task.Integration.Provider),
+				defaultJSON(task.Integration.Payload, "null"),
+				nullString(task.ImageURL),
+				task.IsVisible,
+				task.IsActive,
+				nullTime(task.StartAt),
+				nullTime(task.EndAt),
+			})
+			result.Imported.Tasks++
+		}
+	}
+	if err := r.execImportBulk(ctx, "task_definition",
+		[]string{
+			"workspace_id", "`key`", "group_key", "sequence_key", "sequence_position",
+			"task_kind", "action_key", "action_kind", "claim_mode", "target_count",
+			"reset_unit", "reset_every", "position", "payload", "target",
+			"integration_kind", "integration_provider", "integration_payload", "image_url",
+			"is_visible", "is_active", "start_at", "end_at",
+		},
+		rows,
+		"group_key = VALUES(group_key), sequence_key = VALUES(sequence_key), sequence_position = VALUES(sequence_position), "+
+			"task_kind = VALUES(task_kind), action_key = VALUES(action_key), action_kind = VALUES(action_kind), "+
+			"claim_mode = VALUES(claim_mode), target_count = VALUES(target_count), reset_unit = VALUES(reset_unit), "+
+			"reset_every = VALUES(reset_every), position = VALUES(position), payload = VALUES(payload), target = VALUES(target), "+
+			"integration_kind = VALUES(integration_kind), integration_provider = VALUES(integration_provider), "+
+			"integration_payload = VALUES(integration_payload), image_url = VALUES(image_url), is_visible = VALUES(is_visible), "+
+			"is_active = VALUES(is_active), start_at = VALUES(start_at), end_at = VALUES(end_at), deleted_at = NULL, updated_at = NOW()",
+	); err != nil {
+		return nil, err
+	}
+	if len(needed) == 0 {
+		return nil, nil
+	}
+	taskRows, err := r.q.ExportListTasks(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	resultIDs := make(map[string]uint64, len(needed))
+	for _, task := range taskRows {
+		if _, ok := needed[task.Key]; ok {
+			resultIDs[task.Key] = task.ID
+		}
+	}
+	return resultIDs, nil
+}
+
+func (r *Repository) importTaskLocalizationsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0)
+	for _, group := range groups {
+		for _, task := range group.Tasks {
+			if previewHasConflict(preview, "task", task.Key) && strategy == ImportConflictSkip {
+				continue
+			}
+			taskID, ok := taskIDs[task.Key]
+			if !ok {
+				continue
+			}
+			for locale, text := range task.Localization {
+				rows = append(rows, []any{workspaceID, taskID, locale, text.Title, text.Description})
+				result.Imported.TaskLocalizations++
+			}
+		}
+	}
+	return r.execImportBulk(ctx, "task_localization",
+		[]string{"workspace_id", "task_id", "locale", "title", "description"},
+		rows,
+		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0)
+	for _, group := range groups {
+		for _, task := range group.Tasks {
+			if previewHasConflict(preview, "task", task.Key) && strategy == ImportConflictSkip {
+				continue
+			}
+			taskID, ok := taskIDs[task.Key]
+			if !ok {
+				continue
+			}
+			for _, reward := range task.Rewards {
+				rows = append(rows, []any{
+					workspaceID, taskID, reward.Key, defaultString(reward.Type, "quantity"),
+					reward.Quantity, reward.Scale, nullRewardDurationUnit(reward.Unit), reward.Position,
+				})
+				result.Imported.Rewards++
+			}
+		}
+	}
+	return r.execImportBulk(ctx, "task_reward",
+		[]string{"workspace_id", "task_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit", "position"},
+		rows,
+		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
+			"duration_unit = VALUES(duration_unit), position = VALUES(position), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importPartnerConfigsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, secrets map[string]string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0)
+	for _, group := range groups {
+		for _, config := range group.PartnerConfigs {
+			key := partnerConfigImportKey(config.Provider, group.Key, config.Platform)
+			exists := previewHasConflict(preview, "partner_config", key)
+			if exists && strategy == ImportConflictSkip {
+				result.Skipped.PartnerConfigs++
+				continue
+			}
+			var secret sql.NullString
+			if config.Secret != nil {
+				value := secrets[config.Secret.Key]
+				secret = sql.NullString{String: value, Valid: true}
+			}
+			rows = append(rows, []any{
+				workspaceID, config.Provider, group.Key, config.Platform, config.IsEnabled,
+				secret, defaultJSON(config.Target, "null"), defaultJSON(config.Settings, "null"),
+			})
+			result.Imported.PartnerConfigs++
+		}
+	}
+	return r.execImportBulk(ctx, "task_partner_config",
+		[]string{"workspace_id", "provider", "group_key", "platform", "is_enabled", "secret", "target", "settings"},
+		rows,
+		"is_enabled = VALUES(is_enabled), secret = VALUES(secret), target = VALUES(target), settings = VALUES(settings), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importPartnerRewardRulesBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0)
+	for _, group := range groups {
+		for _, rule := range group.PartnerRewardRules {
+			externalType := defaultString(rule.ExternalType, "*")
+			key := partnerRewardImportKey(rule.Provider, group.Key, externalType, rule.Reward.Key)
+			exists := previewHasConflict(preview, "partner_reward_rule", key)
+			if exists && strategy == ImportConflictSkip {
+				result.Skipped.PartnerRewards++
+				continue
+			}
+			rewardType := defaultString(rule.Reward.Type, "quantity")
+			rows = append(rows, []any{
+				workspaceID, rule.Provider, group.Key, externalType,
+				rule.Reward.Key, rewardType, rule.Reward.Quantity, rule.Reward.Scale,
+				nullPartnerRewardDurationUnit(rule.Reward.Unit), rule.Position, rule.IsEnabled,
+			})
+			result.Imported.PartnerRewards++
+		}
+	}
+	return r.execImportBulk(ctx, "task_partner_reward_rule",
+		[]string{
+			"workspace_id", "provider", "group_key", "external_type", "reward_key",
+			"reward_type", "quantity", "scale", "duration_unit", "position", "is_enabled",
+		},
+		rows,
+		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
+			"duration_unit = VALUES(duration_unit), position = VALUES(position), is_enabled = VALUES(is_enabled), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
+	return repositoryExec(ctx, r, func(ctx context.Context) error {
+		_, err := r.executor.ExecContext(ctx, query, args...)
+		return err
+	})
+}
+
+func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
+	var builder strings.Builder
+	builder.Grow(len(rows) * len(columns) * 4)
+	builder.WriteString("INSERT INTO ")
+	builder.WriteString(table)
+	builder.WriteString(" (")
+	builder.WriteString(strings.Join(columns, ", "))
+	builder.WriteString(") VALUES ")
+	args := make([]any, 0, len(rows)*len(columns))
+	for rowIndex, row := range rows {
+		if rowIndex > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteByte('(')
+		for columnIndex := range columns {
+			if columnIndex > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteByte('?')
+		}
+		builder.WriteByte(')')
+		args = append(args, row...)
+	}
+	if duplicateUpdate != "" {
+		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+		builder.WriteString(duplicateUpdate)
+	}
+	return builder.String(), args
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func defaultUint32(value uint32, fallback uint32) uint32 {
+	if value == 0 {
+		return fallback
+	}
+	return value
+}
+
+func defaultJSON(value []byte, fallback string) string {
+	if len(value) == 0 {
+		return fallback
+	}
+	return string(value)
+}
+
+func nullRewardDurationUnit(value *string) tasksqlc.NullTaskRewardDurationUnit {
+	return tasksqlc.NullTaskRewardDurationUnit{
+		TaskRewardDurationUnit: tasksqlc.TaskRewardDurationUnit(taskStringValue(value)),
+		Valid:                  value != nil,
+	}
+}
+
+func nullPartnerRewardDurationUnit(value *string) tasksqlc.NullTaskPartnerRewardRuleDurationUnit {
+	return tasksqlc.NullTaskPartnerRewardRuleDurationUnit{
+		TaskPartnerRewardRuleDurationUnit: tasksqlc.TaskPartnerRewardRuleDurationUnit(taskStringValue(value)),
+		Valid:                             value != nil,
+	}
 }
 
 type importExistingKeys struct {

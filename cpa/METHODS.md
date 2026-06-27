@@ -21,9 +21,12 @@
 | `Admin.UpsertLocalization(ctx, params)` | `UpsertLocalizationParams{WorkspaceID, CPAID, Locale, Title, Description}`. | Создает или обновляет локализацию оффера. |
 | `Admin.ListLocalizations(ctx, workspaceID, cpaID)` | `workspaceID`, `cpaID`. | Возвращает локализации оффера. |
 | `Admin.DeleteLocalization(ctx, workspaceID, cpaID, locale)` | `workspaceID`, `cpaID`, `locale`. | Удаляет локализацию. |
-| `Admin.UpsertReward(ctx, params)` | `UpsertRewardParams{WorkspaceID, CPAID, Key, Type, Quantity, Unit}`. | Создает или обновляет награду оффера. |
+| `Admin.UpsertReward(ctx, params)` | `UpsertRewardParams{WorkspaceID, CPAID, Key, Type, Quantity, Scale, Unit}`. | Создает или обновляет награду оффера. `Scale` задает точность дробной валюты, например `25/scale=2` = `0.25`. |
 | `Admin.ListRewards(ctx, workspaceID, cpaID)` | `workspaceID`, `cpaID`. | Возвращает награды оффера. |
 | `Admin.DeleteReward(ctx, workspaceID, cpaID, rewardID)` | `workspaceID`, `cpaID`, `rewardID`. | Удаляет награду оффера. |
+| `Admin.Export(ctx, workspaceID, req)` | `workspaceID`, `ExportRequest{Now}`. | Экспортирует CPA-офферы workspace в `cpa.export.v1`: payload, target, локализации, награды и настройки кодов. |
+| `Admin.PreviewImport(ctx, workspaceID, pkg)` | `workspaceID`, `ExportPackage`. | Проверяет пакет импорта, считает элементы и возвращает конфликты по `offer.ID` без записи данных. |
+| `Admin.Import(ctx, workspaceID, req)` | `ImportRequest{Package, ConflictStrategy}`; стратегии `fail_on_conflict`, `skip_existing`, `update_existing`. | Импортирует CPA-офферы в workspace пачками в транзакции и сбрасывает кеш CPA. |
 | `Admin.AddCodes(ctx, params)` | `AddCodesParams{WorkspaceID, CPAID, Codes}`. | Добавляет пул персональных кодов для оффера. |
 | `Admin.DeleteAvailableCodes(ctx, workspaceID, cpaID)` | `workspaceID`, `cpaID`. | Удаляет доступные, еще не выданные коды оффера. |
 | `Admin.DeleteIssuedCodes(ctx, workspaceID, cpaID)` | `workspaceID`, `cpaID`. | Удаляет выданные коды оффера. |
@@ -42,4 +45,3 @@
 | `Admin.MarkCallbackEventOK(ctx, id)` | `id`. | Помечает callback-событие успешным. |
 | `Admin.MarkCallbackEventReject(ctx, id, reason)` | `id`, `reason`. | Помечает callback-событие отклоненным. |
 | `Admin.ResetExpiredCallbackProcessing(ctx)` | Только `ctx`. | Сбрасывает зависшие callback-события в обработке. |
-

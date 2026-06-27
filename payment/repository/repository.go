@@ -20,6 +20,7 @@ type PaymentRepository struct {
 	db        *sqlwrap.Client
 	q         *paymentsqlc.Queries
 	callbacks *callbackutil.Store
+	executor  paymentsqlc.DBTX
 	inTx      bool
 	timeout   time.Duration
 	cacheL1   time.Duration
@@ -45,10 +46,12 @@ func NewPaymentRepository(db *sqlwrap.Client) *PaymentRepository {
 
 func NewPaymentRepositoryWithOptions(db *sqlwrap.Client, options Options) *PaymentRepository {
 	timeout := queryTimeout(options.QueryTimeout)
+	executor := db.WithQueryTimeout(timeout)
 	return &PaymentRepository{
 		db:        db,
-		q:         paymentsqlc.New(db.WithQueryTimeout(timeout)),
+		q:         paymentsqlc.New(executor),
 		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.PaymentTable),
+		executor:  executor,
 		timeout:   timeout,
 		cacheL1:   options.CacheL1Delay,
 		cacheL2:   options.CacheL2Delay,
@@ -80,6 +83,7 @@ func (r *PaymentRepository) WithTx(ctx context.Context, fn func(*PaymentReposito
 			db:        r.db,
 			q:         r.q.WithTx(tx),
 			callbacks: r.callbacks.WithTx(tx),
+			executor:  tx,
 			inTx:      true,
 			timeout:   r.timeout,
 			cacheL1:   r.cacheL1,

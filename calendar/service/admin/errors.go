@@ -3,6 +3,7 @@ package admin
 import serviceerrors "github.com/elum-utils/services/errors"
 
 var (
+	ErrRepositoryNotConfigured     = serviceerrors.New(serviceerrors.CodeNotReady, "calendar admin repository is not configured")
 	ErrCalendarIDRequired          = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin id is required")
 	ErrCalendarScopeRequired       = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin workspace and type are required")
 	ErrCalendarTimezoneInvalid     = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin timezone is invalid")

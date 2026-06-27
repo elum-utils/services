@@ -4,6 +4,7 @@ import (
 	json "github.com/goccy/go-json"
 	"time"
 
+	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/user"
 )
 
@@ -84,3 +85,14 @@ type AssignmentEventModel struct {
 	EventType    string    `json:"event_type"`
 	OccurredAt   time.Time `json:"occurred_at"`
 }
+
+type ExportRequest = repository.ExportRequest
+type ExportPackage = repository.ExportPackage
+type ExportOffer = repository.ExportOffer
+type ExportText = repository.ExportText
+type ExportReward = repository.ExportReward
+type ImportRequest = repository.ImportRequest
+type ImportPreview = repository.ImportPreview
+type ImportCounts = repository.ImportCounts
+type ImportConflict = repository.ImportConflict
+type ImportResult = repository.ImportResult
