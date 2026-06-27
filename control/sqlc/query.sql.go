@@ -73,7 +73,7 @@ const checkAccess = `-- name: CheckAccess :one
 SELECT EXISTS(
     SELECT 1
     FROM control_workspace_member m
-    JOIN control_method cm ON cm.method_key = ? AND cm.status = 'active' AND cm.workspace_scoped = TRUE
+    JOIN control_method cm ON cm.method_key = ?
     JOIN control_role_member rm ON rm.account_id = m.account_id
     JOIN control_role r ON r.id = rm.role_id
     LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
@@ -495,19 +495,8 @@ func (q *Queries) GetActiveSessionByHash(ctx context.Context, tokenHash string) 
 	return i, err
 }
 
-const getAuthVersion = `-- name: GetAuthVersion :one
-SELECT workspace_id, version, updated_at FROM control_workspace_auth_version WHERE workspace_id = ? LIMIT 1
-`
-
-func (q *Queries) GetAuthVersion(ctx context.Context, workspaceID string) (ControlWorkspaceAuthVersion, error) {
-	row := q.queryRow(ctx, q.getAuthVersionStmt, getAuthVersion, workspaceID)
-	var i ControlWorkspaceAuthVersion
-	err := row.Scan(&i.WorkspaceID, &i.Version, &i.UpdatedAt)
-	return i, err
-}
-
 const getMethod = `-- name: GetMethod :one
-SELECT method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status, created_at, updated_at
+SELECT method_key, service, group_key, position, created_at, updated_at
 FROM control_method WHERE method_key = ? LIMIT 1
 `
 
@@ -518,11 +507,7 @@ func (q *Queries) GetMethod(ctx context.Context, methodKey string) (ControlMetho
 		&i.MethodKey,
 		&i.Service,
 		&i.GroupKey,
-		&i.Title,
-		&i.WorkspaceScoped,
-		&i.IsSensitive,
-		&i.SchemaRevision,
-		&i.Status,
+		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -595,6 +580,44 @@ func (q *Queries) GetTwoFactorChallengeForUpdate(ctx context.Context, tokenHash 
 		&i.BindToIp,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTwoFactorChallengeWithFactorForUpdate = `-- name: GetTwoFactorChallengeWithFactorForUpdate :one
+SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip, c.expires_at,
+       f.secret, f.backup_hashes, f.activated_at
+FROM control_two_factor_challenge c
+JOIN control_two_factor f ON f.account_id = c.account_id
+WHERE c.token_hash = ? AND c.expires_at > NOW()
+LIMIT 1 FOR UPDATE
+`
+
+type GetTwoFactorChallengeWithFactorForUpdateRow struct {
+	ChallengeID  string          `json:"challenge_id"`
+	AccountID    string          `json:"account_id"`
+	Ip           string          `json:"ip"`
+	UserAgent    string          `json:"user_agent"`
+	BindToIp     bool            `json:"bind_to_ip"`
+	ExpiresAt    time.Time       `json:"expires_at"`
+	Secret       string          `json:"secret"`
+	BackupHashes json.RawMessage `json:"backup_hashes"`
+	ActivatedAt  sql.NullTime    `json:"activated_at"`
+}
+
+func (q *Queries) GetTwoFactorChallengeWithFactorForUpdate(ctx context.Context, tokenHash string) (GetTwoFactorChallengeWithFactorForUpdateRow, error) {
+	row := q.queryRow(ctx, q.getTwoFactorChallengeWithFactorForUpdateStmt, getTwoFactorChallengeWithFactorForUpdate, tokenHash)
+	var i GetTwoFactorChallengeWithFactorForUpdateRow
+	err := row.Scan(
+		&i.ChallengeID,
+		&i.AccountID,
+		&i.Ip,
+		&i.UserAgent,
+		&i.BindToIp,
+		&i.ExpiresAt,
+		&i.Secret,
+		&i.BackupHashes,
+		&i.ActivatedAt,
 	)
 	return i, err
 }
@@ -683,9 +706,109 @@ func (q *Queries) IsActiveWorkspaceMember(ctx context.Context, arg IsActiveWorks
 	return active, err
 }
 
+const listAccessCatalog = `-- name: ListAccessCatalog :many
+SELECT g.service, service_catalog.position AS service_position, g.group_key, g.position AS group_position,
+       COALESCE(service_title.value, g.service) AS service_title,
+       COALESCE(service_description.value, '') AS service_description,
+       COALESCE(group_loc.value, g.group_key) AS group_title,
+       COALESCE(group_description.value, '') AS group_description,
+       m.method_key, m.position,
+       COALESCE(access_loc.value, m.method_key) AS access_title,
+       COALESCE(access_description.value, '') AS access_description
+FROM control_method_group g
+JOIN control_method m ON m.service = g.service AND m.group_key = g.group_key
+JOIN control_access_service service_catalog ON service_catalog.service = g.service
+LEFT JOIN control_localization service_title
+    ON service_title.localization_key = CONCAT('control.access_service.', g.service, '.title')
+   AND service_title.locale = ?
+LEFT JOIN control_localization service_description
+    ON service_description.localization_key = CONCAT('control.access_service.', g.service, '.description')
+   AND service_description.locale = ?
+LEFT JOIN control_localization group_loc
+    ON group_loc.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key)
+   AND group_loc.locale = ?
+LEFT JOIN control_localization group_description
+    ON group_description.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key, '.description')
+   AND group_description.locale = ?
+LEFT JOIN control_localization access_loc
+    ON access_loc.localization_key = CONCAT('control.method.', m.method_key)
+   AND access_loc.locale = ?
+LEFT JOIN control_localization access_description
+    ON access_description.localization_key = CONCAT('control.method.', m.method_key, '.description')
+   AND access_description.locale = ?
+ORDER BY service_catalog.position, g.position, m.position, m.method_key
+`
+
+type ListAccessCatalogParams struct {
+	Locale   string `json:"locale"`
+	Locale_2 string `json:"locale_2"`
+	Locale_3 string `json:"locale_3"`
+	Locale_4 string `json:"locale_4"`
+	Locale_5 string `json:"locale_5"`
+	Locale_6 string `json:"locale_6"`
+}
+
+type ListAccessCatalogRow struct {
+	Service            string `json:"service"`
+	ServicePosition    int32  `json:"service_position"`
+	GroupKey           string `json:"group_key"`
+	GroupPosition      int32  `json:"group_position"`
+	ServiceTitle       string `json:"service_title"`
+	ServiceDescription string `json:"service_description"`
+	GroupTitle         string `json:"group_title"`
+	GroupDescription   string `json:"group_description"`
+	MethodKey          string `json:"method_key"`
+	Position           int32  `json:"position"`
+	AccessTitle        string `json:"access_title"`
+	AccessDescription  string `json:"access_description"`
+}
+
+func (q *Queries) ListAccessCatalog(ctx context.Context, arg ListAccessCatalogParams) ([]ListAccessCatalogRow, error) {
+	rows, err := q.query(ctx, q.listAccessCatalogStmt, listAccessCatalog,
+		arg.Locale,
+		arg.Locale_2,
+		arg.Locale_3,
+		arg.Locale_4,
+		arg.Locale_5,
+		arg.Locale_6,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessCatalogRow
+	for rows.Next() {
+		var i ListAccessCatalogRow
+		if err := rows.Scan(
+			&i.Service,
+			&i.ServicePosition,
+			&i.GroupKey,
+			&i.GroupPosition,
+			&i.ServiceTitle,
+			&i.ServiceDescription,
+			&i.GroupTitle,
+			&i.GroupDescription,
+			&i.MethodKey,
+			&i.Position,
+			&i.AccessTitle,
+			&i.AccessDescription,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditEvents = `-- name: ListAuditEvents :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       before_data, after_data, result, request_id, occurred_at
+       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
 WHERE workspace_id = ?
 ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?
@@ -734,7 +857,7 @@ func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams
 
 const listAuditEventsFiltered = `-- name: ListAuditEventsFiltered :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       before_data, after_data, result, request_id, occurred_at
+       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
 WHERE workspace_id = ?
   AND (? = '' OR method_key = ?)
@@ -805,8 +928,59 @@ func (q *Queries) ListAuditEventsFiltered(ctx context.Context, arg ListAuditEven
 	return items, nil
 }
 
+const listAuthorizedMethods = `-- name: ListAuthorizedMethods :many
+SELECT DISTINCT cm.method_key, cm.service, cm.group_key, cm.position
+FROM control_method cm
+JOIN control_workspace_member m ON m.workspace_id = ? AND m.account_id = ? AND m.status = 'active'
+JOIN control_role_member rm ON rm.account_id = m.account_id
+JOIN control_role r ON r.id = rm.role_id AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
+LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
+WHERE r.is_owner = TRUE OR p.method_key IS NOT NULL
+ORDER BY cm.service, cm.group_key, cm.method_key
+`
+
+type ListAuthorizedMethodsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	AccountID   string `json:"account_id"`
+}
+
+type ListAuthorizedMethodsRow struct {
+	MethodKey string `json:"method_key"`
+	Service   string `json:"service"`
+	GroupKey  string `json:"group_key"`
+	Position  int32  `json:"position"`
+}
+
+func (q *Queries) ListAuthorizedMethods(ctx context.Context, arg ListAuthorizedMethodsParams) ([]ListAuthorizedMethodsRow, error) {
+	rows, err := q.query(ctx, q.listAuthorizedMethodsStmt, listAuthorizedMethods, arg.WorkspaceID, arg.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthorizedMethodsRow
+	for rows.Next() {
+		var i ListAuthorizedMethodsRow
+		if err := rows.Scan(
+			&i.MethodKey,
+			&i.Service,
+			&i.GroupKey,
+			&i.Position,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIdentities = `-- name: ListIdentities :many
-SELECT account_id, provider, provider_subject, payload, created_at, updated_at
+SELECT account_id, provider, provider_subject, COALESCE(payload, JSON_OBJECT()) AS payload, created_at, updated_at
 FROM control_identity WHERE account_id = ? ORDER BY provider
 `
 
@@ -911,9 +1085,44 @@ func (q *Queries) ListInvites(ctx context.Context, arg ListInvitesParams) ([]Con
 	return items, nil
 }
 
+const listMethodGroups = `-- name: ListMethodGroups :many
+SELECT service, group_key, position, created_at, updated_at
+FROM control_method_group
+ORDER BY service, group_key
+`
+
+func (q *Queries) ListMethodGroups(ctx context.Context) ([]ControlMethodGroup, error) {
+	rows, err := q.query(ctx, q.listMethodGroupsStmt, listMethodGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ControlMethodGroup
+	for rows.Next() {
+		var i ControlMethodGroup
+		if err := rows.Scan(
+			&i.Service,
+			&i.GroupKey,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMethods = `-- name: ListMethods :many
-SELECT method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status, created_at, updated_at
-FROM control_method WHERE status = 'active' ORDER BY service, group_key, method_key
+SELECT method_key, service, group_key, position, created_at, updated_at
+FROM control_method ORDER BY service, group_key, method_key
 `
 
 func (q *Queries) ListMethods(ctx context.Context) ([]ControlMethod, error) {
@@ -929,11 +1138,7 @@ func (q *Queries) ListMethods(ctx context.Context) ([]ControlMethod, error) {
 			&i.MethodKey,
 			&i.Service,
 			&i.GroupKey,
-			&i.Title,
-			&i.WorkspaceScoped,
-			&i.IsSensitive,
-			&i.SchemaRevision,
-			&i.Status,
+			&i.Position,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1281,6 +1486,30 @@ func (q *Queries) RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int
 	return result.RowsAffected()
 }
 
+const revokeInviteAsActiveMember = `-- name: RevokeInviteAsActiveMember :execrows
+UPDATE control_workspace_invite i
+SET i.revoked_at = NOW()
+WHERE i.id = ? AND i.workspace_id = ? AND i.revoked_at IS NULL
+  AND EXISTS (
+      SELECT 1 FROM control_workspace_member m
+      WHERE m.workspace_id = i.workspace_id AND m.account_id = ? AND m.status = 'active'
+  )
+`
+
+type RevokeInviteAsActiveMemberParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	AccountID   string `json:"account_id"`
+}
+
+func (q *Queries) RevokeInviteAsActiveMember(ctx context.Context, arg RevokeInviteAsActiveMemberParams) (int64, error) {
+	result, err := q.exec(ctx, q.revokeInviteAsActiveMemberStmt, revokeInviteAsActiveMember, arg.ID, arg.WorkspaceID, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokeSession = `-- name: RevokeSession :execrows
 UPDATE control_session SET revoked_at = NOW()
 WHERE id = ? AND account_id = ? AND revoked_at IS NULL
@@ -1310,22 +1539,6 @@ type SetRolePermissionParams struct {
 
 func (q *Queries) SetRolePermission(ctx context.Context, arg SetRolePermissionParams) error {
 	_, err := q.exec(ctx, q.setRolePermissionStmt, setRolePermission, arg.RoleID, arg.MethodKey)
-	return err
-}
-
-const touchAuthVersion = `-- name: TouchAuthVersion :exec
-INSERT INTO control_workspace_auth_version (workspace_id, version)
-VALUES (?, ?)
-ON DUPLICATE KEY UPDATE version = VALUES(version)
-`
-
-type TouchAuthVersionParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	Version     string `json:"version"`
-}
-
-func (q *Queries) TouchAuthVersion(ctx context.Context, arg TouchAuthVersionParams) error {
-	_, err := q.exec(ctx, q.touchAuthVersionStmt, touchAuthVersion, arg.WorkspaceID, arg.Version)
 	return err
 }
 
@@ -1427,6 +1640,38 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 	return result.RowsAffected()
 }
 
+const updateWorkspaceAsActiveMember = `-- name: UpdateWorkspaceAsActiveMember :execrows
+UPDATE control_workspace w
+SET w.slug = ?, w.title = ?, w.status = ?
+WHERE w.id = ?
+  AND EXISTS (
+      SELECT 1 FROM control_workspace_member m
+      WHERE m.workspace_id = w.id AND m.account_id = ? AND m.status = 'active'
+  )
+`
+
+type UpdateWorkspaceAsActiveMemberParams struct {
+	Slug      string                 `json:"slug"`
+	Title     string                 `json:"title"`
+	Status    ControlWorkspaceStatus `json:"status"`
+	ID        string                 `json:"id"`
+	AccountID string                 `json:"account_id"`
+}
+
+func (q *Queries) UpdateWorkspaceAsActiveMember(ctx context.Context, arg UpdateWorkspaceAsActiveMemberParams) (int64, error) {
+	result, err := q.exec(ctx, q.updateWorkspaceAsActiveMemberStmt, updateWorkspaceAsActiveMember,
+		arg.Slug,
+		arg.Title,
+		arg.Status,
+		arg.ID,
+		arg.AccountID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const upsertIdentity = `-- name: UpsertIdentity :exec
 INSERT INTO control_identity (account_id, provider, provider_subject, payload)
 VALUES (?, ?, ?, ?)
@@ -1451,20 +1696,16 @@ func (q *Queries) UpsertIdentity(ctx context.Context, arg UpsertIdentityParams) 
 }
 
 const upsertMethod = `-- name: UpsertMethod :exec
-INSERT INTO control_method (method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
-ON DUPLICATE KEY UPDATE service = VALUES(service), group_key = VALUES(group_key), title = VALUES(title),
-    workspace_scoped = VALUES(workspace_scoped), is_sensitive = VALUES(is_sensitive), schema_revision = VALUES(schema_revision), status = 'active'
+INSERT INTO control_method (method_key, service, group_key, position)
+VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE service = VALUES(service), group_key = VALUES(group_key), position = VALUES(position)
 `
 
 type UpsertMethodParams struct {
-	MethodKey       string `json:"method_key"`
-	Service         string `json:"service"`
-	GroupKey        string `json:"group_key"`
-	Title           string `json:"title"`
-	WorkspaceScoped bool   `json:"workspace_scoped"`
-	IsSensitive     bool   `json:"is_sensitive"`
-	SchemaRevision  uint32 `json:"schema_revision"`
+	MethodKey string `json:"method_key"`
+	Service   string `json:"service"`
+	GroupKey  string `json:"group_key"`
+	Position  int32  `json:"position"`
 }
 
 func (q *Queries) UpsertMethod(ctx context.Context, arg UpsertMethodParams) error {
@@ -1472,11 +1713,25 @@ func (q *Queries) UpsertMethod(ctx context.Context, arg UpsertMethodParams) erro
 		arg.MethodKey,
 		arg.Service,
 		arg.GroupKey,
-		arg.Title,
-		arg.WorkspaceScoped,
-		arg.IsSensitive,
-		arg.SchemaRevision,
+		arg.Position,
 	)
+	return err
+}
+
+const upsertMethodGroup = `-- name: UpsertMethodGroup :exec
+INSERT INTO control_method_group (service, group_key, position)
+VALUES (?, ?, ?)
+ON DUPLICATE KEY UPDATE position = VALUES(position)
+`
+
+type UpsertMethodGroupParams struct {
+	Service  string `json:"service"`
+	GroupKey string `json:"group_key"`
+	Position int32  `json:"position"`
+}
+
+func (q *Queries) UpsertMethodGroup(ctx context.Context, arg UpsertMethodGroupParams) error {
+	_, err := q.exec(ctx, q.upsertMethodGroupStmt, upsertMethodGroup, arg.Service, arg.GroupKey, arg.Position)
 	return err
 }
 

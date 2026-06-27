@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS control_session (
     PRIMARY KEY (id),
     UNIQUE KEY control_session_token_hash_uq (token_hash),
     KEY control_session_account_idx (account_id, revoked_at, expires_at),
+    KEY control_session_account_created_idx (account_id, created_at),
     CONSTRAINT control_session_account_fk FOREIGN KEY (account_id)
         REFERENCES control_account (id) ON DELETE CASCADE
 );
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS control_workspace_invite (
     PRIMARY KEY (id),
     UNIQUE KEY control_invite_token_hash_uq (token_hash),
     KEY control_invite_workspace_idx (workspace_id, revoked_at, expires_at),
+    KEY control_invite_workspace_created_idx (workspace_id, created_at),
     CONSTRAINT control_invite_workspace_fk FOREIGN KEY (workspace_id)
         REFERENCES control_workspace (id) ON DELETE CASCADE,
     CONSTRAINT control_invite_creator_fk FOREIGN KEY (created_by)
@@ -129,15 +131,37 @@ CREATE TABLE IF NOT EXISTS control_method (
     method_key VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     service VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     group_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    workspace_scoped BOOLEAN NOT NULL DEFAULT TRUE,
-    is_sensitive BOOLEAN NOT NULL DEFAULT FALSE,
-    schema_revision INT UNSIGNED NOT NULL DEFAULT 1,
-    status ENUM('active', 'deprecated') NOT NULL DEFAULT 'active',
+    position INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (method_key),
-    KEY control_method_service_idx (service, status, group_key)
+    KEY control_method_service_idx (service, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS control_method_group (
+    service VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    group_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (service, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS control_access_service (
+    service VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (service)
+);
+
+CREATE TABLE IF NOT EXISTS control_localization (
+    localization_key VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    locale VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    value TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (localization_key, locale)
 );
 
 CREATE TABLE IF NOT EXISTS control_role_permission (
@@ -150,15 +174,6 @@ CREATE TABLE IF NOT EXISTS control_role_permission (
         REFERENCES control_role (id) ON DELETE CASCADE,
     CONSTRAINT control_permission_method_fk FOREIGN KEY (method_key)
         REFERENCES control_method (method_key) ON DELETE RESTRICT
-);
-
-CREATE TABLE IF NOT EXISTS control_workspace_auth_version (
-    workspace_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    version CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (workspace_id),
-    CONSTRAINT control_auth_version_workspace_fk FOREIGN KEY (workspace_id)
-        REFERENCES control_workspace (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS control_two_factor (

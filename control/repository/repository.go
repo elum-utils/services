@@ -66,12 +66,22 @@ func (r *Repository) Close() error {
 }
 
 func (r *Repository) Bootstrap(ctx context.Context) error {
-	for _, statement := range splitSQLStatements(controlsqlc.SchemaSQL) {
+	if err := r.execBootstrapSQL(ctx, controlsqlc.SchemaSQL, "schema"); err != nil {
+		return err
+	}
+	if err := r.execBootstrapSQL(ctx, controlsqlc.CatalogSQL, "catalog"); err != nil {
+		return err
+	}
+	return r.db.BumpCacheVersion("control", "access-catalog")
+}
+
+func (r *Repository) execBootstrapSQL(ctx context.Context, raw, name string) error {
+	for _, statement := range splitSQLStatements(raw) {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
 		}); err != nil {
-			return fmt.Errorf("control schema statement failed: %w\n%s", err, statement)
+			return fmt.Errorf("control %s statement failed: %w\n%s", name, err, statement)
 		}
 	}
 	return nil

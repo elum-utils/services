@@ -96,48 +96,6 @@ func (ns NullControlAuditEventResult) Value() (driver.Value, error) {
 	return string(ns.ControlAuditEventResult), nil
 }
 
-type ControlMethodStatus string
-
-const (
-	ControlMethodStatusActive     ControlMethodStatus = "active"
-	ControlMethodStatusDeprecated ControlMethodStatus = "deprecated"
-)
-
-func (e *ControlMethodStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ControlMethodStatus(s)
-	case string:
-		*e = ControlMethodStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ControlMethodStatus: %T", src)
-	}
-	return nil
-}
-
-type NullControlMethodStatus struct {
-	ControlMethodStatus ControlMethodStatus `json:"control_method_status"`
-	Valid               bool                `json:"valid"` // Valid is true if ControlMethodStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullControlMethodStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.ControlMethodStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ControlMethodStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullControlMethodStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ControlMethodStatus), nil
-}
-
 type ControlWorkspaceMemberStatus string
 
 const (
@@ -222,6 +180,13 @@ func (ns NullControlWorkspaceStatus) Value() (driver.Value, error) {
 	return string(ns.ControlWorkspaceStatus), nil
 }
 
+type ControlAccessService struct {
+	Service   string    `json:"service"`
+	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type ControlAccount struct {
 	ID          string               `json:"id"`
 	DisplayName string               `json:"display_name"`
@@ -253,17 +218,29 @@ type ControlIdentity struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
+type ControlLocalization struct {
+	LocalizationKey string    `json:"localization_key"`
+	Locale          string    `json:"locale"`
+	Value           string    `json:"value"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 type ControlMethod struct {
-	MethodKey       string              `json:"method_key"`
-	Service         string              `json:"service"`
-	GroupKey        string              `json:"group_key"`
-	Title           string              `json:"title"`
-	WorkspaceScoped bool                `json:"workspace_scoped"`
-	IsSensitive     bool                `json:"is_sensitive"`
-	SchemaRevision  uint32              `json:"schema_revision"`
-	Status          ControlMethodStatus `json:"status"`
-	CreatedAt       time.Time           `json:"created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"`
+	MethodKey string    `json:"method_key"`
+	Service   string    `json:"service"`
+	GroupKey  string    `json:"group_key"`
+	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ControlMethodGroup struct {
+	Service   string    `json:"service"`
+	GroupKey  string    `json:"group_key"`
+	Position  int32     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ControlRole struct {
@@ -332,12 +309,6 @@ type ControlWorkspace struct {
 	CreatedBy string                 `json:"created_by"`
 	CreatedAt time.Time              `json:"created_at"`
 	UpdatedAt time.Time              `json:"updated_at"`
-}
-
-type ControlWorkspaceAuthVersion struct {
-	WorkspaceID string    `json:"workspace_id"`
-	Version     string    `json:"version"`
-	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type ControlWorkspaceInvite struct {

@@ -15,13 +15,17 @@ func (r *Repository) UpdateWorkspace(ctx context.Context, actorID, workspaceID, 
 	if err := required(actorID, workspaceID, slug, title, status); err != nil {
 		return 0, err
 	}
+	rows, err := r.q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{Slug: slug, Title: title, Status: controlsqlc.ControlWorkspaceStatus(status), ID: workspaceID, AccountID: actorID})
+	if err != nil || rows > 0 {
+		return rows, err
+	}
 	if _, err := r.GetWorkspace(ctx, workspaceID); err != nil {
 		return 0, err
 	}
 	if err := r.requireActiveMember(ctx, actorID, workspaceID); err != nil {
 		return 0, err
 	}
-	return r.q.UpdateWorkspace(ctx, controlsqlc.UpdateWorkspaceParams{Slug: slug, Title: title, Status: controlsqlc.ControlWorkspaceStatus(status), ID: workspaceID})
+	return rows, nil
 }
 
 func (r *Repository) ListMembers(ctx context.Context, workspaceID string, limit, offset int32) ([]Member, error) {
@@ -169,10 +173,14 @@ func (r *Repository) RevokeInvite(ctx context.Context, actorID, workspaceID, inv
 	if err := required(actorID, workspaceID, inviteID); err != nil {
 		return 0, err
 	}
+	rows, err := r.q.RevokeInviteAsActiveMember(ctx, controlsqlc.RevokeInviteAsActiveMemberParams{ID: inviteID, WorkspaceID: workspaceID, AccountID: actorID})
+	if err != nil || rows > 0 {
+		return rows, err
+	}
 	if err := r.requireActiveMember(ctx, actorID, workspaceID); err != nil {
 		return 0, err
 	}
-	return r.q.RevokeInvite(ctx, controlsqlc.RevokeInviteParams{ID: inviteID, WorkspaceID: workspaceID})
+	return rows, nil
 }
 
 func mapInvite(row controlsqlc.ControlWorkspaceInvite, roleIDs []string) Invite {

@@ -86,11 +86,22 @@ type RoleModel struct {
 }
 
 type MethodModel struct {
-	Key, Service, GroupKey, Title string
-	WorkspaceScoped, Sensitive    bool
-	SchemaRevision                uint32
-	Status                        string
-	CreatedAt, UpdatedAt          time.Time
+	Key, Service, GroupKey string
+	CreatedAt, UpdatedAt   time.Time
+}
+
+type AccessModel struct {
+	Key, Title, Desc string
+}
+
+type AccessGroups struct {
+	Key, Title, Description string
+	Accesses                []AccessModel
+}
+
+type AccessGroupModel struct {
+	Service, Title, Description string
+	Groups                      []AccessGroups
 }
 
 type CreateWorkspaceParams struct {
@@ -128,7 +139,5 @@ type SetRolePermissionParams struct {
 }
 
 type RegisterMethodParams struct {
-	Key, Service, GroupKey, Title string
-	WorkspaceScoped, Sensitive    bool
-	SchemaRevision                uint32
+	Key, Service, GroupKey string
 }

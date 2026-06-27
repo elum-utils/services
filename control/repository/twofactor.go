@@ -92,17 +92,17 @@ func (r *Repository) CompleteTwoFactorChallenge(ctx context.Context, rawChalleng
 	var session Session
 	var rawSession string
 	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
-		challenge, err := q.GetTwoFactorChallengeForUpdate(ctx, tokenHash(rawChallenge))
+		challenge, err := q.GetTwoFactorChallengeWithFactorForUpdate(ctx, tokenHash(rawChallenge))
 		if err != nil {
 			return noRows(err, ErrNotFound)
 		}
 		if challenge.BindToIp && challenge.Ip != ip {
 			return ErrForbidden
 		}
-		if err := verifyTwoFactorWithQueries(ctx, q, challenge.AccountID, code, now); err != nil {
+		if err := verifyTwoFactorData(ctx, q, challenge.AccountID, challenge.Secret, challenge.BackupHashes, challenge.ActivatedAt, code, now); err != nil {
 			return err
 		}
-		if rows, err := q.DeleteTwoFactorChallenge(ctx, challenge.ID); err != nil || rows != 1 {
+		if rows, err := q.DeleteTwoFactorChallenge(ctx, challenge.ChallengeID); err != nil || rows != 1 {
 			if err != nil {
 				return err
 			}
@@ -127,14 +127,18 @@ func verifyTwoFactorWithQueries(ctx context.Context, q *controlsqlc.Queries, acc
 	if err != nil {
 		return noRows(err, ErrNotFound)
 	}
-	if !row.ActivatedAt.Valid {
+	return verifyTwoFactorData(ctx, q, accountID, row.Secret, row.BackupHashes, row.ActivatedAt, code, now)
+}
+
+func verifyTwoFactorData(ctx context.Context, q *controlsqlc.Queries, accountID, secret string, backupHashes json.RawMessage, activatedAt sql.NullTime, code string, now time.Time) error {
+	if !activatedAt.Valid {
 		return ErrForbidden
 	}
-	if validTOTP(row.Secret, code, now) {
+	if validTOTP(secret, code, now) {
 		return nil
 	}
 	var hashes []string
-	if err := json.Unmarshal(row.BackupHashes, &hashes); err != nil {
+	if err := json.Unmarshal(backupHashes, &hashes); err != nil {
 		return err
 	}
 	needle := backupHash(code)

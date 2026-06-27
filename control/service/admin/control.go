@@ -183,7 +183,6 @@ func (a *Admin) RegisterMethod(ctx context.Context, params RegisterMethodParams)
 	defer cancel()
 	return a.repository.RegisterMethod(mergedCtx, repository.Method{
 		Key: strings.TrimSpace(params.Key), Service: strings.TrimSpace(params.Service), GroupKey: strings.TrimSpace(params.GroupKey),
-		Title: strings.TrimSpace(params.Title), WorkspaceScoped: params.WorkspaceScoped, Sensitive: params.Sensitive, SchemaRevision: params.SchemaRevision,
 	})
 }
 
@@ -206,6 +205,28 @@ func (a *Admin) GetMethod(ctx context.Context, methodKey string) (MethodModel, e
 	defer cancel()
 	value, err := a.repository.GetMethod(mergedCtx, strings.TrimSpace(methodKey))
 	return mapMethod(value), err
+}
+
+func (a *Admin) ListAccess(ctx context.Context, locale string) ([]AccessGroupModel, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	rows, err := a.repository.ListAccessCatalog(mergedCtx, strings.TrimSpace(locale))
+	if err != nil {
+		return nil, err
+	}
+	services := make([]AccessGroupModel, 0)
+	for _, row := range rows {
+		if len(services) == 0 || services[len(services)-1].Service != row.Service {
+			services = append(services, AccessGroupModel{Service: row.Service, Title: row.ServiceTitle, Description: row.ServiceDescription})
+		}
+		serviceIndex := len(services) - 1
+		if len(services[serviceIndex].Groups) == 0 || services[serviceIndex].Groups[len(services[serviceIndex].Groups)-1].Key != row.GroupKey {
+			services[serviceIndex].Groups = append(services[serviceIndex].Groups, AccessGroups{Key: row.GroupKey, Title: row.GroupTitle, Description: row.GroupDescription})
+		}
+		groupIndex := len(services[serviceIndex].Groups) - 1
+		services[serviceIndex].Groups[groupIndex].Accesses = append(services[serviceIndex].Groups[groupIndex].Accesses, AccessModel{Key: row.Key, Title: row.Title, Desc: row.Desc})
+	}
+	return services, nil
 }
 
 func normalizePage(page Page) (int32, int32) {
@@ -242,5 +263,5 @@ func mapInvite(value repository.Invite) InviteModel {
 }
 
 func mapMethod(value repository.Method) MethodModel {
-	return MethodModel{Key: value.Key, Service: value.Service, GroupKey: value.GroupKey, Title: value.Title, WorkspaceScoped: value.WorkspaceScoped, Sensitive: value.Sensitive, SchemaRevision: value.SchemaRevision, Status: value.Status, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+	return MethodModel{Key: value.Key, Service: value.Service, GroupKey: value.GroupKey, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
 }

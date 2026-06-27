@@ -96,9 +96,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getActiveSessionByHashStmt, err = db.PrepareContext(ctx, getActiveSessionByHash); err != nil {
 		return nil, fmt.Errorf("error preparing query GetActiveSessionByHash: %w", err)
 	}
-	if q.getAuthVersionStmt, err = db.PrepareContext(ctx, getAuthVersion); err != nil {
-		return nil, fmt.Errorf("error preparing query GetAuthVersion: %w", err)
-	}
 	if q.getMethodStmt, err = db.PrepareContext(ctx, getMethod); err != nil {
 		return nil, fmt.Errorf("error preparing query GetMethod: %w", err)
 	}
@@ -110,6 +107,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getTwoFactorChallengeForUpdateStmt, err = db.PrepareContext(ctx, getTwoFactorChallengeForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTwoFactorChallengeForUpdate: %w", err)
+	}
+	if q.getTwoFactorChallengeWithFactorForUpdateStmt, err = db.PrepareContext(ctx, getTwoFactorChallengeWithFactorForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTwoFactorChallengeWithFactorForUpdate: %w", err)
 	}
 	if q.getTwoFactorForUpdateStmt, err = db.PrepareContext(ctx, getTwoFactorForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTwoFactorForUpdate: %w", err)
@@ -126,11 +126,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.isActiveWorkspaceMemberStmt, err = db.PrepareContext(ctx, isActiveWorkspaceMember); err != nil {
 		return nil, fmt.Errorf("error preparing query IsActiveWorkspaceMember: %w", err)
 	}
+	if q.listAccessCatalogStmt, err = db.PrepareContext(ctx, listAccessCatalog); err != nil {
+		return nil, fmt.Errorf("error preparing query ListAccessCatalog: %w", err)
+	}
 	if q.listAuditEventsStmt, err = db.PrepareContext(ctx, listAuditEvents); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAuditEvents: %w", err)
 	}
 	if q.listAuditEventsFilteredStmt, err = db.PrepareContext(ctx, listAuditEventsFiltered); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAuditEventsFiltered: %w", err)
+	}
+	if q.listAuthorizedMethodsStmt, err = db.PrepareContext(ctx, listAuthorizedMethods); err != nil {
+		return nil, fmt.Errorf("error preparing query ListAuthorizedMethods: %w", err)
 	}
 	if q.listIdentitiesStmt, err = db.PrepareContext(ctx, listIdentities); err != nil {
 		return nil, fmt.Errorf("error preparing query ListIdentities: %w", err)
@@ -140,6 +146,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listInvitesStmt, err = db.PrepareContext(ctx, listInvites); err != nil {
 		return nil, fmt.Errorf("error preparing query ListInvites: %w", err)
+	}
+	if q.listMethodGroupsStmt, err = db.PrepareContext(ctx, listMethodGroups); err != nil {
+		return nil, fmt.Errorf("error preparing query ListMethodGroups: %w", err)
 	}
 	if q.listMethodsStmt, err = db.PrepareContext(ctx, listMethods); err != nil {
 		return nil, fmt.Errorf("error preparing query ListMethods: %w", err)
@@ -174,14 +183,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.revokeInviteStmt, err = db.PrepareContext(ctx, revokeInvite); err != nil {
 		return nil, fmt.Errorf("error preparing query RevokeInvite: %w", err)
 	}
+	if q.revokeInviteAsActiveMemberStmt, err = db.PrepareContext(ctx, revokeInviteAsActiveMember); err != nil {
+		return nil, fmt.Errorf("error preparing query RevokeInviteAsActiveMember: %w", err)
+	}
 	if q.revokeSessionStmt, err = db.PrepareContext(ctx, revokeSession); err != nil {
 		return nil, fmt.Errorf("error preparing query RevokeSession: %w", err)
 	}
 	if q.setRolePermissionStmt, err = db.PrepareContext(ctx, setRolePermission); err != nil {
 		return nil, fmt.Errorf("error preparing query SetRolePermission: %w", err)
-	}
-	if q.touchAuthVersionStmt, err = db.PrepareContext(ctx, touchAuthVersion); err != nil {
-		return nil, fmt.Errorf("error preparing query TouchAuthVersion: %w", err)
 	}
 	if q.touchSessionStmt, err = db.PrepareContext(ctx, touchSession); err != nil {
 		return nil, fmt.Errorf("error preparing query TouchSession: %w", err)
@@ -198,11 +207,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateWorkspaceStmt, err = db.PrepareContext(ctx, updateWorkspace); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateWorkspace: %w", err)
 	}
+	if q.updateWorkspaceAsActiveMemberStmt, err = db.PrepareContext(ctx, updateWorkspaceAsActiveMember); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateWorkspaceAsActiveMember: %w", err)
+	}
 	if q.upsertIdentityStmt, err = db.PrepareContext(ctx, upsertIdentity); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertIdentity: %w", err)
 	}
 	if q.upsertMethodStmt, err = db.PrepareContext(ctx, upsertMethod); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertMethod: %w", err)
+	}
+	if q.upsertMethodGroupStmt, err = db.PrepareContext(ctx, upsertMethodGroup); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertMethodGroup: %w", err)
 	}
 	if q.upsertTwoFactorStmt, err = db.PrepareContext(ctx, upsertTwoFactor); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertTwoFactor: %w", err)
@@ -332,11 +347,6 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getActiveSessionByHashStmt: %w", cerr)
 		}
 	}
-	if q.getAuthVersionStmt != nil {
-		if cerr := q.getAuthVersionStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getAuthVersionStmt: %w", cerr)
-		}
-	}
 	if q.getMethodStmt != nil {
 		if cerr := q.getMethodStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getMethodStmt: %w", cerr)
@@ -355,6 +365,11 @@ func (q *Queries) Close() error {
 	if q.getTwoFactorChallengeForUpdateStmt != nil {
 		if cerr := q.getTwoFactorChallengeForUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getTwoFactorChallengeForUpdateStmt: %w", cerr)
+		}
+	}
+	if q.getTwoFactorChallengeWithFactorForUpdateStmt != nil {
+		if cerr := q.getTwoFactorChallengeWithFactorForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTwoFactorChallengeWithFactorForUpdateStmt: %w", cerr)
 		}
 	}
 	if q.getTwoFactorForUpdateStmt != nil {
@@ -382,6 +397,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing isActiveWorkspaceMemberStmt: %w", cerr)
 		}
 	}
+	if q.listAccessCatalogStmt != nil {
+		if cerr := q.listAccessCatalogStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listAccessCatalogStmt: %w", cerr)
+		}
+	}
 	if q.listAuditEventsStmt != nil {
 		if cerr := q.listAuditEventsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAuditEventsStmt: %w", cerr)
@@ -390,6 +410,11 @@ func (q *Queries) Close() error {
 	if q.listAuditEventsFilteredStmt != nil {
 		if cerr := q.listAuditEventsFilteredStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAuditEventsFilteredStmt: %w", cerr)
+		}
+	}
+	if q.listAuthorizedMethodsStmt != nil {
+		if cerr := q.listAuthorizedMethodsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listAuthorizedMethodsStmt: %w", cerr)
 		}
 	}
 	if q.listIdentitiesStmt != nil {
@@ -405,6 +430,11 @@ func (q *Queries) Close() error {
 	if q.listInvitesStmt != nil {
 		if cerr := q.listInvitesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listInvitesStmt: %w", cerr)
+		}
+	}
+	if q.listMethodGroupsStmt != nil {
+		if cerr := q.listMethodGroupsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listMethodGroupsStmt: %w", cerr)
 		}
 	}
 	if q.listMethodsStmt != nil {
@@ -462,6 +492,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing revokeInviteStmt: %w", cerr)
 		}
 	}
+	if q.revokeInviteAsActiveMemberStmt != nil {
+		if cerr := q.revokeInviteAsActiveMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing revokeInviteAsActiveMemberStmt: %w", cerr)
+		}
+	}
 	if q.revokeSessionStmt != nil {
 		if cerr := q.revokeSessionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing revokeSessionStmt: %w", cerr)
@@ -470,11 +505,6 @@ func (q *Queries) Close() error {
 	if q.setRolePermissionStmt != nil {
 		if cerr := q.setRolePermissionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing setRolePermissionStmt: %w", cerr)
-		}
-	}
-	if q.touchAuthVersionStmt != nil {
-		if cerr := q.touchAuthVersionStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing touchAuthVersionStmt: %w", cerr)
 		}
 	}
 	if q.touchSessionStmt != nil {
@@ -502,6 +532,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateWorkspaceStmt: %w", cerr)
 		}
 	}
+	if q.updateWorkspaceAsActiveMemberStmt != nil {
+		if cerr := q.updateWorkspaceAsActiveMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateWorkspaceAsActiveMemberStmt: %w", cerr)
+		}
+	}
 	if q.upsertIdentityStmt != nil {
 		if cerr := q.upsertIdentityStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing upsertIdentityStmt: %w", cerr)
@@ -510,6 +545,11 @@ func (q *Queries) Close() error {
 	if q.upsertMethodStmt != nil {
 		if cerr := q.upsertMethodStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing upsertMethodStmt: %w", cerr)
+		}
+	}
+	if q.upsertMethodGroupStmt != nil {
+		if cerr := q.upsertMethodGroupStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertMethodGroupStmt: %w", cerr)
 		}
 	}
 	if q.upsertTwoFactorStmt != nil {
@@ -554,135 +594,145 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                                     DBTX
-	tx                                     *sql.Tx
-	activateTwoFactorStmt                  *sql.Stmt
-	addInviteRoleStmt                      *sql.Stmt
-	addRoleMemberStmt                      *sql.Stmt
-	addWorkspaceMemberStmt                 *sql.Stmt
-	checkAccessStmt                        *sql.Stmt
-	clearRolePermissionsStmt               *sql.Stmt
-	countIdentitiesStmt                    *sql.Stmt
-	createAccountStmt                      *sql.Stmt
-	createAuditEventStmt                   *sql.Stmt
-	createInviteStmt                       *sql.Stmt
-	createRoleStmt                         *sql.Stmt
-	createSessionStmt                      *sql.Stmt
-	createTwoFactorChallengeStmt           *sql.Stmt
-	createWorkspaceStmt                    *sql.Stmt
-	deleteIdentityStmt                     *sql.Stmt
-	deleteRoleStmt                         *sql.Stmt
-	deleteRolePermissionStmt               *sql.Stmt
-	deleteTwoFactorStmt                    *sql.Stmt
-	deleteTwoFactorChallengeStmt           *sql.Stmt
-	findAccountByIdentityStmt              *sql.Stmt
-	getAccountStmt                         *sql.Stmt
-	getAccountPositionStmt                 *sql.Stmt
-	getActiveInviteByHashForUpdateStmt     *sql.Stmt
-	getActiveSessionByHashStmt             *sql.Stmt
-	getAuthVersionStmt                     *sql.Stmt
-	getMethodStmt                          *sql.Stmt
-	getRoleStmt                            *sql.Stmt
-	getTwoFactorStmt                       *sql.Stmt
-	getTwoFactorChallengeForUpdateStmt     *sql.Stmt
-	getTwoFactorForUpdateStmt              *sql.Stmt
-	getWorkspaceStmt                       *sql.Stmt
-	hasActiveTwoFactorStmt                 *sql.Stmt
-	incrementInviteUseStmt                 *sql.Stmt
-	isActiveWorkspaceMemberStmt            *sql.Stmt
-	listAuditEventsStmt                    *sql.Stmt
-	listAuditEventsFilteredStmt            *sql.Stmt
-	listIdentitiesStmt                     *sql.Stmt
-	listInviteRolesStmt                    *sql.Stmt
-	listInvitesStmt                        *sql.Stmt
-	listMethodsStmt                        *sql.Stmt
-	listRolePermissionsStmt                *sql.Stmt
-	listRolesStmt                          *sql.Stmt
-	listSessionsStmt                       *sql.Stmt
-	listWorkspaceMembersStmt               *sql.Stmt
-	listWorkspacesForAccountStmt           *sql.Stmt
-	removeRoleMemberStmt                   *sql.Stmt
-	removeWorkspaceMemberStmt              *sql.Stmt
-	removeWorkspaceMemberRolesStmt         *sql.Stmt
-	revokeAllSessionsStmt                  *sql.Stmt
-	revokeInviteStmt                       *sql.Stmt
-	revokeSessionStmt                      *sql.Stmt
-	setRolePermissionStmt                  *sql.Stmt
-	touchAuthVersionStmt                   *sql.Stmt
-	touchSessionStmt                       *sql.Stmt
-	updatePendingTwoFactorBackupHashesStmt *sql.Stmt
-	updateRoleStmt                         *sql.Stmt
-	updateTwoFactorBackupHashesStmt        *sql.Stmt
-	updateWorkspaceStmt                    *sql.Stmt
-	upsertIdentityStmt                     *sql.Stmt
-	upsertMethodStmt                       *sql.Stmt
-	upsertTwoFactorStmt                    *sql.Stmt
+	db                                           DBTX
+	tx                                           *sql.Tx
+	activateTwoFactorStmt                        *sql.Stmt
+	addInviteRoleStmt                            *sql.Stmt
+	addRoleMemberStmt                            *sql.Stmt
+	addWorkspaceMemberStmt                       *sql.Stmt
+	checkAccessStmt                              *sql.Stmt
+	clearRolePermissionsStmt                     *sql.Stmt
+	countIdentitiesStmt                          *sql.Stmt
+	createAccountStmt                            *sql.Stmt
+	createAuditEventStmt                         *sql.Stmt
+	createInviteStmt                             *sql.Stmt
+	createRoleStmt                               *sql.Stmt
+	createSessionStmt                            *sql.Stmt
+	createTwoFactorChallengeStmt                 *sql.Stmt
+	createWorkspaceStmt                          *sql.Stmt
+	deleteIdentityStmt                           *sql.Stmt
+	deleteRoleStmt                               *sql.Stmt
+	deleteRolePermissionStmt                     *sql.Stmt
+	deleteTwoFactorStmt                          *sql.Stmt
+	deleteTwoFactorChallengeStmt                 *sql.Stmt
+	findAccountByIdentityStmt                    *sql.Stmt
+	getAccountStmt                               *sql.Stmt
+	getAccountPositionStmt                       *sql.Stmt
+	getActiveInviteByHashForUpdateStmt           *sql.Stmt
+	getActiveSessionByHashStmt                   *sql.Stmt
+	getMethodStmt                                *sql.Stmt
+	getRoleStmt                                  *sql.Stmt
+	getTwoFactorStmt                             *sql.Stmt
+	getTwoFactorChallengeForUpdateStmt           *sql.Stmt
+	getTwoFactorChallengeWithFactorForUpdateStmt *sql.Stmt
+	getTwoFactorForUpdateStmt                    *sql.Stmt
+	getWorkspaceStmt                             *sql.Stmt
+	hasActiveTwoFactorStmt                       *sql.Stmt
+	incrementInviteUseStmt                       *sql.Stmt
+	isActiveWorkspaceMemberStmt                  *sql.Stmt
+	listAccessCatalogStmt                        *sql.Stmt
+	listAuditEventsStmt                          *sql.Stmt
+	listAuditEventsFilteredStmt                  *sql.Stmt
+	listAuthorizedMethodsStmt                    *sql.Stmt
+	listIdentitiesStmt                           *sql.Stmt
+	listInviteRolesStmt                          *sql.Stmt
+	listInvitesStmt                              *sql.Stmt
+	listMethodGroupsStmt                         *sql.Stmt
+	listMethodsStmt                              *sql.Stmt
+	listRolePermissionsStmt                      *sql.Stmt
+	listRolesStmt                                *sql.Stmt
+	listSessionsStmt                             *sql.Stmt
+	listWorkspaceMembersStmt                     *sql.Stmt
+	listWorkspacesForAccountStmt                 *sql.Stmt
+	removeRoleMemberStmt                         *sql.Stmt
+	removeWorkspaceMemberStmt                    *sql.Stmt
+	removeWorkspaceMemberRolesStmt               *sql.Stmt
+	revokeAllSessionsStmt                        *sql.Stmt
+	revokeInviteStmt                             *sql.Stmt
+	revokeInviteAsActiveMemberStmt               *sql.Stmt
+	revokeSessionStmt                            *sql.Stmt
+	setRolePermissionStmt                        *sql.Stmt
+	touchSessionStmt                             *sql.Stmt
+	updatePendingTwoFactorBackupHashesStmt       *sql.Stmt
+	updateRoleStmt                               *sql.Stmt
+	updateTwoFactorBackupHashesStmt              *sql.Stmt
+	updateWorkspaceStmt                          *sql.Stmt
+	updateWorkspaceAsActiveMemberStmt            *sql.Stmt
+	upsertIdentityStmt                           *sql.Stmt
+	upsertMethodStmt                             *sql.Stmt
+	upsertMethodGroupStmt                        *sql.Stmt
+	upsertTwoFactorStmt                          *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                                     tx,
-		tx:                                     tx,
-		activateTwoFactorStmt:                  q.activateTwoFactorStmt,
-		addInviteRoleStmt:                      q.addInviteRoleStmt,
-		addRoleMemberStmt:                      q.addRoleMemberStmt,
-		addWorkspaceMemberStmt:                 q.addWorkspaceMemberStmt,
-		checkAccessStmt:                        q.checkAccessStmt,
-		clearRolePermissionsStmt:               q.clearRolePermissionsStmt,
-		countIdentitiesStmt:                    q.countIdentitiesStmt,
-		createAccountStmt:                      q.createAccountStmt,
-		createAuditEventStmt:                   q.createAuditEventStmt,
-		createInviteStmt:                       q.createInviteStmt,
-		createRoleStmt:                         q.createRoleStmt,
-		createSessionStmt:                      q.createSessionStmt,
-		createTwoFactorChallengeStmt:           q.createTwoFactorChallengeStmt,
-		createWorkspaceStmt:                    q.createWorkspaceStmt,
-		deleteIdentityStmt:                     q.deleteIdentityStmt,
-		deleteRoleStmt:                         q.deleteRoleStmt,
-		deleteRolePermissionStmt:               q.deleteRolePermissionStmt,
-		deleteTwoFactorStmt:                    q.deleteTwoFactorStmt,
-		deleteTwoFactorChallengeStmt:           q.deleteTwoFactorChallengeStmt,
-		findAccountByIdentityStmt:              q.findAccountByIdentityStmt,
-		getAccountStmt:                         q.getAccountStmt,
-		getAccountPositionStmt:                 q.getAccountPositionStmt,
-		getActiveInviteByHashForUpdateStmt:     q.getActiveInviteByHashForUpdateStmt,
-		getActiveSessionByHashStmt:             q.getActiveSessionByHashStmt,
-		getAuthVersionStmt:                     q.getAuthVersionStmt,
-		getMethodStmt:                          q.getMethodStmt,
-		getRoleStmt:                            q.getRoleStmt,
-		getTwoFactorStmt:                       q.getTwoFactorStmt,
-		getTwoFactorChallengeForUpdateStmt:     q.getTwoFactorChallengeForUpdateStmt,
-		getTwoFactorForUpdateStmt:              q.getTwoFactorForUpdateStmt,
-		getWorkspaceStmt:                       q.getWorkspaceStmt,
-		hasActiveTwoFactorStmt:                 q.hasActiveTwoFactorStmt,
-		incrementInviteUseStmt:                 q.incrementInviteUseStmt,
-		isActiveWorkspaceMemberStmt:            q.isActiveWorkspaceMemberStmt,
-		listAuditEventsStmt:                    q.listAuditEventsStmt,
-		listAuditEventsFilteredStmt:            q.listAuditEventsFilteredStmt,
-		listIdentitiesStmt:                     q.listIdentitiesStmt,
-		listInviteRolesStmt:                    q.listInviteRolesStmt,
-		listInvitesStmt:                        q.listInvitesStmt,
-		listMethodsStmt:                        q.listMethodsStmt,
-		listRolePermissionsStmt:                q.listRolePermissionsStmt,
-		listRolesStmt:                          q.listRolesStmt,
-		listSessionsStmt:                       q.listSessionsStmt,
-		listWorkspaceMembersStmt:               q.listWorkspaceMembersStmt,
-		listWorkspacesForAccountStmt:           q.listWorkspacesForAccountStmt,
-		removeRoleMemberStmt:                   q.removeRoleMemberStmt,
-		removeWorkspaceMemberStmt:              q.removeWorkspaceMemberStmt,
-		removeWorkspaceMemberRolesStmt:         q.removeWorkspaceMemberRolesStmt,
-		revokeAllSessionsStmt:                  q.revokeAllSessionsStmt,
-		revokeInviteStmt:                       q.revokeInviteStmt,
-		revokeSessionStmt:                      q.revokeSessionStmt,
-		setRolePermissionStmt:                  q.setRolePermissionStmt,
-		touchAuthVersionStmt:                   q.touchAuthVersionStmt,
-		touchSessionStmt:                       q.touchSessionStmt,
-		updatePendingTwoFactorBackupHashesStmt: q.updatePendingTwoFactorBackupHashesStmt,
-		updateRoleStmt:                         q.updateRoleStmt,
-		updateTwoFactorBackupHashesStmt:        q.updateTwoFactorBackupHashesStmt,
-		updateWorkspaceStmt:                    q.updateWorkspaceStmt,
-		upsertIdentityStmt:                     q.upsertIdentityStmt,
-		upsertMethodStmt:                       q.upsertMethodStmt,
-		upsertTwoFactorStmt:                    q.upsertTwoFactorStmt,
+		db:                                 tx,
+		tx:                                 tx,
+		activateTwoFactorStmt:              q.activateTwoFactorStmt,
+		addInviteRoleStmt:                  q.addInviteRoleStmt,
+		addRoleMemberStmt:                  q.addRoleMemberStmt,
+		addWorkspaceMemberStmt:             q.addWorkspaceMemberStmt,
+		checkAccessStmt:                    q.checkAccessStmt,
+		clearRolePermissionsStmt:           q.clearRolePermissionsStmt,
+		countIdentitiesStmt:                q.countIdentitiesStmt,
+		createAccountStmt:                  q.createAccountStmt,
+		createAuditEventStmt:               q.createAuditEventStmt,
+		createInviteStmt:                   q.createInviteStmt,
+		createRoleStmt:                     q.createRoleStmt,
+		createSessionStmt:                  q.createSessionStmt,
+		createTwoFactorChallengeStmt:       q.createTwoFactorChallengeStmt,
+		createWorkspaceStmt:                q.createWorkspaceStmt,
+		deleteIdentityStmt:                 q.deleteIdentityStmt,
+		deleteRoleStmt:                     q.deleteRoleStmt,
+		deleteRolePermissionStmt:           q.deleteRolePermissionStmt,
+		deleteTwoFactorStmt:                q.deleteTwoFactorStmt,
+		deleteTwoFactorChallengeStmt:       q.deleteTwoFactorChallengeStmt,
+		findAccountByIdentityStmt:          q.findAccountByIdentityStmt,
+		getAccountStmt:                     q.getAccountStmt,
+		getAccountPositionStmt:             q.getAccountPositionStmt,
+		getActiveInviteByHashForUpdateStmt: q.getActiveInviteByHashForUpdateStmt,
+		getActiveSessionByHashStmt:         q.getActiveSessionByHashStmt,
+		getMethodStmt:                      q.getMethodStmt,
+		getRoleStmt:                        q.getRoleStmt,
+		getTwoFactorStmt:                   q.getTwoFactorStmt,
+		getTwoFactorChallengeForUpdateStmt: q.getTwoFactorChallengeForUpdateStmt,
+		getTwoFactorChallengeWithFactorForUpdateStmt: q.getTwoFactorChallengeWithFactorForUpdateStmt,
+		getTwoFactorForUpdateStmt:                    q.getTwoFactorForUpdateStmt,
+		getWorkspaceStmt:                             q.getWorkspaceStmt,
+		hasActiveTwoFactorStmt:                       q.hasActiveTwoFactorStmt,
+		incrementInviteUseStmt:                       q.incrementInviteUseStmt,
+		isActiveWorkspaceMemberStmt:                  q.isActiveWorkspaceMemberStmt,
+		listAccessCatalogStmt:                        q.listAccessCatalogStmt,
+		listAuditEventsStmt:                          q.listAuditEventsStmt,
+		listAuditEventsFilteredStmt:                  q.listAuditEventsFilteredStmt,
+		listAuthorizedMethodsStmt:                    q.listAuthorizedMethodsStmt,
+		listIdentitiesStmt:                           q.listIdentitiesStmt,
+		listInviteRolesStmt:                          q.listInviteRolesStmt,
+		listInvitesStmt:                              q.listInvitesStmt,
+		listMethodGroupsStmt:                         q.listMethodGroupsStmt,
+		listMethodsStmt:                              q.listMethodsStmt,
+		listRolePermissionsStmt:                      q.listRolePermissionsStmt,
+		listRolesStmt:                                q.listRolesStmt,
+		listSessionsStmt:                             q.listSessionsStmt,
+		listWorkspaceMembersStmt:                     q.listWorkspaceMembersStmt,
+		listWorkspacesForAccountStmt:                 q.listWorkspacesForAccountStmt,
+		removeRoleMemberStmt:                         q.removeRoleMemberStmt,
+		removeWorkspaceMemberStmt:                    q.removeWorkspaceMemberStmt,
+		removeWorkspaceMemberRolesStmt:               q.removeWorkspaceMemberRolesStmt,
+		revokeAllSessionsStmt:                        q.revokeAllSessionsStmt,
+		revokeInviteStmt:                             q.revokeInviteStmt,
+		revokeInviteAsActiveMemberStmt:               q.revokeInviteAsActiveMemberStmt,
+		revokeSessionStmt:                            q.revokeSessionStmt,
+		setRolePermissionStmt:                        q.setRolePermissionStmt,
+		touchSessionStmt:                             q.touchSessionStmt,
+		updatePendingTwoFactorBackupHashesStmt:       q.updatePendingTwoFactorBackupHashesStmt,
+		updateRoleStmt:                               q.updateRoleStmt,
+		updateTwoFactorBackupHashesStmt:              q.updateTwoFactorBackupHashesStmt,
+		updateWorkspaceStmt:                          q.updateWorkspaceStmt,
+		updateWorkspaceAsActiveMemberStmt:            q.updateWorkspaceAsActiveMemberStmt,
+		upsertIdentityStmt:                           q.upsertIdentityStmt,
+		upsertMethodStmt:                             q.upsertMethodStmt,
+		upsertMethodGroupStmt:                        q.upsertMethodGroupStmt,
+		upsertTwoFactorStmt:                          q.upsertTwoFactorStmt,
 	}
 }

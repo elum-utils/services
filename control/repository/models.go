@@ -52,11 +52,20 @@ type Role struct {
 }
 
 type Method struct {
-	Key, Service, GroupKey, Title string
-	WorkspaceScoped, Sensitive    bool
-	SchemaRevision                uint32
-	Status                        string
-	CreatedAt, UpdatedAt          time.Time
+	Key, Service, GroupKey string
+	Position               int32
+	CreatedAt, UpdatedAt   time.Time
+}
+
+type MethodGroup struct {
+	Service, Key         string
+	Position             int32
+	CreatedAt, UpdatedAt time.Time
+}
+
+type AccessCatalogRow struct {
+	Service, ServiceTitle, ServiceDescription, GroupKey, GroupTitle, GroupDescription, Key, Title, Desc string
+	ServicePosition, GroupPosition, Position                                                            int32
 }
 
 type AuditEvent struct {

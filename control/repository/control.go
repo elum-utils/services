@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	controlsqlc "github.com/elum-utils/services/control/sqlc"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -19,7 +20,8 @@ func (r *Repository) CreateAccount(ctx context.Context, id, displayName string) 
 	if err := r.q.CreateAccount(ctx, controlsqlc.CreateAccountParams{ID: id, DisplayName: displayName}); err != nil {
 		return Account{}, err
 	}
-	return r.GetAccount(ctx, id)
+	now := time.Now()
+	return Account{ID: id, DisplayName: displayName, Status: string(controlsqlc.ControlAccountStatusActive), CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id string) (Account, error) {
@@ -50,7 +52,7 @@ func (r *Repository) CreateWorkspace(ctx context.Context, workspaceID, slug, tit
 		if err := q.AddRoleMember(ctx, controlsqlc.AddRoleMemberParams{RoleID: ownerID, AccountID: actorID}); err != nil {
 			return err
 		}
-		return q.TouchAuthVersion(ctx, controlsqlc.TouchAuthVersionParams{WorkspaceID: workspaceID, Version: newAuthVersion()})
+		return nil
 	})
 	if err != nil {
 		return Workspace{}, err
@@ -252,21 +254,55 @@ func (r *Repository) ClearPermissions(ctx context.Context, actorID, workspaceID,
 }
 
 func (r *Repository) RegisterMethod(ctx context.Context, method Method) error {
-	if err := required(method.Key, method.Service, method.GroupKey, method.Title); err != nil {
+	if err := required(method.Key, method.Service, method.GroupKey); err != nil {
 		return err
-	}
-	if method.SchemaRevision == 0 {
-		method.SchemaRevision = 1
 	}
 	if existing, err := r.GetMethod(ctx, method.Key); err == nil && existing.Service != method.Service {
 		return ErrMethodOwner
 	} else if err != nil && !errors.Is(err, ErrMethodNotFound) {
 		return err
 	}
-	if err := r.q.UpsertMethod(ctx, controlsqlc.UpsertMethodParams{MethodKey: method.Key, Service: method.Service, GroupKey: method.GroupKey, Title: method.Title, WorkspaceScoped: method.WorkspaceScoped, IsSensitive: method.Sensitive, SchemaRevision: method.SchemaRevision}); err != nil {
+	if err := r.q.UpsertMethodGroup(ctx, controlsqlc.UpsertMethodGroupParams{Service: method.Service, GroupKey: method.GroupKey, Position: method.Position}); err != nil {
+		return err
+	}
+	if err := r.q.UpsertMethod(ctx, controlsqlc.UpsertMethodParams{MethodKey: method.Key, Service: method.Service, GroupKey: method.GroupKey, Position: method.Position}); err != nil {
 		return err
 	}
 	return r.db.BumpCacheVersion("control", "method-registry")
+}
+
+func (r *Repository) ListMethodGroups(ctx context.Context) ([]MethodGroup, error) {
+	rows, err := r.q.ListMethodGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]MethodGroup, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, MethodGroup{Service: row.Service, Key: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return result, nil
+}
+
+func (r *Repository) ListAccessCatalog(ctx context.Context, locale string) ([]AccessCatalogRow, error) {
+	locale = strings.TrimSpace(locale)
+	version := r.db.CacheVersion("control", "access-catalog")
+	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+		KeyParts:          []any{"control", "access-catalog", version, locale},
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: []any{"control", "access-catalog"},
+	}, func(ctx context.Context) ([]AccessCatalogRow, error) {
+		rows, err := r.q.ListAccessCatalog(ctx, controlsqlc.ListAccessCatalogParams{Locale: locale, Locale_2: locale, Locale_3: locale, Locale_4: locale, Locale_5: locale, Locale_6: locale})
+		if err != nil {
+			return nil, err
+		}
+		result := make([]AccessCatalogRow, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, AccessCatalogRow{Service: row.Service, ServicePosition: row.ServicePosition, ServiceTitle: row.ServiceTitle, ServiceDescription: row.ServiceDescription, GroupKey: row.GroupKey, GroupPosition: row.GroupPosition, GroupTitle: row.GroupTitle, GroupDescription: row.GroupDescription, Key: row.MethodKey, Position: row.Position, Title: row.AccessTitle, Desc: row.AccessDescription})
+		}
+		return result, nil
+	})
 }
 
 func (r *Repository) ListMethods(ctx context.Context) ([]Method, error) {
@@ -276,7 +312,7 @@ func (r *Repository) ListMethods(ctx context.Context) ([]Method, error) {
 	}
 	result := make([]Method, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Title: row.Title, WorkspaceScoped: row.WorkspaceScoped, Sensitive: row.IsSensitive, SchemaRevision: row.SchemaRevision, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
 	}
 	return result, nil
 }
@@ -286,7 +322,7 @@ func (r *Repository) GetMethod(ctx context.Context, methodKey string) (Method, e
 	if err != nil {
 		return Method{}, noRows(err, ErrMethodNotFound)
 	}
-	return Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Title: row.Title, WorkspaceScoped: row.WorkspaceScoped, Sensitive: row.IsSensitive, SchemaRevision: row.SchemaRevision, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
 }
 
 func (r *Repository) CheckAccess(ctx context.Context, accountID, workspaceID, methodKey string) (bool, error) {
@@ -303,14 +339,33 @@ func (r *Repository) CheckAccess(ctx context.Context, accountID, workspaceID, me
 	})
 }
 
-func (r *Repository) touchAuthVersion(ctx context.Context, workspaceID string) error {
-	if err := r.q.TouchAuthVersion(ctx, controlsqlc.TouchAuthVersionParams{WorkspaceID: workspaceID, Version: newAuthVersion()}); err != nil {
-		return err
+func (r *Repository) ListAuthorizedMethods(ctx context.Context, accountID, workspaceID string) ([]Method, error) {
+	if err := required(accountID, workspaceID); err != nil {
+		return nil, err
 	}
-	return r.db.BumpCacheVersion("control", "access", workspaceID)
+	methodVersion := r.db.CacheVersion("control", "method-registry")
+	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+		KeyParts:          []any{"control", "authorized-methods", methodVersion, workspaceID, accountID},
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: []any{"control", "access", workspaceID},
+	}, func(ctx context.Context) ([]Method, error) {
+		rows, err := r.q.ListAuthorizedMethods(ctx, controlsqlc.ListAuthorizedMethodsParams{WorkspaceID: workspaceID, AccountID: accountID})
+		if err != nil {
+			return nil, err
+		}
+		result := make([]Method, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position})
+		}
+		return result, nil
+	})
 }
 
-func newAuthVersion() string { return strings.ReplaceAll(uuid.NewString(), "-", "") }
+func (r *Repository) touchAuthVersion(ctx context.Context, workspaceID string) error {
+	return r.db.BumpCacheVersion("control", "access", workspaceID)
+}
 
 func (r *Repository) requireHigherThanPosition(ctx context.Context, actorID, workspaceID string, targetPosition int32) error {
 	position, err := r.accountPosition(ctx, actorID, workspaceID)

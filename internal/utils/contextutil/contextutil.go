@@ -16,12 +16,9 @@ func Merge(rootCtx context.Context, requestCtx context.Context) (context.Context
 	}
 
 	ctx, cancel := context.WithCancel(requestCtx)
-	go func() {
-		select {
-		case <-rootCtx.Done():
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	return ctx, cancel
+	stop := context.AfterFunc(rootCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }

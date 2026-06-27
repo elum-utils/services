@@ -15,9 +15,7 @@ type Internal struct {
 }
 
 type MethodManifest struct {
-	Key, Service, GroupKey, Title string
-	WorkspaceScoped, Sensitive    bool
-	SchemaRevision                uint32
+	Key, Service, GroupKey string
 }
 
 type AccessRequest struct {
@@ -25,9 +23,7 @@ type AccessRequest struct {
 }
 
 type AuthorizedMethod struct {
-	Key, Service, GroupKey, Title string
-	WorkspaceScoped, Sensitive    bool
-	SchemaRevision                uint32
+	Key, Service, GroupKey string
 }
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options repository.Options) *Internal {
@@ -50,8 +46,7 @@ func (i *Internal) RegisterManifest(ctx context.Context, values []MethodManifest
 	defer cancel()
 	for _, value := range values {
 		if err := i.repository.RegisterMethod(mergedCtx, repository.Method{
-			Key: strings.TrimSpace(value.Key), Service: strings.TrimSpace(value.Service), GroupKey: strings.TrimSpace(value.GroupKey), Title: strings.TrimSpace(value.Title),
-			WorkspaceScoped: value.WorkspaceScoped, Sensitive: value.Sensitive, SchemaRevision: value.SchemaRevision,
+			Key: strings.TrimSpace(value.Key), Service: strings.TrimSpace(value.Service), GroupKey: strings.TrimSpace(value.GroupKey),
 		}); err != nil {
 			return err
 		}
@@ -68,20 +63,13 @@ func (i *Internal) CheckAccess(ctx context.Context, value AccessRequest) (bool, 
 func (i *Internal) GetAuthorizedMethods(ctx context.Context, accountID, workspaceID string) ([]AuthorizedMethod, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
-	methods, err := i.repository.ListMethods(mergedCtx)
+	methods, err := i.repository.ListAuthorizedMethods(mergedCtx, strings.TrimSpace(accountID), strings.TrimSpace(workspaceID))
 	if err != nil {
 		return nil, err
 	}
 	result := make([]AuthorizedMethod, 0, len(methods))
 	for _, method := range methods {
-		if !method.WorkspaceScoped {
-			continue
-		}
-		allowed, err := i.repository.CheckAccess(mergedCtx, strings.TrimSpace(accountID), strings.TrimSpace(workspaceID), method.Key)
-		if err != nil || !allowed {
-			continue
-		}
-		result = append(result, AuthorizedMethod{Key: method.Key, Service: method.Service, GroupKey: method.GroupKey, Title: method.Title, WorkspaceScoped: method.WorkspaceScoped, Sensitive: method.Sensitive, SchemaRevision: method.SchemaRevision})
+		result = append(result, AuthorizedMethod{Key: method.Key, Service: method.Service, GroupKey: method.GroupKey})
 	}
 	return result, nil
 }

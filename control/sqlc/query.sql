@@ -18,7 +18,7 @@ VALUES (?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE provider_subject = VALUES(provider_subject), payload = VALUES(payload);
 
 -- name: ListIdentities :many
-SELECT account_id, provider, provider_subject, payload, created_at, updated_at
+SELECT account_id, provider, provider_subject, COALESCE(payload, JSON_OBJECT()) AS payload, created_at, updated_at
 FROM control_identity WHERE account_id = ? ORDER BY provider;
 
 -- name: CountIdentities :one
@@ -97,6 +97,15 @@ WHERE r.workspace_id = ? AND rm.account_id = ?;
 -- name: UpdateWorkspace :execrows
 UPDATE control_workspace SET slug = ?, title = ?, status = ? WHERE id = ?;
 
+-- name: UpdateWorkspaceAsActiveMember :execrows
+UPDATE control_workspace w
+SET w.slug = ?, w.title = ?, w.status = ?
+WHERE w.id = ?
+  AND EXISTS (
+      SELECT 1 FROM control_workspace_member m
+      WHERE m.workspace_id = w.id AND m.account_id = ? AND m.status = 'active'
+  );
+
 -- name: CreateInvite :exec
 INSERT INTO control_workspace_invite (id, workspace_id, created_by, token_hash, max_uses, expires_at)
 VALUES (?, ?, ?, ?, ?, ?);
@@ -125,6 +134,15 @@ FROM control_workspace_invite WHERE workspace_id = ? ORDER BY created_at DESC LI
 -- name: RevokeInvite :execrows
 UPDATE control_workspace_invite SET revoked_at = NOW()
 WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL;
+
+-- name: RevokeInviteAsActiveMember :execrows
+UPDATE control_workspace_invite i
+SET i.revoked_at = NOW()
+WHERE i.id = ? AND i.workspace_id = ? AND i.revoked_at IS NULL
+  AND EXISTS (
+      SELECT 1 FROM control_workspace_member m
+      WHERE m.workspace_id = i.workspace_id AND m.account_id = ? AND m.status = 'active'
+  );
 
 -- name: CreateRole :exec
 INSERT INTO control_role (id, workspace_id, code, title, description, position, is_owner)
@@ -161,18 +179,59 @@ WHERE r.workspace_id = ? AND p.role_id = ? AND r.deleted_at IS NULL
 ORDER BY p.method_key;
 
 -- name: UpsertMethod :exec
-INSERT INTO control_method (method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
-ON DUPLICATE KEY UPDATE service = VALUES(service), group_key = VALUES(group_key), title = VALUES(title),
-    workspace_scoped = VALUES(workspace_scoped), is_sensitive = VALUES(is_sensitive), schema_revision = VALUES(schema_revision), status = 'active';
+INSERT INTO control_method (method_key, service, group_key, position)
+VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE service = VALUES(service), group_key = VALUES(group_key), position = VALUES(position);
+
+-- name: UpsertMethodGroup :exec
+INSERT INTO control_method_group (service, group_key, position)
+VALUES (?, ?, ?)
+ON DUPLICATE KEY UPDATE position = VALUES(position);
+
+-- name: ListMethodGroups :many
+SELECT service, group_key, position, created_at, updated_at
+FROM control_method_group
+ORDER BY service, group_key;
+
+-- name: ListAccessCatalog :many
+SELECT g.service, service_catalog.position AS service_position, g.group_key, g.position AS group_position,
+       COALESCE(service_title.value, g.service) AS service_title,
+       COALESCE(service_description.value, '') AS service_description,
+       COALESCE(group_loc.value, g.group_key) AS group_title,
+       COALESCE(group_description.value, '') AS group_description,
+       m.method_key, m.position,
+       COALESCE(access_loc.value, m.method_key) AS access_title,
+       COALESCE(access_description.value, '') AS access_description
+FROM control_method_group g
+JOIN control_method m ON m.service = g.service AND m.group_key = g.group_key
+JOIN control_access_service service_catalog ON service_catalog.service = g.service
+LEFT JOIN control_localization service_title
+    ON service_title.localization_key = CONCAT('control.access_service.', g.service, '.title')
+   AND service_title.locale = ?
+LEFT JOIN control_localization service_description
+    ON service_description.localization_key = CONCAT('control.access_service.', g.service, '.description')
+   AND service_description.locale = ?
+LEFT JOIN control_localization group_loc
+    ON group_loc.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key)
+   AND group_loc.locale = ?
+LEFT JOIN control_localization group_description
+    ON group_description.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key, '.description')
+   AND group_description.locale = ?
+LEFT JOIN control_localization access_loc
+    ON access_loc.localization_key = CONCAT('control.method.', m.method_key)
+   AND access_loc.locale = ?
+LEFT JOIN control_localization access_description
+    ON access_description.localization_key = CONCAT('control.method.', m.method_key, '.description')
+   AND access_description.locale = ?
+ORDER BY service_catalog.position, g.position, m.position, m.method_key;
 
 -- name: GetMethod :one
-SELECT method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status, created_at, updated_at
+SELECT method_key, service, group_key, position, created_at, updated_at
 FROM control_method WHERE method_key = ? LIMIT 1;
 
 -- name: ListMethods :many
-SELECT method_key, service, group_key, title, workspace_scoped, is_sensitive, schema_revision, status, created_at, updated_at
-FROM control_method WHERE status = 'active' ORDER BY service, group_key, method_key;
+SELECT method_key, service, group_key, position, created_at, updated_at
+FROM control_method ORDER BY service, group_key, method_key;
 
 -- name: SetRolePermission :exec
 INSERT IGNORE INTO control_role_permission (role_id, method_key) VALUES (?, ?);
@@ -183,19 +242,11 @@ DELETE FROM control_role_permission WHERE role_id = ? AND method_key = ?;
 -- name: ClearRolePermissions :execrows
 DELETE FROM control_role_permission WHERE role_id = ?;
 
--- name: TouchAuthVersion :exec
-INSERT INTO control_workspace_auth_version (workspace_id, version)
-VALUES (?, ?)
-ON DUPLICATE KEY UPDATE version = VALUES(version);
-
--- name: GetAuthVersion :one
-SELECT workspace_id, version, updated_at FROM control_workspace_auth_version WHERE workspace_id = ? LIMIT 1;
-
 -- name: CheckAccess :one
 SELECT EXISTS(
     SELECT 1
     FROM control_workspace_member m
-    JOIN control_method cm ON cm.method_key = ? AND cm.status = 'active' AND cm.workspace_scoped = TRUE
+    JOIN control_method cm ON cm.method_key = ?
     JOIN control_role_member rm ON rm.account_id = m.account_id
     JOIN control_role r ON r.id = rm.role_id
     LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
@@ -203,6 +254,16 @@ SELECT EXISTS(
       AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
       AND (r.is_owner = TRUE OR p.method_key IS NOT NULL)
 ) AS allowed;
+
+-- name: ListAuthorizedMethods :many
+SELECT DISTINCT cm.method_key, cm.service, cm.group_key, cm.position
+FROM control_method cm
+JOIN control_workspace_member m ON m.workspace_id = ? AND m.account_id = ? AND m.status = 'active'
+JOIN control_role_member rm ON rm.account_id = m.account_id
+JOIN control_role r ON r.id = rm.role_id AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
+LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
+WHERE r.is_owner = TRUE OR p.method_key IS NOT NULL
+ORDER BY cm.service, cm.group_key, cm.method_key;
 
 -- name: GetAccountPosition :one
 SELECT COALESCE((
@@ -267,6 +328,14 @@ FROM control_two_factor_challenge
 WHERE token_hash = ? AND expires_at > NOW()
 LIMIT 1 FOR UPDATE;
 
+-- name: GetTwoFactorChallengeWithFactorForUpdate :one
+SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip, c.expires_at,
+       f.secret, f.backup_hashes, f.activated_at
+FROM control_two_factor_challenge c
+JOIN control_two_factor f ON f.account_id = c.account_id
+WHERE c.token_hash = ? AND c.expires_at > NOW()
+LIMIT 1 FOR UPDATE;
+
 -- name: DeleteTwoFactorChallenge :execrows
 DELETE FROM control_two_factor_challenge WHERE id = ?;
 
@@ -278,14 +347,14 @@ UPDATE control_two_factor SET backup_hashes = ? WHERE account_id = ? AND activat
 
 -- name: ListAuditEvents :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       before_data, after_data, result, request_id, occurred_at
+       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
 WHERE workspace_id = ?
 ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?;
 
 -- name: ListAuditEventsFiltered :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       before_data, after_data, result, request_id, occurred_at
+       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
 WHERE workspace_id = ?
   AND (? = '' OR method_key = ?)
