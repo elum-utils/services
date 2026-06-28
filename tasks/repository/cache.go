@@ -9,8 +9,8 @@ import (
 
 var taskCacheKeys sync.Map
 
-func activeCatalogCacheKey(workspaceID, locale string) string {
-	return sqlwrap.CreateKey("tasks", "active_catalog", workspaceID, locale)
+func activeCatalogCacheKey(workspaceID, locale, groupKey string) string {
+	return sqlwrap.CreateKey("tasks", "active_catalog", workspaceID, locale, groupKey)
 }
 
 func recordCatalogCacheKey(workspaceID, actionKey string) string {

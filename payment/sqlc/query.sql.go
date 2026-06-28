@@ -6804,6 +6804,7 @@ FROM payment_product_cache pc
 WHERE pc.workspace_id = ?
   AND pc.asset_code = ?
   AND pc.locale = ?
+  AND (? = '' OR pc.group_code = ?)
 ORDER BY
     pc.product_position,
     pc.product_id,
@@ -6815,9 +6816,11 @@ ORDER BY
 `
 
 type ListProductsCatalogCacheRowsParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	AssetCode   string `json:"asset_code"`
-	Locale      string `json:"locale"`
+	WorkspaceID string         `json:"workspace_id"`
+	AssetCode   string         `json:"asset_code"`
+	Locale      string         `json:"locale"`
+	Column4     interface{}    `json:"column_4"`
+	GroupCode   sql.NullString `json:"group_code"`
 }
 
 type ListProductsCatalogCacheRowsRow struct {
@@ -6864,7 +6867,13 @@ type ListProductsCatalogCacheRowsRow struct {
 }
 
 func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProductsCatalogCacheRowsParams) ([]ListProductsCatalogCacheRowsRow, error) {
-	rows, err := q.query(ctx, q.listProductsCatalogCacheRowsStmt, listProductsCatalogCacheRows, arg.WorkspaceID, arg.AssetCode, arg.Locale)
+	rows, err := q.query(ctx, q.listProductsCatalogCacheRowsStmt, listProductsCatalogCacheRows,
+		arg.WorkspaceID,
+		arg.AssetCode,
+		arg.Locale,
+		arg.Column4,
+		arg.GroupCode,
+	)
 	if err != nil {
 		return nil, err
 	}

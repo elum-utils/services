@@ -10,11 +10,11 @@ import (
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
-func (r *Repository) ListActive(ctx context.Context, identity Identity, locale string, now time.Time) ([]ActiveTask, error) {
+func (r *Repository) ListActive(ctx context.Context, identity Identity, locale, groupKey string, now time.Time) ([]ActiveTask, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	catalog, err := r.listActiveCatalog(ctx, identity.WorkspaceID, locale)
+	catalog, err := r.listActiveCatalog(ctx, identity.WorkspaceID, locale, groupKey)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +48,8 @@ func (r *Repository) ListActive(ctx context.Context, identity Identity, locale s
 	return tasks, nil
 }
 
-func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale string) ([]ActiveTask, error) {
-	key := activeCatalogCacheKey(workspaceID, locale)
+func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale, groupKey string) ([]ActiveTask, error) {
+	key := activeCatalogCacheKey(workspaceID, locale, groupKey)
 	rememberTaskCacheKey(workspaceID, key)
 	out, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:          key,
@@ -60,6 +60,8 @@ func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale 
 			Locale:      locale,
 			Locale_2:    locale,
 			WorkspaceID: workspaceID,
+			Column4:     groupKey,
+			GroupKey:    groupKey,
 		})
 		if err != nil {
 			return nil, err

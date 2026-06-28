@@ -13,9 +13,9 @@ func (a *Checkout) CreateOrderByKey(ctx context.Context, params CreateOrderByKey
 
 	order, err := a.repository.CreateOrderByKey(ctx, repository.OrderCreateByKeyParams{
 		Key:                 params.Key,
-		PayerPlatformID:     params.PayerPlatformID,
-		PayerPlatformUserID: params.PayerPlatformUserID,
-		PayerInternalUserID: params.PayerInternalUserID,
+		PayerPlatformID:     actorPlatformID(params.Payer),
+		PayerPlatformUserID: actorPlatformUserID(params.Payer),
+		PayerInternalUserID: actorInternalUserID(params.Payer),
 		AssetCode:           params.AssetCode,
 		Quantity:            params.Quantity,
 		Locale:              params.Locale,

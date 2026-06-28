@@ -6,10 +6,11 @@ import (
 
 	json "github.com/goccy/go-json"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/tasks/repository"
 )
 
-type Identity = repository.Identity
+type Identity = services.Identity
 
 type RewardModel = repository.Reward
 type ProgressModel = repository.ActiveProgress
@@ -20,6 +21,13 @@ type TaskGroupModel struct {
 	Title       string      `json:"title,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Tasks       []TaskModel `json:"tasks"`
+}
+
+type ListActiveParams struct {
+	Identity Identity
+	Locale   string
+	GroupKey string
+	Now      time.Time
 }
 
 type ClaimParams struct {

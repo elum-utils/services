@@ -1,6 +1,7 @@
 package user
 
 import (
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/payment/service/asset"
 	"github.com/elum-utils/services/payment/service/checkout"
 	"github.com/elum-utils/services/payment/service/product"
@@ -8,7 +9,16 @@ import (
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
+type Identity = services.Identity
+type Actor = services.Actor
+
 type USDTPriceModel = asset.USDTPriceModel
+
+type ListAssetsParams struct{}
+type GetUSDTPriceParams struct {
+	AssetCode string
+}
+type ListUSDTPricesParams struct{}
 
 type ListProductsParams = product.ListParams
 type GetProductParams = product.GetParams

@@ -31,7 +31,7 @@ func TestTgrassProviderListAndCheck(t *testing.T) {
 	secret := "token"
 	provider := TgrassProvider{BaseURL: server.URL}
 	params := PartnerListProviderParams{
-		Identity: repository.Identity{WorkspaceID: "w", PlatformUserID: "123", IsPremium: true},
+		Identity: Identity{WorkspaceID: "w", PlatformUserID: "123", IsPremium: true},
 		Config:   repository.PartnerConfig{Provider: "tgrass", GroupKey: "tgrass", Platform: "telegram", Secret: &secret},
 		Locale:   "ru",
 		Limit:    1,
@@ -78,7 +78,7 @@ func TestSubGramProviderListAndCheck(t *testing.T) {
 	secret := "token"
 	provider := SubGramProvider{BaseURL: server.URL}
 	params := PartnerListProviderParams{
-		Identity: repository.Identity{WorkspaceID: "w", PlatformUserID: "123"},
+		Identity: Identity{WorkspaceID: "w", PlatformUserID: "123"},
 		Config:   repository.PartnerConfig{Provider: "subgram", GroupKey: "subgram", Secret: &secret, Settings: json.RawMessage(`{"action":"task"}`)},
 		Locale:   "ru",
 	}
@@ -116,7 +116,7 @@ func TestFlyerProviderListAndCheck(t *testing.T) {
 	secret := "key"
 	provider := FlyerProvider{BaseURL: server.URL}
 	params := PartnerListProviderParams{
-		Identity: repository.Identity{WorkspaceID: "w", PlatformUserID: "123"},
+		Identity: Identity{WorkspaceID: "w", PlatformUserID: "123"},
 		Config:   repository.PartnerConfig{Provider: "flyer", GroupKey: "flyer", Platform: "telegram", Secret: &secret},
 		Locale:   "ru",
 	}

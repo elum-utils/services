@@ -39,7 +39,8 @@ func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]Tas
 	}) {
 		return []TaskModel{}, nil
 	}
-	existing, err := u.repository.ListPartnerIssuesForUser(mergedCtx, params.Identity, config.Provider, config.GroupKey, config.Platform, now)
+	repoIdentity := repositoryIdentity(params.Identity)
+	existing, err := u.repository.ListPartnerIssuesForUser(mergedCtx, repoIdentity, config.Provider, config.GroupKey, config.Platform, now)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]Tas
 			return nil, err
 		}
 		issue, _, err := u.repository.CreatePartnerIssue(mergedCtx, repository.CreatePartnerIssueParams{
-			Identity: params.Identity, Provider: config.Provider, GroupKey: config.GroupKey, Platform: config.Platform,
+			Identity: repoIdentity, Provider: config.Provider, GroupKey: config.GroupKey, Platform: config.Platform,
 			ExternalID: external.ExternalID, ExternalType: external.ExternalType,
 			IssueKey:      issueKey,
 			PublicPayload: external.PublicPayload, PrivatePayload: external.PrivatePayload,

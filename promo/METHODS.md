@@ -6,7 +6,7 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.Apply(ctx, params)` | `ApplyParams{Identity, Code, Now}`; `Identity{WorkspaceID, AppID, PlatformID, PlatformUserID}`. | Активирует промокод для пользователя и возвращает промо, redemption и признак повторной активации. |
+| `User.Apply(ctx, params)` | `ApplyParams{Identity, Code, Now}`; `Identity{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country}`. | Активирует промокод для пользователя и возвращает промо, redemption и признак повторной активации. |
 
 ## admin
 

@@ -5,28 +5,28 @@ import (
 	json "github.com/goccy/go-json"
 	"time"
 
-	servicecallback "github.com/elum-utils/services/callback"
+	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
 type CallbackPayload struct {
-	WorkspaceID    string                   `json:"workspace_id"`
-	AppID          int64                    `json:"app_id"`
-	PlatformID     int64                    `json:"platform_id"`
-	PlatformUserID string                   `json:"platform_user_id"`
-	TaskID         uint64                   `json:"task_id"`
-	TaskKey        string                   `json:"task_key"`
-	OperationID    string                   `json:"operation_id"`
-	PeriodStartAt  time.Time                `json:"period_start_at"`
-	PeriodEndAt    time.Time                `json:"period_end_at"`
-	Rewards        []servicecallback.Reward `json:"rewards"`
-	Payload        json.RawMessage          `json:"payload"`
+	WorkspaceID    string            `json:"workspace_id"`
+	AppID          int64             `json:"app_id"`
+	PlatformID     int64             `json:"platform_id"`
+	PlatformUserID string            `json:"platform_user_id"`
+	TaskID         uint64            `json:"task_id"`
+	TaskKey        string            `json:"task_key"`
+	OperationID    string            `json:"operation_id"`
+	PeriodStartAt  time.Time         `json:"period_start_at"`
+	PeriodEndAt    time.Time         `json:"period_end_at"`
+	Rewards        []services.Reward `json:"rewards"`
+	Payload        json.RawMessage   `json:"payload"`
 }
 
 type Context struct {
 	callbackutil.Context
-	Payload *servicecallback.RewardPayload
+	Payload *services.RewardPayload
 	Claimed *CallbackPayload
 }
 
@@ -84,8 +84,8 @@ func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts .
 		}
 		return handler(Context{
 			Context: callbackCtx,
-			Payload: &servicecallback.RewardPayload{
-				Identity: servicecallback.Identity{
+			Payload: &services.RewardPayload{
+				Identity: services.Identity{
 					WorkspaceID: payload.WorkspaceID,
 					AppID:       payload.AppID, PlatformID: payload.PlatformID,
 					PlatformUserID: payload.PlatformUserID,

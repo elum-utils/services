@@ -3,6 +3,8 @@ package product
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	services "github.com/elum-utils/services"
 )
 
 type UpsertParams struct {
@@ -32,16 +34,10 @@ type UpsertParams struct {
 }
 
 type ListParams struct {
-	WorkspaceID    string
-	AppID          int64
-	PlatformID     int64
-	Platform       string
-	PlatformUserID string
-	IsPremium      bool
-	Sex            string
-	Country        string
-	AssetCode      string
-	Locale         string
+	Identity  services.Identity
+	GroupCode string
+	AssetCode string
+	Locale    string
 }
 
 type ProductModel struct {

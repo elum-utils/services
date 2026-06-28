@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `User.Get(ctx, params)` | `GetParams{WorkspaceID, Key, Locale}`. | Возвращает активный справочный item по ключу. |
 | `User.Resolve(ctx, params)` | `ResolveParams{WorkspaceID, Keys, Locale}`. | Массово разрешает ключи в items и возвращает найденные элементы плюс `MissingKeys`. |
-| `User.List(ctx, workspaceID, locale, page)` | `workspaceID`, `locale`, `Page{Limit, Offset}`. | Возвращает страницу активных справочных items. |
+| `User.List(ctx, params)` | `ListParams{WorkspaceID, Locale, Page}`; `Page{Limit, Offset}`. | Возвращает страницу активных справочных items. |
 
 ## admin
 

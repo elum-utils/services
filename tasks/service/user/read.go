@@ -7,10 +7,10 @@ import (
 	"github.com/elum-utils/services/tasks/repository"
 )
 
-func (u *User) ListActive(ctx context.Context, identity Identity, locale string, now time.Time) ([]TaskGroupModel, error) {
+func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]TaskGroupModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
-	tasks, err := u.repository.ListActive(mergedCtx, identity, locale, now)
+	tasks, err := u.repository.ListActive(mergedCtx, repositoryIdentity(params.Identity), params.Locale, params.GroupKey, params.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +21,7 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
 	if issueID, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
-		result, err := u.repository.ClaimPartnerIssue(mergedCtx, params.Identity, issueID, params.OperationID, params.Now)
+		result, err := u.repository.ClaimPartnerIssue(mergedCtx, repositoryIdentity(params.Identity), issueID, params.OperationID, params.Now)
 		if err != nil {
 			return ClaimResult{}, err
 		}
@@ -36,7 +36,12 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 		}
 		return output, nil
 	}
-	result, err := u.repository.Claim(mergedCtx, repository.ClaimParams(params))
+	result, err := u.repository.Claim(mergedCtx, repository.ClaimParams{
+		Identity:    repositoryIdentity(params.Identity),
+		TaskRef:     params.TaskRef,
+		OperationID: params.OperationID,
+		Now:         params.Now,
+	})
 	if err != nil {
 		return ClaimResult{}, err
 	}
@@ -46,6 +51,19 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 		output.Task = &task
 	}
 	return output, nil
+}
+
+func repositoryIdentity(identity Identity) repository.Identity {
+	return repository.Identity{
+		WorkspaceID:    identity.WorkspaceID,
+		AppID:          identity.AppID,
+		PlatformID:     identity.PlatformID,
+		Platform:       identity.Platform,
+		PlatformUserID: identity.PlatformUserID,
+		IsPremium:      identity.IsPremium,
+		Sex:            identity.Sex,
+		Country:        identity.Country,
+	}
 }
 
 func groupTasks(tasks []repository.ActiveTask) []TaskGroupModel {

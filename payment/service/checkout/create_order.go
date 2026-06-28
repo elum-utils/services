@@ -12,14 +12,14 @@ func (a *Checkout) CreateOrder(ctx context.Context, params CreateOrderParams) (*
 	ctx = mergedCtx
 
 	order, err := a.repository.CreateOrder(ctx, repository.OrderCreateParams{
-		AppID:               params.AppID,
-		WorkspaceID:         params.WorkspaceID,
-		PlatformID:          params.PlatformID,
-		PlatformUserID:      params.PlatformUserID,
+		AppID:               params.Identity.AppID,
+		WorkspaceID:         params.Identity.WorkspaceID,
+		PlatformID:          params.Identity.PlatformID,
+		PlatformUserID:      params.Identity.PlatformUserID,
 		InternalUserID:      params.InternalUserID,
-		PayerPlatformID:     params.PayerPlatformID,
-		PayerPlatformUserID: params.PayerPlatformUserID,
-		PayerInternalUserID: params.PayerInternalUserID,
+		PayerPlatformID:     actorPlatformID(params.Payer),
+		PayerPlatformUserID: actorPlatformUserID(params.Payer),
+		PayerInternalUserID: actorInternalUserID(params.Payer),
 		ProductID:           params.ProductID,
 		Quantity:            params.Quantity,
 		AssetCode:           params.AssetCode,

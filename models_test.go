@@ -1,8 +1,9 @@
-package callback
+package services
 
 import (
-	json "github.com/goccy/go-json"
 	"testing"
+
+	json "github.com/goccy/go-json"
 )
 
 func TestRewardPayloadJSON(t *testing.T) {

@@ -47,6 +47,7 @@ type ProductListParams struct {
 	IsPremium      bool
 	Sex            string
 	Country        string
+	GroupCode      string
 	AssetCode      string
 	Locale         string
 	Now            time.Time
@@ -196,12 +197,14 @@ func (r *PaymentRepository) ListProducts(ctx context.Context, params ProductList
 		return nil, err
 	}
 
-	key := paymentCacheKey("products_catalog", workspaceID, params.AssetCode, locale)
+	key := paymentCacheKey("products_catalog", workspaceID, params.AssetCode, locale, params.GroupCode)
 	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductsCatalogCacheRowsRow, error) {
 		return r.q.ListProductsCatalogCacheRows(ctx, sqlc.ListProductsCatalogCacheRowsParams{
 			WorkspaceID: workspaceID,
 			AssetCode:   params.AssetCode,
 			Locale:      locale,
+			Column4:     params.GroupCode,
+			GroupCode:   sql.NullString{String: params.GroupCode, Valid: params.GroupCode != ""},
 		})
 	})
 	if err != nil {

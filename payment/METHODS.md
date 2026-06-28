@@ -6,16 +6,16 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.ListProducts(ctx, params)` | `ListProductsParams{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country, AssetCode, Locale}`. | Возвращает доступные пользователю продукты с учетом target-фильтра, цены, лимитов и item-ов. |
-| `User.GetProduct(ctx, params)` | `GetProductParams{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country, ProductID, AssetCode, Locale}`. | Возвращает один продукт для пользователя с учетом target-фильтра. |
+| `User.ListProducts(ctx, params)` | `ListProductsParams{Identity, GroupCode, AssetCode, Locale}`; `Identity{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country}`. | Возвращает доступные пользователю продукты с учетом опционального фильтра `GroupCode`, target-фильтра, цены, лимитов и item-ов. |
+| `User.GetProduct(ctx, params)` | `GetProductParams{Identity, ProductID, AssetCode, Locale}`. | Возвращает один продукт для пользователя с учетом target-фильтра. |
 | `User.GetProductByKey(ctx, params)` | `GetProductByKeyParams{Key, AssetCode, Locale}`. | Возвращает продукт по purchase key. |
-| `User.ListAssets(ctx)` | Только `ctx`. | Возвращает список платежных assets. |
-| `User.GetUSDTPrice(ctx, assetCode)` | `assetCode`. | Возвращает курс asset к USDT. |
-| `User.ListUSDTPrices(ctx)` | Только `ctx`. | Возвращает список курсов assets к USDT. |
-| `User.CreateOrder(ctx, params)` | `CreateOrderParams{WorkspaceID, AppID, PlatformID, PlatformUserID, InternalUserID, PayerPlatformID, PayerPlatformUserID, PayerInternalUserID, ProductID, Quantity, AssetCode, Locale, ReservedUntil, ExpiresAt}`. | Создает платежный заказ по продукту. |
-| `User.CreateOrderByKey(ctx, params)` | `CreateOrderByKeyParams{Key, PayerPlatformID, PayerPlatformUserID, PayerInternalUserID, AssetCode, Quantity, Locale, ReservedUntil, ExpiresAt}`. | Создает заказ по purchase key. |
+| `User.ListAssets(ctx, params)` | `ListAssetsParams{}`. | Возвращает список платежных assets. |
+| `User.GetUSDTPrice(ctx, params)` | `GetUSDTPriceParams{AssetCode}`. | Возвращает курс asset к USDT. |
+| `User.ListUSDTPrices(ctx, params)` | `ListUSDTPricesParams{}`. | Возвращает список курсов assets к USDT. |
+| `User.CreateOrder(ctx, params)` | `CreateOrderParams{Identity, InternalUserID, Payer, ProductID, Quantity, AssetCode, Locale, ReservedUntil, ExpiresAt}`; `Payer{PlatformID, Platform, PlatformUserID, InternalUserID}`. | Создает платежный заказ по продукту. |
+| `User.CreateOrderByKey(ctx, params)` | `CreateOrderByKeyParams{Key, Payer, AssetCode, Quantity, Locale, ReservedUntil, ExpiresAt}`. | Создает заказ по purchase key. |
 | `User.CreateAttempt(ctx, params)` | `CreateAttemptParams{OrderID, ProviderCode, AssetCode, AmountMinor, ProviderPaymentID, ProviderInvoiceID, ProviderChargeID, ProviderSubscriptionID, IdempotencyKey, ConfirmationURL, ReturnURL, ExpiresAt}`. | Создает попытку оплаты для заказа. |
-| `User.IsSubscriptionActive(ctx, params)` | `IsSubscriptionActiveParams{WorkspaceID, PlatformID, PlatformUserID, ProductID, ProviderCode}`. | Проверяет, активна ли подписка пользователя на продукт у провайдера. |
+| `User.IsSubscriptionActive(ctx, params)` | `IsSubscriptionActiveParams{Identity, ProductID, ProviderCode}`. | Проверяет, активна ли подписка пользователя на продукт у провайдера. |
 
 ## admin
 

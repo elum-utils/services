@@ -2752,15 +2752,18 @@ LEFT JOIN task_group_localization gl ON gl.workspace_id = t.workspace_id AND gl.
 LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id = t.id AND l.locale = ?
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.is_visible = TRUE AND t.is_active = TRUE
+  AND (? = '' OR t.group_key = ?)
   AND g.is_active = TRUE AND g.deleted_at IS NULL
   AND t.deleted_at IS NULL
 ORDER BY t.position, t.id, r.position, r.id
 `
 
 type ListActiveTaskBundlesParams struct {
-	Locale      string `json:"locale"`
-	Locale_2    string `json:"locale_2"`
-	WorkspaceID string `json:"workspace_id"`
+	Locale      string      `json:"locale"`
+	Locale_2    string      `json:"locale_2"`
+	WorkspaceID string      `json:"workspace_id"`
+	Column4     interface{} `json:"column_4"`
+	GroupKey    string      `json:"group_key"`
 }
 
 type ListActiveTaskBundlesRow struct {
@@ -2792,7 +2795,13 @@ type ListActiveTaskBundlesRow struct {
 }
 
 func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskBundlesParams) ([]ListActiveTaskBundlesRow, error) {
-	rows, err := q.query(ctx, q.listActiveTaskBundlesStmt, listActiveTaskBundles, arg.Locale, arg.Locale_2, arg.WorkspaceID)
+	rows, err := q.query(ctx, q.listActiveTaskBundlesStmt, listActiveTaskBundles,
+		arg.Locale,
+		arg.Locale_2,
+		arg.WorkspaceID,
+		arg.Column4,
+		arg.GroupKey,
+	)
 	if err != nil {
 		return nil, err
 	}

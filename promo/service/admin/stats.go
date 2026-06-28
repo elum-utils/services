@@ -21,7 +21,16 @@ func (a *Admin) GetStats(ctx context.Context, workspaceID string, promoID uint64
 func (a *Admin) GetUserRedemption(ctx context.Context, identity user.Identity, promoID uint64) (*RedemptionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	value, err := a.repository.GetRedemption(mergedCtx, repository.Identity(identity), promoID)
+	value, err := a.repository.GetRedemption(mergedCtx, repository.Identity{
+		WorkspaceID:    identity.WorkspaceID,
+		AppID:          identity.AppID,
+		PlatformID:     identity.PlatformID,
+		Platform:       identity.Platform,
+		PlatformUserID: identity.PlatformUserID,
+		IsPremium:      identity.IsPremium,
+		Sex:            identity.Sex,
+		Country:        identity.Country,
+	}, promoID)
 	if err != nil || value == nil {
 		return nil, err
 	}

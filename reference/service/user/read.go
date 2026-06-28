@@ -50,12 +50,12 @@ func (u *User) Resolve(ctx context.Context, params ResolveParams) (ResolveResult
 	return result, nil
 }
 
-func (u *User) List(ctx context.Context, workspaceID, locale string, page Page) ([]ItemModel, error) {
+func (u *User) List(ctx context.Context, params ListParams) ([]ItemModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
-	limit, offset := normalizePage(page)
+	limit, offset := normalizePage(params.Page)
 	items, err := u.repository.List(
-		mergedCtx, strings.TrimSpace(workspaceID), normalizeLocale(locale), limit, offset,
+		mergedCtx, strings.TrimSpace(params.WorkspaceID), normalizeLocale(params.Locale), limit, offset,
 	)
 	if err != nil {
 		return nil, err

@@ -17,7 +17,7 @@ func TestTgrassProviderLiveManual(t *testing.T) {
 	}
 	provider := TgrassProvider{Timeout: 15 * time.Second}
 	params := PartnerListProviderParams{
-		Identity: repository.Identity{
+		Identity: Identity{
 			WorkspaceID:    "live",
 			Platform:       "tma",
 			PlatformUserID: userID,

@@ -1,12 +1,28 @@
 package user
 
-import "time"
+import (
+	"time"
 
-type Identity struct {
-	WorkspaceID    string
-	AppID          int64
-	PlatformID     int64
-	PlatformUserID string
+	services "github.com/elum-utils/services"
+)
+
+type Identity = services.Identity
+
+type ListActiveParams struct {
+	WorkspaceID string
+	Locale      string
+	Now         time.Time
+}
+
+type GetCalendarParams struct {
+	Identity Identity
+	Ref      string
+	Locale   string
+}
+
+type GetProgressParams struct {
+	Identity   Identity
+	CalendarID string
 }
 
 type RewardModel struct {

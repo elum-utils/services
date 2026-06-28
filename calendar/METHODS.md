@@ -6,9 +6,9 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.ListActive(ctx, workspaceID, locale, now)` | `workspaceID`, `locale`, `now time.Time`. | Возвращает активные календари рабочей области на момент `now`. |
-| `User.GetCalendar(ctx, identity, ref, locale)` | `Identity{WorkspaceID, AppID, PlatformID, PlatformUserID}`, `ref`, `locale`. | Возвращает календарь с локализацией, шагами и наградами для пользователя. |
-| `User.GetProgress(ctx, identity, calendarID)` | `Identity`, `calendarID`. | Возвращает прогресс пользователя по календарю. |
+| `User.ListActive(ctx, params)` | `ListActiveParams{WorkspaceID, Locale, Now}`. | Возвращает активные календари рабочей области на момент `Now`. |
+| `User.GetCalendar(ctx, params)` | `GetCalendarParams{Identity, Ref, Locale}`; `Identity{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country}`. | Возвращает календарь с локализацией, шагами и наградами для пользователя. |
+| `User.GetProgress(ctx, params)` | `GetProgressParams{Identity, CalendarID}`. | Возвращает прогресс пользователя по календарю. |
 | `User.Record(ctx, params)` | `RecordParams{Identity, CalendarID, OperationID, Now}`. | Фиксирует операцию пользователя, обновляет прогресс и возвращает результат выдачи награды. |
 | `User.Next(ctx, params)` | `NextParams{Identity, CalendarID, OperationID, Now}`. | Записывает переход пользователя к следующему доступному шагу календаря. |
 

@@ -1,9 +1,9 @@
 package subscription
 
+import services "github.com/elum-utils/services"
+
 type IsActiveParams struct {
-	WorkspaceID    string
-	PlatformID     int64
-	PlatformUserID string
-	ProductID      string
-	ProviderCode   string
+	Identity     services.Identity
+	ProductID    string
+	ProviderCode string
 }

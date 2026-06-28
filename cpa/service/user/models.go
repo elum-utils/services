@@ -3,18 +3,11 @@ package user
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	services "github.com/elum-utils/services"
 )
 
-type Identity struct {
-	WorkspaceID    string
-	AppID          int64
-	PlatformID     int64
-	Platform       string
-	PlatformUserID string
-	IsPremium      bool
-	Sex            string
-	Country        string
-}
+type Identity = services.Identity
 
 type OfferModel struct {
 	ID          string           `json:"id"`

@@ -6,7 +6,7 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.ListActive(ctx, params)` | `ListActiveParams{Identity, Locale, Now}`; `Identity{WorkspaceID, AppID, PlatformID, PlatformUserID}`. | Возвращает активные CPA-офферы для пользователя. |
+| `User.ListActive(ctx, params)` | `ListActiveParams{Identity, Locale, Now}`; `Identity{WorkspaceID, AppID, PlatformID, Platform, PlatformUserID, IsPremium, Sex, Country}`. | Возвращает активные CPA-офферы для пользователя. |
 | `User.GetCode(ctx, params)` | `GetCodeParams{Identity, CPAID}`. | Выдает или возвращает уже назначенный CPA-код пользователя. |
 | `User.GetStatus(ctx, params)` | `GetStatusParams{Identity, CPAID}`. | Возвращает текущее назначение пользователя по CPA-офферу. |
 

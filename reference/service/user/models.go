@@ -37,6 +37,12 @@ type ResolveParams struct {
 	Locale      string
 }
 
+type ListParams struct {
+	WorkspaceID string
+	Locale      string
+	Page        Page
+}
+
 type ResolveResult struct {
 	Items       []ItemModel `json:"items"`
 	MissingKeys []string    `json:"missing_keys,omitempty"`

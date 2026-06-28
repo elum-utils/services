@@ -11,14 +11,15 @@ func (a *Product) List(ctx context.Context, params ListParams) ([]ProductModel, 
 	defer cancel()
 
 	products, err := a.repository.ListProducts(mergedCtx, repository.ProductListParams{
-		WorkspaceID:    params.WorkspaceID,
-		AppID:          params.AppID,
-		PlatformID:     params.PlatformID,
-		Platform:       params.Platform,
-		PlatformUserID: params.PlatformUserID,
-		IsPremium:      params.IsPremium,
-		Sex:            params.Sex,
-		Country:        params.Country,
+		WorkspaceID:    params.Identity.WorkspaceID,
+		AppID:          params.Identity.AppID,
+		PlatformID:     params.Identity.PlatformID,
+		Platform:       params.Identity.Platform,
+		PlatformUserID: params.Identity.PlatformUserID,
+		IsPremium:      params.Identity.IsPremium,
+		Sex:            params.Identity.Sex,
+		Country:        params.Identity.Country,
+		GroupCode:      params.GroupCode,
 		AssetCode:      params.AssetCode,
 		Locale:         params.Locale,
 	})

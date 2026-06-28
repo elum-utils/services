@@ -5,13 +5,14 @@ import (
 	"time"
 )
 
-func (u *User) ListActive(ctx context.Context, workspaceID, locale string, now time.Time) ([]ActiveCalendarModel, error) {
+func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]ActiveCalendarModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	values, err := u.repository.ListActive(mergedCtx, workspaceID, locale, now)
+	values, err := u.repository.ListActive(mergedCtx, params.WorkspaceID, params.Locale, now)
 	if err != nil {
 		return nil, err
 	}
@@ -30,10 +31,10 @@ func (u *User) ListActive(ctx context.Context, workspaceID, locale string, now t
 	return result, nil
 }
 
-func (u *User) GetCalendar(ctx context.Context, identity Identity, ref, locale string) (CalendarModel, error) {
+func (u *User) GetCalendar(ctx context.Context, params GetCalendarParams) (CalendarModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
-	value, err := u.repository.GetCalendar(mergedCtx, identity.WorkspaceID, ref, locale)
+	value, err := u.repository.GetCalendar(mergedCtx, params.Identity.WorkspaceID, params.Ref, params.Locale)
 	if err != nil {
 		return CalendarModel{}, err
 	}
@@ -41,7 +42,7 @@ func (u *User) GetCalendar(ctx context.Context, identity Identity, ref, locale s
 	if !value.HideFutureRewards || value.ID == "" {
 		return result, nil
 	}
-	progress, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(identity), value.ID)
+	progress, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(params.Identity), value.ID)
 	if err != nil {
 		return CalendarModel{}, err
 	}
@@ -59,10 +60,10 @@ func (u *User) GetCalendar(ctx context.Context, identity Identity, ref, locale s
 	return result, nil
 }
 
-func (u *User) GetProgress(ctx context.Context, identity Identity, calendarID string) (*ProgressModel, error) {
+func (u *User) GetProgress(ctx context.Context, params GetProgressParams) (*ProgressModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
-	value, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(identity), calendarID)
+	value, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(params.Identity), params.CalendarID)
 	if err != nil || value == nil {
 		return nil, err
 	}

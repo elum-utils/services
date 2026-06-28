@@ -5,7 +5,7 @@ import (
 	json "github.com/goccy/go-json"
 	"time"
 
-	servicecallback "github.com/elum-utils/services/callback"
+	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
@@ -15,7 +15,7 @@ const (
 	CallbackEventPaymentOrderRefunded  = "payment.order.refunded"
 )
 
-type Reward = servicecallback.Reward
+type Reward = services.Reward
 
 type PaymentFulfilledCallbackPayload struct {
 	OrderID           uint64   `json:"order_id"`
@@ -56,7 +56,7 @@ type PaymentRefundedCallbackPayload struct {
 type Context struct {
 	callbackutil.Context
 
-	Payload          *servicecallback.RewardPayload
+	Payload          *services.RewardPayload
 	PaymentFulfilled *PaymentFulfilledCallbackPayload
 	PaymentRefunded  *PaymentRefundedCallbackPayload
 }
@@ -136,8 +136,8 @@ func newCallbackContext(callbackCtx callbackutil.Context) (Context, error) {
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return Context{}, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment callback payload decode failed", err)
 		}
-		ctx.Payload = &servicecallback.RewardPayload{
-			Identity: servicecallback.Identity{
+		ctx.Payload = &services.RewardPayload{
+			Identity: services.Identity{
 				WorkspaceID: payload.WorkspaceID,
 				AppID:       payload.AppID, PlatformID: payload.PlatformID,
 				PlatformUserID: payload.PlatformUserID,
@@ -150,8 +150,8 @@ func newCallbackContext(callbackCtx callbackutil.Context) (Context, error) {
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return Context{}, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment callback payload decode failed", err)
 		}
-		ctx.Payload = &servicecallback.RewardPayload{
-			Identity: servicecallback.Identity{
+		ctx.Payload = &services.RewardPayload{
+			Identity: services.Identity{
 				WorkspaceID: payload.WorkspaceID,
 				AppID:       payload.AppID, PlatformID: payload.PlatformID,
 				PlatformUserID: payload.PlatformUserID,

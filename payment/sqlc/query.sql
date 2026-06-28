@@ -973,6 +973,7 @@ FROM payment_product_cache pc
 WHERE pc.workspace_id = ?
   AND pc.asset_code = ?
   AND pc.locale = ?
+  AND (? = '' OR pc.group_code = ?)
 ORDER BY
     pc.product_position,
     pc.product_id,

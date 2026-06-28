@@ -5,7 +5,7 @@ import (
 	json "github.com/goccy/go-json"
 	"time"
 
-	servicecallback "github.com/elum-utils/services/callback"
+	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
@@ -15,7 +15,7 @@ const (
 	CallbackEventCompleted = "cpa.completed"
 )
 
-type CallbackReward = servicecallback.Reward
+type CallbackReward = services.Reward
 
 type CallbackPayload struct {
 	AssignmentID   uint64           `json:"assignment_id"`
@@ -32,7 +32,7 @@ type CallbackPayload struct {
 
 type Context struct {
 	callbackutil.Context
-	Payload   *servicecallback.RewardPayload
+	Payload   *services.RewardPayload
 	Issued    *CallbackPayload
 	Completed *CallbackPayload
 }
@@ -96,8 +96,8 @@ func (c *CPA) runCallback(ctx context.Context, handler CallbackHandler, opts ...
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa callback payload decode failed", err)
 		}
-		value.Payload = &servicecallback.RewardPayload{
-			Identity: servicecallback.Identity{
+		value.Payload = &services.RewardPayload{
+			Identity: services.Identity{
 				WorkspaceID: payload.WorkspaceID,
 				AppID:       payload.AppID, PlatformID: payload.PlatformID,
 				PlatformUserID: payload.PlatformUserID,

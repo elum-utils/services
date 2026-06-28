@@ -1,34 +1,31 @@
 package checkout
 
-import "time"
+import (
+	"time"
+
+	services "github.com/elum-utils/services"
+)
 
 type CreateOrderParams struct {
-	WorkspaceID         string
-	AppID               int64
-	PlatformID          int64
-	PlatformUserID      string
-	InternalUserID      *int64
-	PayerPlatformID     *int64
-	PayerPlatformUserID *string
-	PayerInternalUserID *int64
-	ProductID           string
-	Quantity            uint64
-	AssetCode           string
-	Locale              string
-	ReservedUntil       *time.Time
-	ExpiresAt           *time.Time
+	Identity       services.Identity
+	InternalUserID *int64
+	Payer          *services.Actor
+	ProductID      string
+	Quantity       uint64
+	AssetCode      string
+	Locale         string
+	ReservedUntil  *time.Time
+	ExpiresAt      *time.Time
 }
 
 type CreateOrderByKeyParams struct {
-	Key                 string
-	PayerPlatformID     *int64
-	PayerPlatformUserID *string
-	PayerInternalUserID *int64
-	AssetCode           string
-	Quantity            uint64
-	Locale              string
-	ReservedUntil       *time.Time
-	ExpiresAt           *time.Time
+	Key           string
+	Payer         *services.Actor
+	AssetCode     string
+	Quantity      uint64
+	Locale        string
+	ReservedUntil *time.Time
+	ExpiresAt     *time.Time
 }
 
 type Order struct {
