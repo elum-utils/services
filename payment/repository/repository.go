@@ -119,6 +119,9 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 			return fmt.Errorf("statement failed: %w\n%s", err, stmt)
 		}
 	}
+	if err := r.applySchemaUpgrades(ctx); err != nil {
+		return err
+	}
 
 	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.PaymentTable)
@@ -129,6 +132,26 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 		return err
 	}
 	return r.applySQL(ctx, paymentsqlc.EventSQL, "event")
+}
+
+func (r *PaymentRepository) applySchemaUpgrades(ctx context.Context) error {
+	upgrades := []struct {
+		table      string
+		column     string
+		definition string
+	}{
+		{table: "payment_asset", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER asset_kind"},
+		{table: "payment_product_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
+		{table: "payment_product_cache", column: "item_scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER item_quantity"},
+		{table: "payment_order_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
+		{table: "payment_fulfillment_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
+	}
+	for _, upgrade := range upgrades {
+		if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, upgrade.table, upgrade.column, upgrade.definition); err != nil {
+			return fmt.Errorf("payment schema upgrade %s.%s failed: %w", upgrade.table, upgrade.column, err)
+		}
+	}
+	return nil
 }
 
 func (r *PaymentRepository) applySQL(ctx context.Context, raw, source string) error {

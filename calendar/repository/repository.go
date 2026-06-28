@@ -85,6 +85,9 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.applySQL(ctx, calendarsqlc.SchemaSQL, "schema"); err != nil {
 		return err
 	}
+	if err := r.applySchemaUpgrades(ctx); err != nil {
+		return err
+	}
 	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.CalendarTable)
 	}); err != nil {
@@ -94,6 +97,13 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	return r.applySQL(ctx, calendarsqlc.EventSQL, "event")
+}
+
+func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "calendar_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER item_count"); err != nil {
+		return fmt.Errorf("calendar schema upgrade calendar_reward.scale failed: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {

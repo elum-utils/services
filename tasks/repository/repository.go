@@ -99,6 +99,9 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.applySQL(ctx, tasksqlc.SchemaSQL, "schema"); err != nil {
 		return err
 	}
+	if err := r.applySchemaUpgrades(ctx); err != nil {
+		return err
+	}
 	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.TasksTable)
 	}); err != nil {
@@ -108,6 +111,16 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	return r.applySQL(ctx, tasksqlc.EventSQL, "event")
+}
+
+func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_reward.scale failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_reward_rule", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_reward_rule.scale failed: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {

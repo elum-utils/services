@@ -105,12 +105,22 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.applySQL(ctx, cpasqlc.SchemaSQL, "schema"); err != nil {
 		return err
 	}
+	if err := r.applySchemaUpgrades(ctx); err != nil {
+		return err
+	}
 	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.CPATable)
 	}); err != nil {
 		return err
 	}
 	return r.applySQL(ctx, cpasqlc.EventSQL, "event")
+}
+
+func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "cpa_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
+		return fmt.Errorf("cpa schema upgrade cpa_reward.scale failed: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
