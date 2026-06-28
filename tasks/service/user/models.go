@@ -15,6 +15,13 @@ type RewardModel = repository.Reward
 type ProgressModel = repository.ActiveProgress
 type TaskModel = repository.ActiveTask
 
+type TaskGroupModel struct {
+	Key         string      `json:"key"`
+	Title       string      `json:"title,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Tasks       []TaskModel `json:"tasks"`
+}
+
 type ClaimParams struct {
 	Identity    Identity
 	TaskRef     string

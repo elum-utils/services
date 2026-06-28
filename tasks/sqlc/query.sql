@@ -414,13 +414,17 @@ FOR UPDATE;
 SELECT t.id, t.`key`, t.group_key,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
        t.payload, t.target, t.image_url, t.start_at, t.end_at,
+       gl.locale AS group_locale, gl.title AS group_title, gl.description AS group_description,
        l.locale, l.title, l.description,
        r.id AS reward_id, r.reward_key, r.reward_type,
        r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t FORCE INDEX (task_definition_visible_user_list_idx)
+JOIN task_group g ON g.workspace_id = t.workspace_id AND g.`key` = t.group_key
+LEFT JOIN task_group_localization gl ON gl.workspace_id = t.workspace_id AND gl.group_key = t.group_key AND gl.locale = ?
 LEFT JOIN task_localization l ON l.workspace_id = t.workspace_id AND l.task_id = t.id AND l.locale = ?
 LEFT JOIN task_reward r ON r.workspace_id = t.workspace_id AND r.task_id = t.id
 WHERE t.workspace_id = ? AND t.is_visible = TRUE AND t.is_active = TRUE
+  AND g.is_active = TRUE AND g.deleted_at IS NULL
   AND t.deleted_at IS NULL
 ORDER BY t.position, t.id, r.position, r.id;
 

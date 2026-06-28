@@ -7,14 +7,14 @@ import (
 	"github.com/elum-utils/services/tasks/repository"
 )
 
-func (u *User) ListActive(ctx context.Context, identity Identity, locale string, now time.Time) ([]TaskModel, error) {
+func (u *User) ListActive(ctx context.Context, identity Identity, locale string, now time.Time) ([]TaskGroupModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
 	tasks, err := u.repository.ListActive(mergedCtx, identity, locale, now)
 	if err != nil {
 		return nil, err
 	}
-	return tasks, nil
+	return groupTasks(tasks), nil
 }
 
 func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
@@ -46,6 +46,30 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 		output.Task = &task
 	}
 	return output, nil
+}
+
+func groupTasks(tasks []repository.ActiveTask) []TaskGroupModel {
+	groups := make([]TaskGroupModel, 0)
+	indexByKey := make(map[string]int, len(tasks))
+	for _, task := range tasks {
+		index, ok := indexByKey[task.GroupKey]
+		if !ok {
+			title := task.GroupTitle
+			if title == "" {
+				title = task.GroupKey
+			}
+			groups = append(groups, TaskGroupModel{
+				Key:         task.GroupKey,
+				Title:       title,
+				Description: task.GroupDesc,
+				Tasks:       make([]TaskModel, 0),
+			})
+			index = len(groups) - 1
+			indexByKey[task.GroupKey] = index
+		}
+		groups[index].Tasks = append(groups[index].Tasks, task)
+	}
+	return groups
 }
 
 func mapTask(task repository.Task) TaskModel {

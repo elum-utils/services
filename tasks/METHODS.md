@@ -6,7 +6,7 @@
 
 | Метод | Что принимаем | Что делает |
 | --- | --- | --- |
-| `User.ListActive(ctx, identity, locale, now)` | `Identity{WorkspaceID, AppID, PlatformID, PlatformUserID}`, `locale`, `now`. | Возвращает активные задачи пользователя с прогрессом и локализацией. |
+| `User.ListActive(ctx, identity, locale, now)` | `Identity{WorkspaceID, AppID, PlatformID, PlatformUserID}`, `locale`, `now`. | Возвращает активные задачи пользователя сгруппированными как `[]TaskGroupModel{Key, Title, Description, Tasks}`. Группа и задачи локализуются по `locale`; прогресс остается внутри каждой задачи. |
 | `User.ListPartner(ctx, params)` | `PartnerListParams{Identity, Provider, GroupKey, Platform, Locale, Limit, Variables, Now}`. | Запрашивает партнерскую группу, скрыто вызывает provider adapter, создает/переиспользует `partner_issue` и возвращает партнерские задания в той же форме, что обычные задачи. |
 | `User.CheckPartner(ctx, params)` | `PartnerCheckParams{Identity, IssueRef, Variables, Now}`. | Проверяет выполнение партнерского задания через provider adapter, скрывает партнерский API и при успехе помечает issue как `completed`, возвращая задачу со статусом `ready`. |
 | `User.Claim(ctx, params)` | `ClaimParams{Identity, TaskRef, OperationID, Now}`. | Забирает награду по готовой задаче и возвращает новый статус. |

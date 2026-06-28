@@ -93,6 +93,12 @@ func mapActiveBundles(rows []tasksqlc.ListActiveTaskBundlesRow) []Task {
 				StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
 				Rewards: make([]Reward, 0),
 			}
+			if row.GroupTitle.Valid {
+				task.GroupTitle = row.GroupTitle.String
+			}
+			if row.GroupDescription.Valid {
+				task.GroupDesc = row.GroupDescription.String
+			}
 			if row.Locale.Valid {
 				task.Localization = &Localization{Locale: row.Locale.String, Title: row.Title.String, Description: row.Description.String}
 			}

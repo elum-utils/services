@@ -58,6 +58,7 @@ func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale 
 	}, func(ctx context.Context) ([]ActiveTask, error) {
 		rows, err := r.q.ListActiveTaskBundles(ctx, tasksqlc.ListActiveTaskBundlesParams{
 			Locale:      locale,
+			Locale_2:    locale,
 			WorkspaceID: workspaceID,
 		})
 		if err != nil {
@@ -76,6 +77,7 @@ func activeTasksFromTasks(tasks []Task) []ActiveTask {
 	for _, task := range tasks {
 		out := ActiveTask{
 			ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
+			GroupTitle: task.GroupTitle, GroupDesc: task.GroupDesc,
 			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
 			TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
 			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt, Target: task.Target,

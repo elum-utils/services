@@ -73,6 +73,8 @@ type Task struct {
 	WorkspaceID         string
 	Key                 string
 	GroupKey            string
+	GroupTitle          string
+	GroupDesc           string
 	SequenceKey         *string
 	SequencePosition    *uint32
 	TaskKind            string
@@ -105,6 +107,8 @@ type ActiveTask struct {
 	ID          uint64          `json:"id"`
 	Key         string          `json:"key"`
 	GroupKey    string          `json:"group_key"`
+	GroupTitle  string          `json:"-" msgpack:"group_title"`
+	GroupDesc   string          `json:"-" msgpack:"group_description"`
 	TaskKind    string          `json:"task_kind"`
 	ActionKey   string          `json:"action_key"`
 	ActionKind  string          `json:"action_kind"`
