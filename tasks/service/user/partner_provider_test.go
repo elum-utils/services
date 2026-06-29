@@ -18,7 +18,7 @@ func TestTgrassProviderListAndCheck(t *testing.T) {
 			t.Fatalf("Auth header = %q", got)
 		}
 		_, _ = w.Write([]byte(`{
-			"status":"not_ok",
+			"status":"ok",
 			"offers":[{"name":"Tech","link":"https://t.me/tech","subscribed":false,"type":"channel","channel_id":"-100","offer_id":1054}]
 		}`))
 	})

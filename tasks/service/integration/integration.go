@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"maps"
 	"context"
 	"fmt"
 	"time"
@@ -11,16 +12,18 @@ import (
 )
 
 type Options struct {
-	RepositoryOptions repository.Options
-	ChannelCheckers   map[string]ChannelSubscriptionChecker
-	ExternalCheckers  map[string]ExternalTaskChecker
+	RepositoryOptions    repository.Options
+	ChannelCheckers      map[string]ChannelSubscriptionChecker
+	ChannelBoostCheckers map[string]ChannelBoostChecker
+	ExternalCheckers     map[string]ExternalTaskChecker
 }
 
 type Integration struct {
-	rootCtx          context.Context
-	repository       *repository.Repository
-	channelCheckers  map[string]ChannelSubscriptionChecker
-	externalCheckers map[string]ExternalTaskChecker
+	rootCtx              context.Context
+	repository           *repository.Repository
+	channelCheckers      map[string]ChannelSubscriptionChecker
+	channelBoostCheckers map[string]ChannelBoostChecker
+	externalCheckers     map[string]ExternalTaskChecker
 }
 
 func New(ctx context.Context, db *sqlwrap.Client) *Integration {
@@ -28,11 +31,13 @@ func New(ctx context.Context, db *sqlwrap.Client) *Integration {
 }
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options Options) *Integration {
+	channelChecker := NewChannelSubscriptionChecker(ChannelSubscriptionCheckerOptions{})
 	return &Integration{
-		rootCtx:          contextutil.Normalize(ctx),
-		repository:       repository.NewWithOptions(db, options.RepositoryOptions),
-		channelCheckers:  cloneChannelCheckers(options.ChannelCheckers),
-		externalCheckers: cloneExternalCheckers(options.ExternalCheckers),
+		rootCtx:              contextutil.Normalize(ctx),
+		repository:           repository.NewWithOptions(db, options.RepositoryOptions),
+		channelCheckers:      defaultChannelCheckers(channelChecker, options.ChannelCheckers),
+		channelBoostCheckers: defaultChannelBoostCheckers(channelChecker, options.ChannelBoostCheckers),
+		externalCheckers:     cloneExternalCheckers(options.ExternalCheckers),
 	}
 }
 
@@ -55,6 +60,22 @@ func (i *Integration) CheckChannelSubscription(ctx context.Context, params Check
 		},
 		checker: func(provider string) any {
 			return i.channelCheckers[provider]
+		},
+	})
+}
+
+func (i *Integration) CheckChannelBoost(ctx context.Context, params CheckChannelBoostParams) (Result, error) {
+	return i.checkAndRecord(ctx, checkAndRecordParams{
+		taskRef: params.TaskRefParams, provider: params.Provider,
+		variables: params.Variables, expectedActionKind: repository.ActionKindChannelBoost,
+		check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+			return checker.(ChannelBoostChecker).CheckChannelBoost(ctx, ChannelBoostCheckParams{
+				Identity: params.Identity, Task: taskContext(task), Provider: provider,
+				Variables: params.Variables, OccurredAt: now,
+			})
+		},
+		checker: func(provider string) any {
+			return i.channelBoostCheckers[provider]
 		},
 	})
 }
@@ -207,9 +228,32 @@ func integrationEventKey(task repository.Task, identity repository.Identity) str
 	return fmt.Sprintf("integration:%d:%s:%d:%d:%s", task.ID, identity.WorkspaceID, identity.AppID, identity.PlatformID, identity.PlatformUserID)
 }
 
-func cloneChannelCheckers(values map[string]ChannelSubscriptionChecker) map[string]ChannelSubscriptionChecker {
-	result := make(map[string]ChannelSubscriptionChecker, len(values))
-	for key, value := range values {
+func defaultChannelCheckers(checker ChannelSubscriptionChecker, overrides map[string]ChannelSubscriptionChecker) map[string]ChannelSubscriptionChecker {
+	result := map[string]ChannelSubscriptionChecker{
+		"telegram": checker,
+		"tg":       checker,
+		"vk":       checker,
+	}
+	for key, value := range overrides {
+		if value == nil {
+			delete(result, key)
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func defaultChannelBoostCheckers(checker ChannelBoostChecker, overrides map[string]ChannelBoostChecker) map[string]ChannelBoostChecker {
+	result := map[string]ChannelBoostChecker{
+		"telegram": checker,
+		"tg":       checker,
+	}
+	for key, value := range overrides {
+		if value == nil {
+			delete(result, key)
+			continue
+		}
 		result[key] = value
 	}
 	return result
@@ -217,8 +261,6 @@ func cloneChannelCheckers(values map[string]ChannelSubscriptionChecker) map[stri
 
 func cloneExternalCheckers(values map[string]ExternalTaskChecker) map[string]ExternalTaskChecker {
 	result := make(map[string]ExternalTaskChecker, len(values))
-	for key, value := range values {
-		result[key] = value
-	}
+	maps.Copy(result, values)
 	return result
 }

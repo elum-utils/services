@@ -7,12 +7,14 @@ import (
 
 const (
 	TaskKindInternal           = "internal"
+	TaskKindChannelBoost       = "channel_boost"
 	TaskKindChannelSubscribe   = "channel_subscribe"
 	TaskKindExternalCheck      = "external_check"
 	TaskKindExternalConfirming = "external_confirming"
 
 	ActionKindAppAction         = "app_action"
 	ActionKindAmountAction      = "amount_action"
+	ActionKindChannelBoost      = "channel_boost"
 	ActionKindChannelSubscribe  = "channel_subscribe"
 	ActionKindAdvertisementView = "advertisement_view"
 	ActionKindExternal          = "external"

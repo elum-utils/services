@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"maps"
 	"bytes"
 	"context"
 	"fmt"
@@ -177,9 +178,7 @@ func templateValues(identity Identity, task TaskContext, provider string, variab
 		"time_unix":    strconv.FormatInt(now.UTC().Unix(), 10),
 		"time_unix_ms": strconv.FormatInt(now.UTC().UnixMilli(), 10),
 	}
-	for key, value := range variables {
-		values[key] = value
-	}
+	maps.Copy(values, variables)
 	return values
 }
 

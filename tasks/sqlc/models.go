@@ -18,6 +18,7 @@ const (
 	TaskDefinitionActionKindAppAction         TaskDefinitionActionKind = "app_action"
 	TaskDefinitionActionKindAmountAction      TaskDefinitionActionKind = "amount_action"
 	TaskDefinitionActionKindChannelSubscribe  TaskDefinitionActionKind = "channel_subscribe"
+	TaskDefinitionActionKindChannelBoost      TaskDefinitionActionKind = "channel_boost"
 	TaskDefinitionActionKindAdvertisementView TaskDefinitionActionKind = "advertisement_view"
 	TaskDefinitionActionKindExternal          TaskDefinitionActionKind = "external"
 )

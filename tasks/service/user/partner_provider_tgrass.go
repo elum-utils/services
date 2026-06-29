@@ -69,7 +69,7 @@ func (p TgrassProvider) ListPartnerTasks(ctx context.Context, params PartnerList
 	}, body, &response); err != nil {
 		return nil, err
 	}
-	if response.Status == "ok" || response.Status == "no_offers" {
+	if response.Status == "no_offers" {
 		return []PartnerExternalTask{}, nil
 	}
 	result := make([]PartnerExternalTask, 0, len(response.Offers))

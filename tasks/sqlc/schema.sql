@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS task_definition (
     sequence_position INT NULL,
     task_kind VARCHAR(64) NOT NULL DEFAULT 'internal',
     action_key VARCHAR(150) NOT NULL,
-    action_kind ENUM('app_action', 'amount_action', 'channel_subscribe', 'advertisement_view', 'external') NOT NULL,
+    action_kind ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external') NOT NULL,
     claim_mode ENUM('manual', 'auto') NOT NULL DEFAULT 'manual',
     target_count BIGINT UNSIGNED NOT NULL DEFAULT 1,
     reset_unit ENUM('never', 'second', 'minute', 'hour', 'day', 'year') NOT NULL DEFAULT 'never',

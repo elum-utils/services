@@ -56,6 +56,12 @@ type CheckChannelSubscriptionParams struct {
 	Variables map[string]string
 }
 
+type CheckChannelBoostParams struct {
+	TaskRefParams
+	Provider  string
+	Variables map[string]string
+}
+
 type CheckExternalParams struct {
 	TaskRefParams
 	Provider  string
@@ -67,6 +73,14 @@ type ConfirmCompletionParams struct {
 }
 
 type ChannelSubscriptionCheckParams struct {
+	Identity   Identity
+	Task       TaskContext
+	Provider   string
+	Variables  map[string]string
+	OccurredAt time.Time
+}
+
+type ChannelBoostCheckParams struct {
 	Identity   Identity
 	Task       TaskContext
 	Provider   string
@@ -96,6 +110,10 @@ type TaskContext struct {
 
 type ChannelSubscriptionChecker interface {
 	CheckChannelSubscription(ctx context.Context, params ChannelSubscriptionCheckParams) (CheckResult, error)
+}
+
+type ChannelBoostChecker interface {
+	CheckChannelBoost(ctx context.Context, params ChannelBoostCheckParams) (CheckResult, error)
 }
 
 type ExternalTaskChecker interface {
