@@ -4,8 +4,8 @@ function subgram_base_url(event)
 end
 
 function subgram_first_non_empty(...)
-    local values = { ... }
-    for _, value in ipairs(values) do
+    for index = 1, select("#", ...) do
+        local value = select(index, ...)
         if value ~= nil and tostring(value) ~= "" then
             return tostring(value)
         end
@@ -78,7 +78,8 @@ function list(event)
     end
     local tasks = {}
     for _, sponsor in ipairs(sponsors) do
-        if sponsor.link ~= nil and sponsor.link ~= "" and sponsor.available_now == true and sponsor.status ~= "subscribed" then
+        if sponsor.link ~= nil and sponsor.link ~= "" and sponsor.available_now == true and sponsor.status ~=
+            "subscribed" then
             local external_type = subgram_first_non_empty(sponsor.type, "resource")
             local ads_id = tostring(sponsor.ads_id)
             local resource_id = tostring(sponsor.resource_id or "")
@@ -109,20 +110,22 @@ function list(event)
     }
 end
 
-function callback(event)
-    local request = event.request or {}
-    local body = request.body or {}
-    local status = subgram_first_non_empty(body.status, body.event, body.action, body.type)
-    local action = "complete"
-    if status == "unsubscribe" or status == "unsubscribed" or status == "revoked" or status == "cancelled" or status == "canceled" then
-        action = "revoked"
+function subgram_callback_action(status)
+    if status == "unsubscribe" or status == "unsubscribed" or status == "revoked" or status == "cancelled" or status ==
+        "canceled" then
+        return "revoked"
     end
+    return "complete"
+end
+
+function subgram_callback_item(body)
+    local status = subgram_first_non_empty(body.status, body.event, body.action, body.type)
+    local action = subgram_callback_action(status)
     local external_id = subgram_first_non_empty(body.external_id, body.task_id, body.offer_id)
     if external_id == "" and body.ads_id ~= nil then
         external_id = tostring(body.ads_id) .. ":" .. tostring(body.resource_id or "")
     end
     return {
-        ok = true,
         action = action,
         status = status ~= "" and status or action,
         issue_id = body.issue_id,
@@ -136,9 +139,28 @@ function callback(event)
             event = body.event,
             ads_id = body.ads_id,
             resource_id = body.resource_id,
+            link = body.link,
             user_id = body.user_id
         }
     }
+end
+
+function callback(event)
+    local request = event.request or {}
+    local body = request.body or {}
+    if body.webhooks ~= nil then
+        local callbacks = {}
+        for _, item in ipairs(body.webhooks or {}) do
+            table.insert(callbacks, subgram_callback_item(item))
+        end
+        return {
+            ok = true,
+            callbacks = callbacks
+        }
+    end
+    local result = subgram_callback_item(body)
+    result.ok = true
+    return result
 end
 
 function check(event)
@@ -148,12 +170,12 @@ function check(event)
         user_id = subgram_partner_number(event.identity.platform_user_id)
     }
     if private.link ~= nil and private.link ~= "" then
-        body.links = { private.link }
+        body.links = {private.link}
     end
     if private.ads_id ~= nil and private.ads_id ~= "" then
         local ads_id = tonumber(private.ads_id)
         if ads_id ~= nil then
-            body.ads_ids = { ads_id }
+            body.ads_ids = {ads_id}
         end
     end
     local response = http.request({
@@ -180,7 +202,8 @@ function check(event)
     end
     local status = "not_found"
     for _, sponsor in ipairs(sponsors) do
-        if private.link == nil or private.link == "" or sponsor.link == nil or sponsor.link == "" or sponsor.link == private.link then
+        if private.link == nil or private.link == "" or sponsor.link == nil or sponsor.link == "" or sponsor.link ==
+            private.link then
             status = sponsor.status
             break
         end

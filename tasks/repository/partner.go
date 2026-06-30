@@ -401,6 +401,22 @@ func (r *Repository) GetPartnerIssueByExternalUser(ctx context.Context, workspac
 	return mapPartnerIssue(row), true, nil
 }
 
+func (r *Repository) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, workspaceID, provider, groupKey, platform, lookupKey, lookupValue, platformUserID string) (PartnerIssue, bool, error) {
+	row, err := repositoryValue(ctx, r, func(ctx context.Context) (tasksqlc.TaskPartnerIssue, error) {
+		return r.q.GetPartnerIssueByPrivatePayloadUser(ctx, tasksqlc.GetPartnerIssueByPrivatePayloadUserParams{
+			WorkspaceID: workspaceID, Provider: provider, GroupKey: groupKey, Platform: platform,
+			LookupKey: lookupKey, LookupValue: lookupValue, PlatformUserID: platformUserID,
+		})
+	})
+	if err != nil {
+		if isNoRows(err) {
+			return PartnerIssue{}, false, nil
+		}
+		return PartnerIssue{}, false, err
+	}
+	return mapPartnerIssue(row), true, nil
+}
+
 func (r *Repository) UpdatePartnerIssueStart(ctx context.Context, workspaceID string, id uint64, externalClickID string, publicPatch, privatePatch json.RawMessage) (PartnerIssue, bool, error) {
 	issue, found, err := r.GetPartnerIssue(ctx, workspaceID, id)
 	if err != nil || !found {

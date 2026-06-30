@@ -180,6 +180,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getPartnerIssueByIDForUpdateStmt, err = db.PrepareContext(ctx, getPartnerIssueByIDForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerIssueByIDForUpdate: %w", err)
 	}
+	if q.getPartnerIssueByPrivatePayloadUserStmt, err = db.PrepareContext(ctx, getPartnerIssueByPrivatePayloadUser); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPartnerIssueByPrivatePayloadUser: %w", err)
+	}
 	if q.getPartnerRewardGrantByIssueStmt, err = db.PrepareContext(ctx, getPartnerRewardGrantByIssue); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerRewardGrantByIssue: %w", err)
 	}
@@ -526,6 +529,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getPartnerIssueByIDForUpdateStmt: %w", cerr)
 		}
 	}
+	if q.getPartnerIssueByPrivatePayloadUserStmt != nil {
+		if cerr := q.getPartnerIssueByPrivatePayloadUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPartnerIssueByPrivatePayloadUserStmt: %w", cerr)
+		}
+	}
 	if q.getPartnerRewardGrantByIssueStmt != nil {
 		if cerr := q.getPartnerRewardGrantByIssueStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getPartnerRewardGrantByIssueStmt: %w", cerr)
@@ -752,6 +760,7 @@ type Queries struct {
 	getPartnerIssueByExternalUserStmt       *sql.Stmt
 	getPartnerIssueByIDStmt                 *sql.Stmt
 	getPartnerIssueByIDForUpdateStmt        *sql.Stmt
+	getPartnerIssueByPrivatePayloadUserStmt *sql.Stmt
 	getPartnerRewardGrantByIssueStmt        *sql.Stmt
 	getSequenceStateForUpdateStmt           *sql.Stmt
 	getStartTaskByIDStmt                    *sql.Stmt
@@ -837,6 +846,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getPartnerIssueByExternalUserStmt:       q.getPartnerIssueByExternalUserStmt,
 		getPartnerIssueByIDStmt:                 q.getPartnerIssueByIDStmt,
 		getPartnerIssueByIDForUpdateStmt:        q.getPartnerIssueByIDForUpdateStmt,
+		getPartnerIssueByPrivatePayloadUserStmt: q.getPartnerIssueByPrivatePayloadUserStmt,
 		getPartnerRewardGrantByIssueStmt:        q.getPartnerRewardGrantByIssueStmt,
 		getSequenceStateForUpdateStmt:           q.getSequenceStateForUpdateStmt,
 		getStartTaskByIDStmt:                    q.getStartTaskByIDStmt,

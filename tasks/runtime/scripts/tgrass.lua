@@ -7,6 +7,7 @@ function callback(event)
         action = "revoked"
     end
     local external_id = body.external_id or body.offer_id or body.task_id
+    local external_link = body.external_link or body.offer_link or body.link
     local platform_user_id = body.platform_user_id or body.tg_user_id or body.user_id
     return {
         ok = true,
@@ -17,11 +18,21 @@ function callback(event)
         external_click_id = body.external_click_id or body.click_id,
         external_id = external_id,
         platform_user_id = platform_user_id,
+        lookup = {
+            platform_user_id = platform_user_id,
+            private_payload = {
+                {
+                    key = "link",
+                    value = external_link
+                }
+            }
+        },
         payload = {
             provider = "tgrass",
             status = status,
             event = body.event,
             offer_id = body.offer_id,
+            offer_link = body.offer_link,
             task_id = body.task_id,
             tg_user_id = body.tg_user_id,
             is_fake = body.is_fake

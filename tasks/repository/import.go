@@ -31,8 +31,10 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 			preview.Conflicts = append(preview.Conflicts, ImportConflict{Type: "group", Key: group.Key})
 		}
 		for _, config := range group.PartnerConfigs {
-			if config.Secret != nil {
-				preview.RequiredSecrets = append(preview.RequiredSecrets, *config.Secret)
+			for _, secret := range []*ExportSecret{config.Secret, config.WebhookSecret} {
+				if secret != nil && !secretHasEmbeddedValue(secret) {
+					preview.RequiredSecrets = append(preview.RequiredSecrets, *secret)
+				}
 			}
 			key := partnerConfigImportKey(config.Provider, group.Key, config.Platform)
 			if existing.partnerConfigs[key] {
@@ -309,22 +311,19 @@ func (r *Repository) importPartnerConfigsBulk(ctx context.Context, workspaceID s
 				result.Skipped.PartnerConfigs++
 				continue
 			}
-			var secret sql.NullString
-			if config.Secret != nil {
-				value := secrets[config.Secret.Key]
-				secret = sql.NullString{String: value, Valid: true}
-			}
+			secret := importSecretValue(config.Secret, secrets)
+			webhookSecret := importSecretValue(config.WebhookSecret, secrets)
 			rows = append(rows, []any{
 				workspaceID, config.Provider, group.Key, config.Platform, config.IsEnabled,
-				secret, defaultJSON(config.Target, "null"), defaultJSON(config.Settings, "null"),
+				secret, webhookSecret, defaultJSON(config.Target, "null"), defaultJSON(config.Settings, "null"),
 			})
 			result.Imported.PartnerConfigs++
 		}
 	}
 	return r.execImportBulk(ctx, "task_partner_config",
-		[]string{"workspace_id", "provider", "group_key", "platform", "is_enabled", "secret", "target", "settings"},
+		[]string{"workspace_id", "provider", "group_key", "platform", "is_enabled", "secret", "webhook_secret", "target", "settings"},
 		rows,
-		"is_enabled = VALUES(is_enabled), secret = VALUES(secret), target = VALUES(target), settings = VALUES(settings), updated_at = NOW()",
+		"is_enabled = VALUES(is_enabled), secret = VALUES(secret), webhook_secret = VALUES(webhook_secret), target = VALUES(target), settings = VALUES(settings), updated_at = NOW()",
 	)
 }
 
@@ -540,15 +539,42 @@ func validateExportPackage(pkg ExportPackage) error {
 func requireImportSecrets(pkg ExportPackage, secrets map[string]string) error {
 	for _, group := range pkg.Groups {
 		for _, config := range group.PartnerConfigs {
-			if config.Secret == nil {
-				continue
-			}
-			if secrets == nil || secrets[config.Secret.Key] == "" {
-				return fmt.Errorf("required import secret is missing: %s", config.Secret.Key)
+			for _, secret := range []*ExportSecret{config.Secret, config.WebhookSecret} {
+				if secret == nil {
+					continue
+				}
+				if importSecretValue(secret, secrets).Valid {
+					continue
+				}
+				if secret.Key == "" {
+					return fmt.Errorf("required import secret is missing")
+				}
+				if secrets == nil || secrets[secret.Key] == "" {
+					return fmt.Errorf("required import secret is missing: %s", secret.Key)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func importSecretValue(secret *ExportSecret, secrets map[string]string) sql.NullString {
+	if secret == nil {
+		return sql.NullString{}
+	}
+	if secrets != nil && secret.Key != "" {
+		if value := secrets[secret.Key]; value != "" {
+			return sql.NullString{String: value, Valid: true}
+		}
+	}
+	if secret.Value != nil && *secret.Value != "" {
+		return sql.NullString{String: *secret.Value, Valid: true}
+	}
+	return sql.NullString{}
+}
+
+func secretHasEmbeddedValue(secret *ExportSecret) bool {
+	return secret != nil && secret.Value != nil && *secret.Value != ""
 }
 
 func previewHasConflict(preview ImportPreview, kind, key string) bool {

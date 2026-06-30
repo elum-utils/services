@@ -4,8 +4,8 @@ function flyer_base_url(event)
 end
 
 function flyer_first_non_empty(...)
-    local values = { ... }
-    for _, value in ipairs(values) do
+    for index = 1, select("#", ...) do
+        local value = select(index, ...)
         if value ~= nil and tostring(value) ~= "" then
             return tostring(value)
         end

@@ -2767,6 +2767,70 @@ func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartn
 	return i, err
 }
 
+const getPartnerIssueByPrivatePayloadUser = `-- name: GetPartnerIssueByPrivatePayloadUser :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND JSON_CONTAINS(private_payload, JSON_OBJECT(?, ?))
+  AND platform_user_id = ?
+ORDER BY issued_at DESC, id DESC
+LIMIT 1
+`
+
+type GetPartnerIssueByPrivatePayloadUserParams struct {
+	WorkspaceID    string      `json:"workspace_id"`
+	Provider       string      `json:"provider"`
+	GroupKey       string      `json:"group_key"`
+	Platform       string      `json:"platform"`
+	LookupKey      interface{} `json:"lookup_key"`
+	LookupValue    interface{} `json:"lookup_value"`
+	PlatformUserID string      `json:"platform_user_id"`
+}
+
+func (q *Queries) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, arg GetPartnerIssueByPrivatePayloadUserParams) (TaskPartnerIssue, error) {
+	row := q.queryRow(ctx, q.getPartnerIssueByPrivatePayloadUserStmt, getPartnerIssueByPrivatePayloadUser,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.LookupKey,
+		arg.LookupValue,
+		arg.PlatformUserID,
+	)
+	var i TaskPartnerIssue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.ExternalID,
+		&i.ExternalType,
+		&i.ExternalClickID,
+		&i.StartMode,
+		&i.IssueKey,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PublicPayload,
+		&i.PrivatePayload,
+		&i.Status,
+		&i.IssuedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ClaimedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPartnerRewardGrantByIssue = `-- name: GetPartnerRewardGrantByIssue :one
 SELECT id, workspace_id, issue_id, provider, group_key, external_type,
        app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at, created_at

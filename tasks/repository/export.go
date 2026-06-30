@@ -192,7 +192,8 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		}
 		out.Groups[index].PartnerConfigs = append(out.Groups[index].PartnerConfigs, ExportPartnerConfig{
 			Provider: config.Provider, Platform: config.Platform, IsEnabled: config.IsEnabled,
-			Secret: exportSecret(config), Target: target, Settings: nullableRaw(config.Settings),
+			Secret: exportSecret(config, req.IncludeSecrets), WebhookSecret: exportWebhookSecret(config, req.IncludeSecrets),
+			Target: target, Settings: nullableRaw(config.Settings),
 		})
 	}
 	for _, row := range partnerRewards {
@@ -231,11 +232,26 @@ func exportSections(values []string) map[string]bool {
 	return out
 }
 
-func exportSecret(config PartnerConfig) *ExportSecret {
+func exportSecret(config PartnerConfig, includeValue bool) *ExportSecret {
 	if config.Secret == nil || *config.Secret == "" {
 		return nil
 	}
-	return &ExportSecret{Mode: "required", Key: partnerSecretImportKey(config.Provider, config.GroupKey, config.Platform)}
+	secret := &ExportSecret{Mode: "required", Key: partnerSecretImportKey(config.Provider, config.GroupKey, config.Platform)}
+	if includeValue {
+		secret.Value = config.Secret
+	}
+	return secret
+}
+
+func exportWebhookSecret(config PartnerConfig, includeValue bool) *ExportSecret {
+	if config.WebhookSecret == nil || *config.WebhookSecret == "" {
+		return nil
+	}
+	secret := &ExportSecret{Mode: "required", Key: partnerWebhookSecretImportKey(config.Provider, config.GroupKey, config.Platform)}
+	if includeValue {
+		secret.Value = config.WebhookSecret
+	}
+	return secret
 }
 
 func nullableRaw(raw json.RawMessage) json.RawMessage {
@@ -247,4 +263,8 @@ func nullableRaw(raw json.RawMessage) json.RawMessage {
 
 func partnerSecretImportKey(provider, groupKey, platform string) string {
 	return "tasks.partner." + provider + "." + groupKey + "." + platform + ".secret"
+}
+
+func partnerWebhookSecretImportKey(provider, groupKey, platform string) string {
+	return "tasks.partner." + provider + "." + groupKey + "." + platform + ".webhook_secret"
 }

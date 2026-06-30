@@ -961,6 +961,20 @@ WHERE workspace_id = ?
 ORDER BY issued_at DESC, id DESC
 LIMIT 1;
 
+-- name: GetPartnerIssueByPrivatePayloadUser :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND JSON_CONTAINS(private_payload, JSON_OBJECT(sqlc.arg(lookup_key), sqlc.arg(lookup_value)))
+  AND platform_user_id = ?
+ORDER BY issued_at DESC, id DESC
+LIMIT 1;
+
 -- name: UpdatePartnerIssueStart :execrows
 UPDATE task_partner_issue
 SET external_click_id = COALESCE(NULLIF(?, ''), external_click_id),
