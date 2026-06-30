@@ -118,6 +118,9 @@ func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (Par
 	if issue.Status == repository.PartnerIssueStatusCompleted || issue.Status == repository.PartnerIssueStatusClaimed {
 		return PartnerCheckOutput{Status: task.Progress.Status, Completed: true, Task: &task}, nil
 	}
+	if issue.Status == repository.PartnerIssueStatusRevoked || issue.Status == repository.PartnerIssueStatusRevokedAfterClaim {
+		return PartnerCheckOutput{Status: task.Progress.Status, Completed: false, Task: &task}, nil
+	}
 	if issue.StartMode == repository.StartModeRequired && issue.StartedAt == nil {
 		return PartnerCheckOutput{Status: repository.ClaimStatusNotStarted, Completed: false, Task: &task}, nil
 	}
