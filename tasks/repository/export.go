@@ -171,7 +171,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		out.Groups[index].Tasks = append(out.Groups[index].Tasks, ExportTask{
 			Key: task.Key, SequenceKey: sequenceKey, SequencePosition: sequencePosition,
 			TaskKind: task.TaskKind, ActionKey: task.ActionKey, ActionKind: task.ActionKind,
-			ClaimMode: task.ClaimMode, TargetCount: task.TargetCount,
+			ClaimMode: task.ClaimMode, StartMode: task.StartMode, TargetCount: task.TargetCount,
 			Reset:    ExportReset{Unit: task.ResetUnit, Every: task.ResetEvery},
 			Position: task.Position, Payload: nullableRaw(task.Payload), Target: target,
 			Integration: integration,

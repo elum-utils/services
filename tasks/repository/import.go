@@ -193,6 +193,7 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 				task.ActionKey,
 				task.ActionKind,
 				defaultString(task.ClaimMode, ClaimModeManual),
+				defaultString(task.StartMode, StartModeNone),
 				task.TargetCount,
 				defaultString(task.Reset.Unit, ResetNever),
 				defaultUint32(task.Reset.Every, 1),
@@ -214,7 +215,7 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 	if err := r.execImportBulk(ctx, "task_definition",
 		[]string{
 			"workspace_id", "`key`", "group_key", "sequence_key", "sequence_position",
-			"task_kind", "action_key", "action_kind", "claim_mode", "target_count",
+			"task_kind", "action_key", "action_kind", "claim_mode", "start_mode", "target_count",
 			"reset_unit", "reset_every", "position", "payload", "target",
 			"integration_kind", "integration_provider", "integration_payload", "image_url",
 			"is_visible", "is_active", "start_at", "end_at",
@@ -222,7 +223,7 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 		rows,
 		"group_key = VALUES(group_key), sequence_key = VALUES(sequence_key), sequence_position = VALUES(sequence_position), "+
 			"task_kind = VALUES(task_kind), action_key = VALUES(action_key), action_kind = VALUES(action_kind), "+
-			"claim_mode = VALUES(claim_mode), target_count = VALUES(target_count), reset_unit = VALUES(reset_unit), "+
+			"claim_mode = VALUES(claim_mode), start_mode = VALUES(start_mode), target_count = VALUES(target_count), reset_unit = VALUES(reset_unit), "+
 			"reset_every = VALUES(reset_every), position = VALUES(position), payload = VALUES(payload), target = VALUES(target), "+
 			"integration_kind = VALUES(integration_kind), integration_provider = VALUES(integration_provider), "+
 			"integration_payload = VALUES(integration_payload), image_url = VALUES(image_url), is_visible = VALUES(is_visible), "+

@@ -79,6 +79,7 @@ type ExportTask struct {
 	ActionKey        string                `json:"action_key"`
 	ActionKind       string                `json:"action_kind"`
 	ClaimMode        string                `json:"claim_mode"`
+	StartMode        string                `json:"start_mode"`
 	TargetCount      uint64                `json:"target_count"`
 	Reset            ExportReset           `json:"reset"`
 	Position         int32                 `json:"position"`

@@ -37,6 +37,10 @@ func (r *Repository) MarkIntegrationTaskReady(ctx context.Context, params MarkIn
 				result.Status = RecordStatusDuplicate
 				return nil
 			}
+			if task.StartMode == StartModeRequired && !exists {
+				result.Status = ClaimStatusNotStarted
+				return nil
+			}
 			if params.ExternalEventKey != "" {
 				inserted, err := txRepo.insertProgressEvent(ctx, params)
 				if err != nil {

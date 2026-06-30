@@ -143,6 +143,9 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 			if progress.Status == StatusClaimed || progress.Status == StatusReady {
 				continue
 			}
+			if task.StartMode == StartModeRequired && !exists {
+				continue
+			}
 			before := progress.Progress
 			need := task.TargetCount - progress.Progress
 			consume := amount
@@ -272,7 +275,11 @@ func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult
 		progress, err := txRepo.currentProgressForUpdate(ctx, params.Identity, task.ID, now)
 		if err != nil {
 			if isNoRows(err) {
-				result.Status = ClaimStatusNotReady
+				if task.StartMode == StartModeRequired {
+					result.Status = ClaimStatusNotStarted
+				} else {
+					result.Status = ClaimStatusNotReady
+				}
 				return nil
 			}
 			return err
@@ -298,6 +305,72 @@ func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult
 			result.Status = ClaimStatusNotReady
 			return nil
 		}
+	})
+	return result, err
+}
+
+func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (StartTaskResult, error) {
+	now := params.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	result := StartTaskResult{Status: ClaimStatusNotFound}
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		id, key := taskRef(params.TaskRef)
+		var (
+			task Task
+			err  error
+		)
+		if id != 0 {
+			row, err := txRepo.q.GetStartTaskByID(ctx, tasksqlc.GetStartTaskByIDParams{WorkspaceID: params.Identity.WorkspaceID, ID: id})
+			if err == nil {
+				task = mapStartTaskByID(row)
+			}
+		} else {
+			row, rowErr := txRepo.q.GetStartTaskByKey(ctx, tasksqlc.GetStartTaskByKeyParams{WorkspaceID: params.Identity.WorkspaceID, Key: key})
+			err = rowErr
+			if err == nil {
+				task = mapStartTaskByKey(row)
+			}
+		}
+		if err != nil {
+			if isNoRows(err) {
+				return nil
+			}
+			return err
+		}
+		result.Task = &task
+		if !taskVisibleAt(task, now) {
+			result.Status = RecordStatusNoTasks
+			return nil
+		}
+		allowed, err := txRepo.integrationTaskSequenceReady(ctx, params.Identity, task)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			result.Status = RecordStatusNoTasks
+			return nil
+		}
+		periodStart, periodEnd := periodFor(task, now)
+		progress, err := txRepo.currentProgressForUpdate(ctx, params.Identity, task.ID, now)
+		if err != nil {
+			if !isNoRows(err) {
+				return err
+			}
+			progress, err = txRepo.ensureProgress(ctx, params.Identity, task, periodStart, periodEnd)
+			if err != nil {
+				return err
+			}
+		}
+		task.Progress = &progress
+		result.Task = &task
+		if progress.Status == StatusClaimed || progress.Status == StatusReady {
+			result.Status = progress.Status
+			return nil
+		}
+		result.Status = StartStatusStarted
+		return nil
 	})
 	return result, err
 }

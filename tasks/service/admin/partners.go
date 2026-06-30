@@ -13,7 +13,8 @@ func (a *Admin) SavePartnerConfig(ctx context.Context, params PartnerConfigModel
 	return a.repository.SavePartnerConfig(mergedCtx, repository.SavePartnerConfigParams{
 		WorkspaceID: params.WorkspaceID, Provider: params.Provider, GroupKey: params.GroupKey,
 		Platform: params.Platform, IsEnabled: params.IsEnabled, Secret: params.Secret,
-		Target: params.Target, Settings: params.Settings,
+		WebhookSecret: params.WebhookSecret,
+		Target:        params.Target, Settings: params.Settings,
 	})
 }
 
@@ -37,6 +38,38 @@ func (a *Admin) ListPartnerConfigs(ctx context.Context, workspaceID string) ([]P
 	result := make([]PartnerConfigModel, 0, len(configs))
 	for _, config := range configs {
 		result = append(result, mapPartnerConfig(config))
+	}
+	return result, nil
+}
+
+func (a *Admin) SavePartnerScript(ctx context.Context, params PartnerScriptModel) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.SavePartnerScript(mergedCtx, repository.SavePartnerScriptParams{
+		Provider: params.Provider, IsEnabled: params.IsEnabled, Version: params.Version, Source: params.Source,
+	})
+}
+
+func (a *Admin) GetPartnerScript(ctx context.Context, provider string) (PartnerScriptModel, bool, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	script, found, err := a.repository.GetPartnerScript(mergedCtx, provider)
+	if err != nil || !found {
+		return PartnerScriptModel{}, found, err
+	}
+	return mapPartnerScript(script), true, nil
+}
+
+func (a *Admin) ListPartnerScripts(ctx context.Context) ([]PartnerScriptModel, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	scripts, err := a.repository.ListPartnerScripts(mergedCtx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]PartnerScriptModel, 0, len(scripts))
+	for _, script := range scripts {
+		result = append(result, mapPartnerScript(script))
 	}
 	return result, nil
 }
@@ -76,6 +109,7 @@ func (a *Admin) ListPartnerDailyStats(ctx context.Context, workspaceID, provider
 		result = append(result, PartnerDailyStatsModel{
 			Date: value.Date, Provider: value.Provider, GroupKey: value.GroupKey, ExternalType: value.ExternalType,
 			IssuedCount: value.IssuedCount, CompletedCount: value.CompletedCount, ClaimedCount: value.ClaimedCount,
+			RevokedCount: value.RevokedCount, RevokedAfterClaimCount: value.RevokedAfterClaimCount,
 			FailedCount: value.FailedCount, FakeCount: value.FakeCount, ExpiredCount: value.ExpiredCount,
 			UniqueIssuedUsers: value.UniqueIssuedUsers, UniqueCompletedUsers: value.UniqueCompletedUsers,
 			UniqueClaimers: value.UniqueClaimers,
@@ -87,7 +121,14 @@ func (a *Admin) ListPartnerDailyStats(ctx context.Context, workspaceID, provider
 func mapPartnerConfig(config repository.PartnerConfig) PartnerConfigModel {
 	return PartnerConfigModel{
 		WorkspaceID: config.WorkspaceID, Provider: config.Provider, GroupKey: config.GroupKey,
-		Platform: config.Platform, IsEnabled: config.IsEnabled, Secret: config.Secret,
+		Platform: config.Platform, IsEnabled: config.IsEnabled, Secret: config.Secret, WebhookSecret: config.WebhookSecret,
 		Target: config.Target, Settings: config.Settings, CreatedAt: config.CreatedAt, UpdatedAt: config.UpdatedAt,
+	}
+}
+
+func mapPartnerScript(script repository.PartnerScript) PartnerScriptModel {
+	return PartnerScriptModel{
+		Provider: script.Provider, IsEnabled: script.IsEnabled, Version: script.Version, Source: script.Source,
+		CreatedAt: script.CreatedAt, UpdatedAt: script.UpdatedAt,
 	}
 }

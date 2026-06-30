@@ -49,6 +49,34 @@ func adminListTasksCacheKey(workspaceID, groupKey string, limit, offset int32) s
 	return sqlwrap.CreateKey("tasks", "admin_list_tasks", workspaceID, groupKey, limit, offset)
 }
 
+func partnerConfigCacheScope(workspaceID string) []any {
+	return []any{"tasks", "partner_config", workspaceID}
+}
+
+func partnerConfigCacheKey(workspaceID, provider, groupKey, platform string) string {
+	return sqlwrap.CreateKey("tasks", "partner_config", workspaceID, provider, groupKey, platform)
+}
+
+func partnerConfigWebhookCacheKey(workspaceID, secret string) string {
+	return sqlwrap.CreateKey("tasks", "partner_config_webhook", workspaceID, secret)
+}
+
+func partnerConfigListCacheKey(workspaceID string) string {
+	return sqlwrap.CreateKey("tasks", "partner_config_list", workspaceID)
+}
+
+func partnerScriptCacheScope() []any {
+	return []any{"tasks", "partner_script"}
+}
+
+func partnerScriptCacheKey(provider string) string {
+	return sqlwrap.CreateKey("tasks", "partner_script", provider)
+}
+
+func partnerScriptListCacheKey() string {
+	return sqlwrap.CreateKey("tasks", "partner_script_list")
+}
+
 func rememberTaskCacheKey(workspaceID, key string) {
 	if workspaceID == "" || key == "" {
 		return
@@ -74,4 +102,18 @@ func (r *Repository) invalidateTaskCache(_ context.Context, workspaceID string) 
 		return true
 	})
 	return outErr
+}
+
+func (r *Repository) bumpPartnerConfigCache(workspaceID string) error {
+	if r == nil || r.db == nil || workspaceID == "" {
+		return nil
+	}
+	return r.db.BumpCacheVersion(partnerConfigCacheScope(workspaceID)...)
+}
+
+func (r *Repository) bumpPartnerScriptCache() error {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	return r.db.BumpCacheVersion(partnerScriptCacheScope()...)
 }

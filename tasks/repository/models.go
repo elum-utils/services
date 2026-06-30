@@ -19,8 +19,10 @@ const (
 	ActionKindAdvertisementView = "advertisement_view"
 	ActionKindExternal          = "external"
 
-	ClaimModeManual = "manual"
-	ClaimModeAuto   = "auto"
+	ClaimModeManual   = "manual"
+	ClaimModeAuto     = "auto"
+	StartModeNone     = "none"
+	StartModeRequired = "required"
 
 	ResetNever  = "never"
 	ResetSecond = "second"
@@ -36,25 +38,32 @@ const (
 	RecordStatusRecorded   = "recorded"
 	RecordStatusDuplicate  = "duplicate"
 	RecordStatusNoTasks    = "no_tasks"
+	StartStatusStarted     = "started"
 	ClaimStatusClaimed     = "claimed"
 	ClaimStatusAlreadyDone = "already_claimed"
 	ClaimStatusNotReady    = "not_ready"
 	ClaimStatusNotFound    = "not_found"
+	ClaimStatusNotStarted  = "not_started"
 
 	CallbackEventClaimed = "task.claimed"
+	CallbackEventRevoked = "task.partner.revoked"
 
 	TaskKindPartner = "partner"
 
-	PartnerIssueStatusIssued    = "issued"
-	PartnerIssueStatusCompleted = "completed"
-	PartnerIssueStatusClaimed   = "claimed"
+	PartnerIssueStatusIssued            = "issued"
+	PartnerIssueStatusCompleted         = "completed"
+	PartnerIssueStatusClaimed           = "claimed"
+	PartnerIssueStatusRevoked           = "revoked"
+	PartnerIssueStatusRevokedAfterClaim = "revoked_after_claim"
 
-	PartnerStatsEventIssued    = "issued"
-	PartnerStatsEventCompleted = "completed"
-	PartnerStatsEventClaimed   = "claimed"
-	PartnerStatsEventFailed    = "failed"
-	PartnerStatsEventFake      = "fake"
-	PartnerStatsEventExpired   = "expired"
+	PartnerStatsEventIssued            = "issued"
+	PartnerStatsEventCompleted         = "completed"
+	PartnerStatsEventClaimed           = "claimed"
+	PartnerStatsEventRevoked           = "revoked"
+	PartnerStatsEventRevokedAfterClaim = "revoked_after_claim"
+	PartnerStatsEventFailed            = "failed"
+	PartnerStatsEventFake              = "fake"
+	PartnerStatsEventExpired           = "expired"
 
 	PartnerIssueKeyPrefix = "partner_issue:"
 )
@@ -83,6 +92,7 @@ type Task struct {
 	ActionKey           string
 	ActionKind          string
 	ClaimMode           string
+	StartMode           string
 	TargetCount         uint64
 	ResetUnit           string
 	ResetEvery          uint32
@@ -115,6 +125,7 @@ type ActiveTask struct {
 	ActionKey   string          `json:"action_key"`
 	ActionKind  string          `json:"action_kind"`
 	ClaimMode   string          `json:"claim_mode"`
+	StartMode   string          `json:"start_mode"`
 	TargetCount uint64          `json:"target_count"`
 	Payload     json.RawMessage `json:"payload,omitempty"`
 	ImageURL    *string         `json:"image_url,omitempty"`
@@ -173,6 +184,7 @@ type SaveTaskParams struct {
 	ActionKey           string
 	ActionKind          string
 	ClaimMode           string
+	StartMode           string
 	TargetCount         uint64
 	ResetUnit           string
 	ResetEvery          uint32
@@ -240,28 +252,57 @@ type ClaimResult struct {
 	Task   *Task
 }
 
+type StartTaskParams struct {
+	Identity Identity
+	TaskRef  string
+	Now      time.Time
+}
+
+type StartTaskResult struct {
+	Status string
+	Task   *Task
+}
+
 type PartnerConfig struct {
-	WorkspaceID string
-	Provider    string
-	GroupKey    string
-	Platform    string
-	IsEnabled   bool
-	Secret      *string
-	Target      json.RawMessage
-	Settings    json.RawMessage
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	WorkspaceID   string
+	Provider      string
+	GroupKey      string
+	Platform      string
+	IsEnabled     bool
+	Secret        *string
+	WebhookSecret *string
+	Target        json.RawMessage
+	Settings      json.RawMessage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type SavePartnerConfigParams struct {
-	WorkspaceID string
-	Provider    string
-	GroupKey    string
-	Platform    string
-	IsEnabled   bool
-	Secret      *string
-	Target      json.RawMessage
-	Settings    json.RawMessage
+	WorkspaceID   string
+	Provider      string
+	GroupKey      string
+	Platform      string
+	IsEnabled     bool
+	Secret        *string
+	WebhookSecret *string
+	Target        json.RawMessage
+	Settings      json.RawMessage
+}
+
+type PartnerScript struct {
+	Provider  string
+	IsEnabled bool
+	Version   string
+	Source    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type SavePartnerScriptParams struct {
+	Provider  string
+	IsEnabled bool
+	Version   string
+	Source    string
 }
 
 type PartnerRewardRule struct {
@@ -287,40 +328,45 @@ type SavePartnerRewardRuleParams struct {
 }
 
 type PartnerIssue struct {
-	ID             uint64
-	WorkspaceID    string
-	Provider       string
-	GroupKey       string
-	Platform       string
-	ExternalID     string
-	ExternalType   string
-	IssueKey       string
-	AppID          int64
-	PlatformID     int64
-	PlatformUserID string
-	PublicPayload  json.RawMessage
-	PrivatePayload json.RawMessage
-	Status         string
-	IssuedAt       time.Time
-	CompletedAt    *time.Time
-	ClaimedAt      *time.Time
-	ExpiresAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID              uint64
+	WorkspaceID     string
+	Provider        string
+	GroupKey        string
+	Platform        string
+	ExternalID      string
+	ExternalType    string
+	ExternalClickID *string
+	StartMode       string
+	IssueKey        string
+	AppID           int64
+	PlatformID      int64
+	PlatformUserID  string
+	PublicPayload   json.RawMessage
+	PrivatePayload  json.RawMessage
+	Status          string
+	IssuedAt        time.Time
+	StartedAt       *time.Time
+	CompletedAt     *time.Time
+	ClaimedAt       *time.Time
+	ExpiresAt       *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type CreatePartnerIssueParams struct {
-	Identity       Identity
-	Provider       string
-	GroupKey       string
-	Platform       string
-	ExternalID     string
-	ExternalType   string
-	IssueKey       string
-	PublicPayload  json.RawMessage
-	PrivatePayload json.RawMessage
-	ExpiresAt      *time.Time
-	Now            time.Time
+	Identity        Identity
+	Provider        string
+	GroupKey        string
+	Platform        string
+	ExternalID      string
+	ExternalType    string
+	ExternalClickID *string
+	StartMode       string
+	IssueKey        string
+	PublicPayload   json.RawMessage
+	PrivatePayload  json.RawMessage
+	ExpiresAt       *time.Time
+	Now             time.Time
 }
 
 type PartnerClaimResult struct {
@@ -331,17 +377,19 @@ type PartnerClaimResult struct {
 }
 
 type PartnerStatsDaily struct {
-	Date                 time.Time
-	Provider             string
-	GroupKey             string
-	ExternalType         string
-	IssuedCount          uint64
-	CompletedCount       uint64
-	ClaimedCount         uint64
-	FailedCount          uint64
-	FakeCount            uint64
-	ExpiredCount         uint64
-	UniqueIssuedUsers    uint64
-	UniqueCompletedUsers uint64
-	UniqueClaimers       uint64
+	Date                   time.Time
+	Provider               string
+	GroupKey               string
+	ExternalType           string
+	IssuedCount            uint64
+	CompletedCount         uint64
+	ClaimedCount           uint64
+	RevokedCount           uint64
+	RevokedAfterClaimCount uint64
+	FailedCount            uint64
+	FakeCount              uint64
+	ExpiredCount           uint64
+	UniqueIssuedUsers      uint64
+	UniqueCompletedUsers   uint64
+	UniqueClaimers         uint64
 }

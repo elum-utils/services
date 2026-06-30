@@ -18,6 +18,7 @@ type SaveTaskParams struct {
 	ActionKey           string
 	ActionKind          string
 	ClaimMode           string
+	StartMode           string
 	TargetCount         uint64
 	ResetUnit           string
 	ResetEvery          uint32
@@ -44,6 +45,7 @@ type TaskModel struct {
 	ActionKey           string          `json:"action_key"`
 	ActionKind          string          `json:"action_kind"`
 	ClaimMode           string          `json:"claim_mode"`
+	StartMode           string          `json:"start_mode"`
 	TargetCount         uint64          `json:"target_count"`
 	ResetUnit           string          `json:"reset_unit"`
 	ResetEvery          uint32          `json:"reset_every"`
@@ -132,16 +134,26 @@ type DailyOverviewModel struct {
 }
 
 type PartnerConfigModel struct {
-	WorkspaceID string          `json:"workspace_id"`
-	Provider    string          `json:"provider"`
-	GroupKey    string          `json:"group_key"`
-	Platform    string          `json:"platform"`
-	IsEnabled   bool            `json:"is_enabled"`
-	Secret      *string         `json:"secret,omitempty"`
-	Target      json.RawMessage `json:"target,omitempty"`
-	Settings    json.RawMessage `json:"settings,omitempty"`
-	CreatedAt   time.Time       `json:"created_at,omitempty"`
-	UpdatedAt   time.Time       `json:"updated_at,omitempty"`
+	WorkspaceID   string          `json:"workspace_id"`
+	Provider      string          `json:"provider"`
+	GroupKey      string          `json:"group_key"`
+	Platform      string          `json:"platform"`
+	IsEnabled     bool            `json:"is_enabled"`
+	Secret        *string         `json:"secret,omitempty"`
+	WebhookSecret *string         `json:"webhook_secret,omitempty"`
+	Target        json.RawMessage `json:"target,omitempty"`
+	Settings      json.RawMessage `json:"settings,omitempty"`
+	CreatedAt     time.Time       `json:"created_at,omitempty"`
+	UpdatedAt     time.Time       `json:"updated_at,omitempty"`
+}
+
+type PartnerScriptModel struct {
+	Provider  string    `json:"provider"`
+	IsEnabled bool      `json:"is_enabled"`
+	Version   string    `json:"version"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 type SavePartnerRewardRuleParams struct {
@@ -155,19 +167,21 @@ type SavePartnerRewardRuleParams struct {
 }
 
 type PartnerDailyStatsModel struct {
-	Date                 time.Time `json:"date"`
-	Provider             string    `json:"provider"`
-	GroupKey             string    `json:"group_key"`
-	ExternalType         string    `json:"external_type"`
-	IssuedCount          uint64    `json:"issued_count"`
-	CompletedCount       uint64    `json:"completed_count"`
-	ClaimedCount         uint64    `json:"claimed_count"`
-	FailedCount          uint64    `json:"failed_count"`
-	FakeCount            uint64    `json:"fake_count"`
-	ExpiredCount         uint64    `json:"expired_count"`
-	UniqueIssuedUsers    uint64    `json:"unique_issued_users"`
-	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
-	UniqueClaimers       uint64    `json:"unique_claimers"`
+	Date                   time.Time `json:"date"`
+	Provider               string    `json:"provider"`
+	GroupKey               string    `json:"group_key"`
+	ExternalType           string    `json:"external_type"`
+	IssuedCount            uint64    `json:"issued_count"`
+	CompletedCount         uint64    `json:"completed_count"`
+	ClaimedCount           uint64    `json:"claimed_count"`
+	RevokedCount           uint64    `json:"revoked_count"`
+	RevokedAfterClaimCount uint64    `json:"revoked_after_claim_count"`
+	FailedCount            uint64    `json:"failed_count"`
+	FakeCount              uint64    `json:"fake_count"`
+	ExpiredCount           uint64    `json:"expired_count"`
+	UniqueIssuedUsers      uint64    `json:"unique_issued_users"`
+	UniqueCompletedUsers   uint64    `json:"unique_completed_users"`
+	UniqueClaimers         uint64    `json:"unique_claimers"`
 }
 
 type ExportPackage = repository.ExportPackage

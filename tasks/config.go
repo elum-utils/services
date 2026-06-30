@@ -4,6 +4,7 @@ import (
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	taskruntime "github.com/elum-utils/services/tasks/runtime"
 	"github.com/elum-utils/services/tasks/service/integration"
 	"github.com/elum-utils/services/tasks/service/user"
 )
@@ -40,6 +41,7 @@ type Options struct {
 	Codec            Codec
 	Mutex            Mutex
 	Integration      integration.Options
+	Runtime          taskruntime.Options
 	PartnerProviders map[string]user.PartnerProvider
 }
 

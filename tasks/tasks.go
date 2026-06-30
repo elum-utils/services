@@ -12,6 +12,7 @@ import (
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
+	taskruntime "github.com/elum-utils/services/tasks/runtime"
 	"github.com/elum-utils/services/tasks/service/admin"
 	"github.com/elum-utils/services/tasks/service/integration"
 	"github.com/elum-utils/services/tasks/service/internalapi"
@@ -25,6 +26,7 @@ type Tasks struct {
 	User        *user.User
 
 	callbacks  *callbackutil.Store
+	runtime    *taskruntime.Manager
 	client     *sqlwrap.Client
 	ownsClient bool
 	rootCtx    context.Context
@@ -33,12 +35,13 @@ type Tasks struct {
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
+	options        Options
 	callbacksToRun []callbackRegistration
 	running        bool
 }
 
 func New(params DatabaseParams) *Tasks {
-	return &Tasks{params: params}
+	return &Tasks{params: params, options: params.Options}
 }
 
 func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Tasks, error) {
@@ -46,7 +49,9 @@ func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*Tasks, 
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "tasks sql client initialization failed", err)
 	}
-	return newTasks(ctx, client, false, options), nil
+	service := newTasks(ctx, client, false, options)
+	_ = service.SyncPartners(ctx)
+	return service, nil
 }
 
 func (t *Tasks) Run(ctx context.Context) error {
@@ -122,29 +127,53 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 		_ = client.Close()
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "tasks bootstrap shutdown failed", err)
 	}
-	return newTasks(ctx, client, true, params.Options), nil
+	service := newTasks(ctx, client, true, params.Options)
+	_ = service.SyncPartners(ctx)
+	return service, nil
 }
 
 func (t *Tasks) adopt(running *Tasks) {
 	t.lifecycleMu.Lock()
 	defer t.lifecycleMu.Unlock()
 	t.Admin, t.Internal, t.Integration, t.User = running.Admin, running.Internal, running.Integration, running.User
-	t.callbacks, t.client, t.ownsClient = running.callbacks, running.client, running.ownsClient
+	t.callbacks, t.runtime, t.client, t.ownsClient = running.callbacks, running.runtime, running.client, running.ownsClient
 	t.rootCtx, t.rootCancel = running.rootCtx, running.rootCancel
+	t.options = running.options
 }
 
 func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Tasks {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repositoryOptions(options)
+	runtimeOptions := options.Runtime
+	if runtimeOptions.ScriptLoader == nil {
+		runtimeOptions.ScriptLoader = partnerScriptLoader(db, repositoryOptions)
+	}
+	runtimeManager := taskruntime.New(rootCtx, runtimeOptions)
 	return &Tasks{
-		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithOptions(rootCtx, db, repositoryOptions),
+		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithServiceOptions(rootCtx, db, internalapi.Options{
+			RepositoryOptions: repositoryOptions,
+			Runtime:           runtimeManager,
+		}),
 		Integration: integration.NewWithOptions(rootCtx, db, integrationOptions(options, repositoryOptions)),
 		User: user.NewWithServiceOptions(rootCtx, db, user.Options{
 			RepositoryOptions: repositoryOptions,
 			PartnerProviders:  options.PartnerProviders,
+			Runtime:           runtimeManager,
 		}),
-		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), client: db, ownsClient: ownsClient,
-		rootCtx: rootCtx, rootCancel: cancel,
+		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), runtime: runtimeManager, client: db, ownsClient: ownsClient,
+		rootCtx: rootCtx, rootCancel: cancel, options: options,
+	}
+}
+
+func partnerScriptLoader(db *sqlwrap.Client, options repository.Options) taskruntime.ScriptLoader {
+	return func(ctx context.Context, provider string) (taskruntime.Script, bool, error) {
+		repo := repository.NewWithOptions(db, options)
+		defer func() { _ = repo.Close() }()
+		script, found, err := repo.GetEnabledPartnerScript(ctx, provider)
+		if err != nil || !found {
+			return taskruntime.Script{}, found, err
+		}
+		return taskruntime.Script{Provider: script.Provider, Source: script.Source, Version: script.Version}, true, nil
 	}
 }
 
@@ -183,6 +212,9 @@ func (t *Tasks) Close() error {
 	if t.User != nil {
 		err = errors.Join(err, t.User.Close())
 	}
+	if t.runtime != nil {
+		err = errors.Join(err, t.runtime.Close())
+	}
 	if t.callbacks != nil {
 		err = errors.Join(err, t.callbacks.Close())
 	}
@@ -190,6 +222,30 @@ func (t *Tasks) Close() error {
 		err = errors.Join(err, t.client.Close())
 	}
 	return err
+}
+
+func (t *Tasks) SyncPartners(ctx context.Context) error {
+	if t == nil || t.client == nil {
+		return nil
+	}
+	mergedCtx, cancel := t.bindContext(ctx)
+	defer cancel()
+	repo := repository.NewWithOptions(t.client, repositoryOptions(t.options))
+	defer func() { _ = repo.Close() }()
+	configs, err := repo.WarmPartnerConfigCache(mergedCtx)
+	if err != nil {
+		return err
+	}
+	if t.runtime == nil {
+		return nil
+	}
+	providers := make([]string, 0, len(configs))
+	for _, config := range configs {
+		if config.IsEnabled {
+			providers = append(providers, config.Provider)
+		}
+	}
+	return t.runtime.WarmProviders(mergedCtx, providers)
 }
 
 // IsReady reports whether the service is initialized and its lifecycle is active.

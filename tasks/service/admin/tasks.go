@@ -120,7 +120,7 @@ func mapTask(task repository.Task) TaskModel {
 	return TaskModel{
 		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey,
 		SequenceKey: task.SequenceKey, SequencePosition: task.SequencePosition,
-		TaskKind: task.TaskKind, ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
+		TaskKind: task.TaskKind, ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode, StartMode: task.StartMode,
 		TargetCount: task.TargetCount, ResetUnit: task.ResetUnit, ResetEvery: task.ResetEvery,
 		Position: task.Position, Payload: task.Payload, Target: task.Target, IntegrationKind: task.IntegrationKind,
 		IntegrationProvider: task.IntegrationProvider, IntegrationPayload: task.IntegrationPayload,

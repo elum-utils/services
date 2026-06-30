@@ -37,6 +37,18 @@ type ClaimParams struct {
 	Now         time.Time
 }
 
+type StartTaskParams struct {
+	Identity Identity
+	TaskRef  string
+	Now      time.Time
+}
+
+type StartTaskResult struct {
+	Status  string     `json:"status"`
+	Started bool       `json:"started"`
+	Task    *TaskModel `json:"task,omitempty"`
+}
+
 type ClaimResult struct {
 	Status string     `json:"status"`
 	Task   *TaskModel `json:"task,omitempty"`
@@ -45,6 +57,10 @@ type ClaimResult struct {
 type PartnerProvider interface {
 	ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error)
 	CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error)
+}
+
+type PartnerStarter interface {
+	StartPartnerTask(ctx context.Context, params PartnerStartProviderParams) (PartnerStartResult, error)
 }
 
 type PartnerListParams struct {
@@ -59,6 +75,13 @@ type PartnerListParams struct {
 }
 
 type PartnerCheckParams struct {
+	Identity  Identity
+	IssueRef  string
+	Variables map[string]string
+	Now       time.Time
+}
+
+type PartnerStartParams struct {
 	Identity  Identity
 	IssueRef  string
 	Variables map[string]string
@@ -82,12 +105,21 @@ type PartnerCheckProviderParams struct {
 	Now       time.Time
 }
 
+type PartnerStartProviderParams struct {
+	Identity  Identity
+	Config    repository.PartnerConfig
+	Issue     repository.PartnerIssue
+	Variables map[string]string
+	Now       time.Time
+}
+
 type PartnerExternalTask struct {
 	ExternalID     string
 	ExternalType   string
 	PublicPayload  json.RawMessage
 	PrivatePayload json.RawMessage
 	ExpiresAt      *time.Time
+	StartMode      string
 }
 
 type PartnerCheckResult struct {
@@ -96,8 +128,25 @@ type PartnerCheckResult struct {
 	Payload   json.RawMessage
 }
 
+type PartnerStartResult struct {
+	Started             bool
+	Status              string
+	ActionURL           string
+	ExternalClickID     string
+	PublicPayloadPatch  json.RawMessage
+	PrivatePayloadPatch json.RawMessage
+	Payload             json.RawMessage
+}
+
 type PartnerCheckOutput struct {
 	Status    string     `json:"status"`
 	Completed bool       `json:"completed"`
+	Task      *TaskModel `json:"task,omitempty"`
+}
+
+type PartnerStartOutput struct {
+	Status    string     `json:"status"`
+	Started   bool       `json:"started"`
+	ActionURL string     `json:"action_url,omitempty"`
 	Task      *TaskModel `json:"task,omitempty"`
 }

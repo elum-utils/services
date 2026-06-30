@@ -15,11 +15,11 @@ import (
 const adminCreateTask = `-- name: AdminCreateTask :execlastid
 INSERT INTO task_definition (
     workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position, task_kind,
-    action_key, action_kind, claim_mode, target_count, reset_unit,
+    action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
     reset_every, position, payload, target, integration_kind, integration_provider,
     integration_payload, image_url, is_visible, is_active,
     start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type AdminCreateTaskParams struct {
@@ -32,6 +32,7 @@ type AdminCreateTaskParams struct {
 	ActionKey           string                   `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount         uint64                   `json:"target_count"`
 	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery          uint32                   `json:"reset_every"`
@@ -59,6 +60,7 @@ func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams
 		arg.ActionKey,
 		arg.ActionKind,
 		arg.ClaimMode,
+		arg.StartMode,
 		arg.TargetCount,
 		arg.ResetUnit,
 		arg.ResetEvery,
@@ -146,7 +148,7 @@ func (q *Queries) AdminDeleteTask(ctx context.Context, arg AdminDeleteTaskParams
 }
 
 const adminGetPartnerConfig = `-- name: AdminGetPartnerConfig :one
-SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
 FROM task_partner_config
 WHERE workspace_id = ? AND provider = ? AND group_key = ? AND platform = ?
 LIMIT 1
@@ -174,8 +176,30 @@ func (q *Queries) AdminGetPartnerConfig(ctx context.Context, arg AdminGetPartner
 		&i.Platform,
 		&i.IsEnabled,
 		&i.Secret,
+		&i.WebhookSecret,
 		&i.Target,
 		&i.Settings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const adminGetPartnerScript = `-- name: AdminGetPartnerScript :one
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+WHERE provider = ?
+LIMIT 1
+`
+
+func (q *Queries) AdminGetPartnerScript(ctx context.Context, provider string) (TaskPartnerScript, error) {
+	row := q.queryRow(ctx, q.adminGetPartnerScriptStmt, adminGetPartnerScript, provider)
+	var i TaskPartnerScript
+	err := row.Scan(
+		&i.Provider,
+		&i.IsEnabled,
+		&i.Version,
+		&i.Source,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -283,7 +307,7 @@ func (q *Queries) AdminGetSingleTaskStats(ctx context.Context, arg AdminGetSingl
 
 const adminGetTask = `-- name: AdminGetTask :one
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -311,6 +335,7 @@ func (q *Queries) AdminGetTask(ctx context.Context, arg AdminGetTaskParams) (Tas
 		&i.ActionKey,
 		&i.ActionKind,
 		&i.ClaimMode,
+		&i.StartMode,
 		&i.TargetCount,
 		&i.ResetUnit,
 		&i.ResetEvery,
@@ -335,7 +360,7 @@ func (q *Queries) AdminGetTask(ctx context.Context, arg AdminGetTaskParams) (Tas
 
 const adminGetTaskByKey = `-- name: AdminGetTaskByKey :one
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -363,6 +388,7 @@ func (q *Queries) AdminGetTaskByKey(ctx context.Context, arg AdminGetTaskByKeyPa
 		&i.ActionKey,
 		&i.ActionKind,
 		&i.ClaimMode,
+		&i.StartMode,
 		&i.TargetCount,
 		&i.ResetUnit,
 		&i.ResetEvery,
@@ -615,7 +641,7 @@ func (q *Queries) AdminListGroups(ctx context.Context, workspaceID string) ([]Ta
 }
 
 const adminListPartnerConfigs = `-- name: AdminListPartnerConfigs :many
-SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
 FROM task_partner_config
 WHERE workspace_id = ?
 ORDER BY provider, group_key, platform
@@ -637,6 +663,7 @@ func (q *Queries) AdminListPartnerConfigs(ctx context.Context, workspaceID strin
 			&i.Platform,
 			&i.IsEnabled,
 			&i.Secret,
+			&i.WebhookSecret,
 			&i.Target,
 			&i.Settings,
 			&i.CreatedAt,
@@ -657,7 +684,8 @@ func (q *Queries) AdminListPartnerConfigs(ctx context.Context, workspaceID strin
 
 const adminListPartnerDailyStats = `-- name: AdminListPartnerDailyStats :many
 SELECT workspace_id, stats_date, provider, group_key, external_type,
-       issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+       issued_count, completed_count, claimed_count, revoked_count, revoked_after_claim_count,
+       failed_count, fake_count, expired_count,
        unique_issued_users, unique_completed_users, unique_claimers, updated_at
 FROM task_partner_stats_daily
 WHERE workspace_id = ?
@@ -704,6 +732,8 @@ func (q *Queries) AdminListPartnerDailyStats(ctx context.Context, arg AdminListP
 			&i.IssuedCount,
 			&i.CompletedCount,
 			&i.ClaimedCount,
+			&i.RevokedCount,
+			&i.RevokedAfterClaimCount,
 			&i.FailedCount,
 			&i.FakeCount,
 			&i.ExpiredCount,
@@ -754,6 +784,42 @@ func (q *Queries) AdminListPartnerRewardRules(ctx context.Context, workspaceID s
 			&i.DurationUnit,
 			&i.Position,
 			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListPartnerScripts = `-- name: AdminListPartnerScripts :many
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+ORDER BY provider
+`
+
+func (q *Queries) AdminListPartnerScripts(ctx context.Context) ([]TaskPartnerScript, error) {
+	rows, err := q.query(ctx, q.adminListPartnerScriptsStmt, adminListPartnerScripts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerScript
+	for rows.Next() {
+		var i TaskPartnerScript
+		if err := rows.Scan(
+			&i.Provider,
+			&i.IsEnabled,
+			&i.Version,
+			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1094,7 +1160,7 @@ func (q *Queries) AdminListTaskLocalizations(ctx context.Context, workspaceID st
 
 const adminListTasks = `-- name: AdminListTasks :many
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -1130,6 +1196,7 @@ func (q *Queries) AdminListTasks(ctx context.Context, arg AdminListTasksParams) 
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.ResetUnit,
 			&i.ResetEvery,
@@ -1164,7 +1231,7 @@ func (q *Queries) AdminListTasks(ctx context.Context, arg AdminListTasksParams) 
 
 const adminListTasksByGroup = `-- name: AdminListTasksByGroup :many
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -1206,6 +1273,7 @@ func (q *Queries) AdminListTasksByGroup(ctx context.Context, arg AdminListTasksB
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.ResetUnit,
 			&i.ResetEvery,
@@ -1241,7 +1309,7 @@ func (q *Queries) AdminListTasksByGroup(ctx context.Context, arg AdminListTasksB
 const adminUpdateTask = `-- name: AdminUpdateTask :execrows
 UPDATE task_definition
 SET group_key = ?, sequence_key = ?, sequence_position = ?, task_kind = ?, action_key = ?,
-    action_kind = ?, claim_mode = ?, target_count = ?, reset_unit = ?,
+    action_kind = ?, claim_mode = ?, start_mode = ?, target_count = ?, reset_unit = ?,
     reset_every = ?, position = ?, payload = ?, target = ?, integration_kind = ?,
     integration_provider = ?, integration_payload = ?, image_url = ?,
     is_visible = ?, is_active = ?, start_at = ?, end_at = ?
@@ -1256,6 +1324,7 @@ type AdminUpdateTaskParams struct {
 	ActionKey           string                   `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount         uint64                   `json:"target_count"`
 	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery          uint32                   `json:"reset_every"`
@@ -1283,6 +1352,7 @@ func (q *Queries) AdminUpdateTask(ctx context.Context, arg AdminUpdateTaskParams
 		arg.ActionKey,
 		arg.ActionKind,
 		arg.ClaimMode,
+		arg.StartMode,
 		arg.TargetCount,
 		arg.ResetUnit,
 		arg.ResetEvery,
@@ -1356,24 +1426,26 @@ func (q *Queries) AdminUpsertGroupLocalization(ctx context.Context, arg AdminUps
 
 const adminUpsertPartnerConfig = `-- name: AdminUpsertPartnerConfig :exec
 INSERT INTO task_partner_config (
-    workspace_id, provider, group_key, platform, is_enabled, secret, target, settings
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     is_enabled = VALUES(is_enabled),
     secret = VALUES(secret),
+    webhook_secret = VALUES(webhook_secret),
     target = VALUES(target),
     settings = VALUES(settings)
 `
 
 type AdminUpsertPartnerConfigParams struct {
-	WorkspaceID string          `json:"workspace_id"`
-	Provider    string          `json:"provider"`
-	GroupKey    string          `json:"group_key"`
-	Platform    string          `json:"platform"`
-	IsEnabled   bool            `json:"is_enabled"`
-	Secret      sql.NullString  `json:"secret"`
-	Target      json.RawMessage `json:"target"`
-	Settings    json.RawMessage `json:"settings"`
+	WorkspaceID   string          `json:"workspace_id"`
+	Provider      string          `json:"provider"`
+	GroupKey      string          `json:"group_key"`
+	Platform      string          `json:"platform"`
+	IsEnabled     bool            `json:"is_enabled"`
+	Secret        sql.NullString  `json:"secret"`
+	WebhookSecret sql.NullString  `json:"webhook_secret"`
+	Target        json.RawMessage `json:"target"`
+	Settings      json.RawMessage `json:"settings"`
 }
 
 func (q *Queries) AdminUpsertPartnerConfig(ctx context.Context, arg AdminUpsertPartnerConfigParams) error {
@@ -1384,6 +1456,7 @@ func (q *Queries) AdminUpsertPartnerConfig(ctx context.Context, arg AdminUpsertP
 		arg.Platform,
 		arg.IsEnabled,
 		arg.Secret,
+		arg.WebhookSecret,
 		arg.Target,
 		arg.Settings,
 	)
@@ -1431,6 +1504,33 @@ func (q *Queries) AdminUpsertPartnerRewardRule(ctx context.Context, arg AdminUps
 		arg.DurationUnit,
 		arg.Position,
 		arg.IsEnabled,
+	)
+	return err
+}
+
+const adminUpsertPartnerScript = `-- name: AdminUpsertPartnerScript :exec
+INSERT INTO task_partner_script (
+    provider, is_enabled, version, source
+) VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    is_enabled = VALUES(is_enabled),
+    version = VALUES(version),
+    source = VALUES(source)
+`
+
+type AdminUpsertPartnerScriptParams struct {
+	Provider  string `json:"provider"`
+	IsEnabled bool   `json:"is_enabled"`
+	Version   string `json:"version"`
+	Source    string `json:"source"`
+}
+
+func (q *Queries) AdminUpsertPartnerScript(ctx context.Context, arg AdminUpsertPartnerScriptParams) error {
+	_, err := q.exec(ctx, q.adminUpsertPartnerScriptStmt, adminUpsertPartnerScript,
+		arg.Provider,
+		arg.IsEnabled,
+		arg.Version,
+		arg.Source,
 	)
 	return err
 }
@@ -1597,9 +1697,9 @@ func (q *Queries) CountProgressEventsByExternalKey(ctx context.Context, arg Coun
 
 const createPartnerIssue = `-- name: CreatePartnerIssue :execlastid
 INSERT INTO task_partner_issue (
-    workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
-    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, expires_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?)
+    workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, started_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, NULL, ?)
 ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     public_payload = VALUES(public_payload),
@@ -1609,20 +1709,22 @@ ON DUPLICATE KEY UPDATE
 `
 
 type CreatePartnerIssueParams struct {
-	WorkspaceID    string          `json:"workspace_id"`
-	Provider       string          `json:"provider"`
-	GroupKey       string          `json:"group_key"`
-	Platform       string          `json:"platform"`
-	ExternalID     string          `json:"external_id"`
-	ExternalType   string          `json:"external_type"`
-	IssueKey       string          `json:"issue_key"`
-	AppID          int64           `json:"app_id"`
-	PlatformID     int64           `json:"platform_id"`
-	PlatformUserID string          `json:"platform_user_id"`
-	PublicPayload  json.RawMessage `json:"public_payload"`
-	PrivatePayload json.RawMessage `json:"private_payload"`
-	IssuedAt       time.Time       `json:"issued_at"`
-	ExpiresAt      sql.NullTime    `json:"expires_at"`
+	WorkspaceID     string                    `json:"workspace_id"`
+	Provider        string                    `json:"provider"`
+	GroupKey        string                    `json:"group_key"`
+	Platform        string                    `json:"platform"`
+	ExternalID      string                    `json:"external_id"`
+	ExternalType    string                    `json:"external_type"`
+	ExternalClickID sql.NullString            `json:"external_click_id"`
+	StartMode       TaskPartnerIssueStartMode `json:"start_mode"`
+	IssueKey        string                    `json:"issue_key"`
+	AppID           int64                     `json:"app_id"`
+	PlatformID      int64                     `json:"platform_id"`
+	PlatformUserID  string                    `json:"platform_user_id"`
+	PublicPayload   json.RawMessage           `json:"public_payload"`
+	PrivatePayload  json.RawMessage           `json:"private_payload"`
+	IssuedAt        time.Time                 `json:"issued_at"`
+	ExpiresAt       sql.NullTime              `json:"expires_at"`
 }
 
 func (q *Queries) CreatePartnerIssue(ctx context.Context, arg CreatePartnerIssueParams) (int64, error) {
@@ -1633,6 +1735,8 @@ func (q *Queries) CreatePartnerIssue(ctx context.Context, arg CreatePartnerIssue
 		arg.Platform,
 		arg.ExternalID,
 		arg.ExternalType,
+		arg.ExternalClickID,
+		arg.StartMode,
 		arg.IssueKey,
 		arg.AppID,
 		arg.PlatformID,
@@ -1684,7 +1788,7 @@ func (q *Queries) EnsureProgress(ctx context.Context, arg EnsureProgressParams) 
 
 const exportListTasks = `-- name: ExportListTasks :many
 SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -1713,6 +1817,7 @@ func (q *Queries) ExportListTasks(ctx context.Context, workspaceID string) ([]Ta
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.ResetUnit,
 			&i.ResetEvery,
@@ -1747,7 +1852,7 @@ func (q *Queries) ExportListTasks(ctx context.Context, workspaceID string) ([]Ta
 
 const getClaimBundleByIDForUpdate = `-- name: GetClaimBundleByIDForUpdate :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
@@ -1785,6 +1890,7 @@ type GetClaimBundleByIDForUpdateRow struct {
 	ActionKey           string                     `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode    `json:"start_mode"`
 	TargetCount         uint64                     `json:"target_count"`
 	Payload             json.RawMessage            `json:"payload"`
 	Target              json.RawMessage            `json:"target"`
@@ -1838,6 +1944,7 @@ func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimB
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.Target,
@@ -1877,7 +1984,7 @@ func (q *Queries) GetClaimBundleByIDForUpdate(ctx context.Context, arg GetClaimB
 
 const getClaimBundleByKeyForUpdate = `-- name: GetClaimBundleByKeyForUpdate :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
@@ -1915,6 +2022,7 @@ type GetClaimBundleByKeyForUpdateRow struct {
 	ActionKey           string                     `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode    `json:"start_mode"`
 	TargetCount         uint64                     `json:"target_count"`
 	Payload             json.RawMessage            `json:"payload"`
 	Target              json.RawMessage            `json:"target"`
@@ -1968,6 +2076,7 @@ func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaim
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.Target,
@@ -2007,7 +2116,7 @@ func (q *Queries) GetClaimBundleByKeyForUpdate(ctx context.Context, arg GetClaim
 
 const getClaimCatalogByID = `-- name: GetClaimCatalogByID :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
@@ -2032,6 +2141,7 @@ type GetClaimCatalogByIDRow struct {
 	ActionKey           string                     `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode    `json:"start_mode"`
 	TargetCount         uint64                     `json:"target_count"`
 	Payload             json.RawMessage            `json:"payload"`
 	Target              json.RawMessage            `json:"target"`
@@ -2067,6 +2177,7 @@ func (q *Queries) GetClaimCatalogByID(ctx context.Context, arg GetClaimCatalogBy
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.Target,
@@ -2096,7 +2207,7 @@ func (q *Queries) GetClaimCatalogByID(ctx context.Context, arg GetClaimCatalogBy
 
 const getClaimCatalogByKey = `-- name: GetClaimCatalogByKey :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
@@ -2121,6 +2232,7 @@ type GetClaimCatalogByKeyRow struct {
 	ActionKey           string                     `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode    `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode    `json:"start_mode"`
 	TargetCount         uint64                     `json:"target_count"`
 	Payload             json.RawMessage            `json:"payload"`
 	Target              json.RawMessage            `json:"target"`
@@ -2156,6 +2268,7 @@ func (q *Queries) GetClaimCatalogByKey(ctx context.Context, arg GetClaimCatalogB
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.Target,
@@ -2241,9 +2354,30 @@ func (q *Queries) GetCurrentProgressForUpdate(ctx context.Context, arg GetCurren
 	return i, err
 }
 
+const getEnabledPartnerScript = `-- name: GetEnabledPartnerScript :one
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+WHERE provider = ? AND is_enabled = TRUE
+LIMIT 1
+`
+
+func (q *Queries) GetEnabledPartnerScript(ctx context.Context, provider string) (TaskPartnerScript, error) {
+	row := q.queryRow(ctx, q.getEnabledPartnerScriptStmt, getEnabledPartnerScript, provider)
+	var i TaskPartnerScript
+	err := row.Scan(
+		&i.Provider,
+		&i.IsEnabled,
+		&i.Version,
+		&i.Source,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getIntegrationCheckTaskByID = `-- name: GetIntegrationCheckTaskByID :one
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.reset_unit, t.reset_every, t.payload, t.target, t.integration_kind, t.integration_provider,
        t.integration_payload, t.image_url, t.start_at, t.end_at
 FROM task_definition t
@@ -2266,6 +2400,7 @@ type GetIntegrationCheckTaskByIDRow struct {
 	ActionKey           string                   `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount         uint64                   `json:"target_count"`
 	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery          uint32                   `json:"reset_every"`
@@ -2293,6 +2428,7 @@ func (q *Queries) GetIntegrationCheckTaskByID(ctx context.Context, arg GetIntegr
 		&i.ActionKey,
 		&i.ActionKind,
 		&i.ClaimMode,
+		&i.StartMode,
 		&i.TargetCount,
 		&i.ResetUnit,
 		&i.ResetEvery,
@@ -2310,7 +2446,7 @@ func (q *Queries) GetIntegrationCheckTaskByID(ctx context.Context, arg GetIntegr
 
 const getIntegrationCheckTaskByKey = `-- name: GetIntegrationCheckTaskByKey :one
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.reset_unit, t.reset_every, t.payload, t.target, t.integration_kind, t.integration_provider,
        t.integration_payload, t.image_url, t.start_at, t.end_at
 FROM task_definition t
@@ -2333,6 +2469,7 @@ type GetIntegrationCheckTaskByKeyRow struct {
 	ActionKey           string                   `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount         uint64                   `json:"target_count"`
 	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery          uint32                   `json:"reset_every"`
@@ -2360,6 +2497,7 @@ func (q *Queries) GetIntegrationCheckTaskByKey(ctx context.Context, arg GetInteg
 		&i.ActionKey,
 		&i.ActionKind,
 		&i.ClaimMode,
+		&i.StartMode,
 		&i.TargetCount,
 		&i.ResetUnit,
 		&i.ResetEvery,
@@ -2399,10 +2537,149 @@ func (q *Queries) GetNextSequenceTaskID(ctx context.Context, arg GetNextSequence
 	return id, err
 }
 
-const getPartnerIssueByID = `-- name: GetPartnerIssueByID :one
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+const getPartnerConfigByWebhookSecret = `-- name: GetPartnerConfigByWebhookSecret :one
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ? AND webhook_secret = ?
+LIMIT 1
+`
+
+type GetPartnerConfigByWebhookSecretParams struct {
+	WorkspaceID   string         `json:"workspace_id"`
+	WebhookSecret sql.NullString `json:"webhook_secret"`
+}
+
+func (q *Queries) GetPartnerConfigByWebhookSecret(ctx context.Context, arg GetPartnerConfigByWebhookSecretParams) (TaskPartnerConfig, error) {
+	row := q.queryRow(ctx, q.getPartnerConfigByWebhookSecretStmt, getPartnerConfigByWebhookSecret, arg.WorkspaceID, arg.WebhookSecret)
+	var i TaskPartnerConfig
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.IsEnabled,
+		&i.Secret,
+		&i.WebhookSecret,
+		&i.Target,
+		&i.Settings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPartnerIssueByExternalClickID = `-- name: GetPartnerIssueByExternalClickID :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND provider = ? AND external_click_id = ?
+LIMIT 1
+`
+
+type GetPartnerIssueByExternalClickIDParams struct {
+	WorkspaceID     string         `json:"workspace_id"`
+	Provider        string         `json:"provider"`
+	ExternalClickID sql.NullString `json:"external_click_id"`
+}
+
+func (q *Queries) GetPartnerIssueByExternalClickID(ctx context.Context, arg GetPartnerIssueByExternalClickIDParams) (TaskPartnerIssue, error) {
+	row := q.queryRow(ctx, q.getPartnerIssueByExternalClickIDStmt, getPartnerIssueByExternalClickID, arg.WorkspaceID, arg.Provider, arg.ExternalClickID)
+	var i TaskPartnerIssue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.ExternalID,
+		&i.ExternalType,
+		&i.ExternalClickID,
+		&i.StartMode,
+		&i.IssueKey,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PublicPayload,
+		&i.PrivatePayload,
+		&i.Status,
+		&i.IssuedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ClaimedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPartnerIssueByExternalUser = `-- name: GetPartnerIssueByExternalUser :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND external_id = ?
+  AND platform_user_id = ?
+ORDER BY issued_at DESC, id DESC
+LIMIT 1
+`
+
+type GetPartnerIssueByExternalUserParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	Provider       string `json:"provider"`
+	GroupKey       string `json:"group_key"`
+	Platform       string `json:"platform"`
+	ExternalID     string `json:"external_id"`
+	PlatformUserID string `json:"platform_user_id"`
+}
+
+func (q *Queries) GetPartnerIssueByExternalUser(ctx context.Context, arg GetPartnerIssueByExternalUserParams) (TaskPartnerIssue, error) {
+	row := q.queryRow(ctx, q.getPartnerIssueByExternalUserStmt, getPartnerIssueByExternalUser,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.ExternalID,
+		arg.PlatformUserID,
+	)
+	var i TaskPartnerIssue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.Platform,
+		&i.ExternalID,
+		&i.ExternalType,
+		&i.ExternalClickID,
+		&i.StartMode,
+		&i.IssueKey,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.PublicPayload,
+		&i.PrivatePayload,
+		&i.Status,
+		&i.IssuedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ClaimedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPartnerIssueByID = `-- name: GetPartnerIssueByID :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ? AND id = ?
 LIMIT 1
@@ -2424,6 +2701,8 @@ func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueBy
 		&i.Platform,
 		&i.ExternalID,
 		&i.ExternalType,
+		&i.ExternalClickID,
+		&i.StartMode,
 		&i.IssueKey,
 		&i.AppID,
 		&i.PlatformID,
@@ -2432,6 +2711,7 @@ func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueBy
 		&i.PrivatePayload,
 		&i.Status,
 		&i.IssuedAt,
+		&i.StartedAt,
 		&i.CompletedAt,
 		&i.ClaimedAt,
 		&i.ExpiresAt,
@@ -2442,9 +2722,9 @@ func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueBy
 }
 
 const getPartnerIssueByIDForUpdate = `-- name: GetPartnerIssueByIDForUpdate :one
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ? AND id = ?
 LIMIT 1
@@ -2467,6 +2747,8 @@ func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartn
 		&i.Platform,
 		&i.ExternalID,
 		&i.ExternalType,
+		&i.ExternalClickID,
+		&i.StartMode,
 		&i.IssueKey,
 		&i.AppID,
 		&i.PlatformID,
@@ -2475,11 +2757,46 @@ func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartn
 		&i.PrivatePayload,
 		&i.Status,
 		&i.IssuedAt,
+		&i.StartedAt,
 		&i.CompletedAt,
 		&i.ClaimedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPartnerRewardGrantByIssue = `-- name: GetPartnerRewardGrantByIssue :one
+SELECT id, workspace_id, issue_id, provider, group_key, external_type,
+       app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at, created_at
+FROM task_partner_reward_grant
+WHERE workspace_id = ? AND issue_id = ?
+LIMIT 1
+`
+
+type GetPartnerRewardGrantByIssueParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	IssueID     uint64 `json:"issue_id"`
+}
+
+func (q *Queries) GetPartnerRewardGrantByIssue(ctx context.Context, arg GetPartnerRewardGrantByIssueParams) (TaskPartnerRewardGrant, error) {
+	row := q.queryRow(ctx, q.getPartnerRewardGrantByIssueStmt, getPartnerRewardGrantByIssue, arg.WorkspaceID, arg.IssueID)
+	var i TaskPartnerRewardGrant
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.IssueID,
+		&i.Provider,
+		&i.GroupKey,
+		&i.ExternalType,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.OperationID,
+		&i.RewardSnapshot,
+		&i.ClaimedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -2521,16 +2838,159 @@ func (q *Queries) GetSequenceStateForUpdate(ctx context.Context, arg GetSequence
 	return i, err
 }
 
+const getStartTaskByID = `-- name: GetStartTaskByID :one
+SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count,
+       reset_unit, reset_every, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, start_at, end_at
+FROM task_definition
+WHERE workspace_id = ? AND id = ? AND is_active = TRUE AND deleted_at IS NULL
+LIMIT 1
+`
+
+type GetStartTaskByIDParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+type GetStartTaskByIDRow struct {
+	ID                  uint64                   `json:"id"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Payload             json.RawMessage          `json:"payload"`
+	Target              json.RawMessage          `json:"target"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+}
+
+func (q *Queries) GetStartTaskByID(ctx context.Context, arg GetStartTaskByIDParams) (GetStartTaskByIDRow, error) {
+	row := q.queryRow(ctx, q.getStartTaskByIDStmt, getStartTaskByID, arg.WorkspaceID, arg.ID)
+	var i GetStartTaskByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.GroupKey,
+		&i.SequenceKey,
+		&i.SequencePosition,
+		&i.TaskKind,
+		&i.ActionKey,
+		&i.ActionKind,
+		&i.ClaimMode,
+		&i.StartMode,
+		&i.TargetCount,
+		&i.ResetUnit,
+		&i.ResetEvery,
+		&i.Payload,
+		&i.Target,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
+		&i.ImageUrl,
+		&i.StartAt,
+		&i.EndAt,
+	)
+	return i, err
+}
+
+const getStartTaskByKey = `-- name: GetStartTaskByKey :one
+SELECT id, workspace_id, ` + "`" + `key` + "`" + `, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count,
+       reset_unit, reset_every, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, start_at, end_at
+FROM task_definition
+WHERE workspace_id = ? AND ` + "`" + `key` + "`" + ` = ? AND is_active = TRUE AND deleted_at IS NULL
+LIMIT 1
+`
+
+type GetStartTaskByKeyParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Key         string `json:"key"`
+}
+
+type GetStartTaskByKeyRow struct {
+	ID                  uint64                   `json:"id"`
+	WorkspaceID         string                   `json:"workspace_id"`
+	Key                 string                   `json:"key"`
+	GroupKey            string                   `json:"group_key"`
+	SequenceKey         sql.NullString           `json:"sequence_key"`
+	SequencePosition    sql.NullInt32            `json:"sequence_position"`
+	TaskKind            string                   `json:"task_kind"`
+	ActionKey           string                   `json:"action_key"`
+	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
+	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
+	TargetCount         uint64                   `json:"target_count"`
+	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
+	ResetEvery          uint32                   `json:"reset_every"`
+	Payload             json.RawMessage          `json:"payload"`
+	Target              json.RawMessage          `json:"target"`
+	IntegrationKind     sql.NullString           `json:"integration_kind"`
+	IntegrationProvider sql.NullString           `json:"integration_provider"`
+	IntegrationPayload  json.RawMessage          `json:"integration_payload"`
+	ImageUrl            sql.NullString           `json:"image_url"`
+	StartAt             sql.NullTime             `json:"start_at"`
+	EndAt               sql.NullTime             `json:"end_at"`
+}
+
+func (q *Queries) GetStartTaskByKey(ctx context.Context, arg GetStartTaskByKeyParams) (GetStartTaskByKeyRow, error) {
+	row := q.queryRow(ctx, q.getStartTaskByKeyStmt, getStartTaskByKey, arg.WorkspaceID, arg.Key)
+	var i GetStartTaskByKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.GroupKey,
+		&i.SequenceKey,
+		&i.SequencePosition,
+		&i.TaskKind,
+		&i.ActionKey,
+		&i.ActionKind,
+		&i.ClaimMode,
+		&i.StartMode,
+		&i.TargetCount,
+		&i.ResetUnit,
+		&i.ResetEvery,
+		&i.Payload,
+		&i.Target,
+		&i.IntegrationKind,
+		&i.IntegrationProvider,
+		&i.IntegrationPayload,
+		&i.ImageUrl,
+		&i.StartAt,
+		&i.EndAt,
+	)
+	return i, err
+}
+
 const incrementPartnerStatsDaily = `-- name: IncrementPartnerStatsDaily :exec
 INSERT INTO task_partner_stats_daily (
     workspace_id, stats_date, provider, group_key, external_type,
-    issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+    issued_count, completed_count, claimed_count, revoked_count, revoked_after_claim_count,
+    failed_count, fake_count, expired_count,
     unique_issued_users, unique_completed_users, unique_claimers
-) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     issued_count = issued_count + VALUES(issued_count),
     completed_count = completed_count + VALUES(completed_count),
     claimed_count = claimed_count + VALUES(claimed_count),
+    revoked_count = revoked_count + VALUES(revoked_count),
+    revoked_after_claim_count = revoked_after_claim_count + VALUES(revoked_after_claim_count),
     failed_count = failed_count + VALUES(failed_count),
     fake_count = fake_count + VALUES(fake_count),
     expired_count = expired_count + VALUES(expired_count),
@@ -2540,20 +3000,22 @@ ON DUPLICATE KEY UPDATE
 `
 
 type IncrementPartnerStatsDailyParams struct {
-	WorkspaceID          string    `json:"workspace_id"`
-	DATE                 time.Time `json:"DATE"`
-	Provider             string    `json:"provider"`
-	GroupKey             string    `json:"group_key"`
-	ExternalType         string    `json:"external_type"`
-	IssuedCount          uint64    `json:"issued_count"`
-	CompletedCount       uint64    `json:"completed_count"`
-	ClaimedCount         uint64    `json:"claimed_count"`
-	FailedCount          uint64    `json:"failed_count"`
-	FakeCount            uint64    `json:"fake_count"`
-	ExpiredCount         uint64    `json:"expired_count"`
-	UniqueIssuedUsers    uint64    `json:"unique_issued_users"`
-	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
-	UniqueClaimers       uint64    `json:"unique_claimers"`
+	WorkspaceID            string    `json:"workspace_id"`
+	DATE                   time.Time `json:"DATE"`
+	Provider               string    `json:"provider"`
+	GroupKey               string    `json:"group_key"`
+	ExternalType           string    `json:"external_type"`
+	IssuedCount            uint64    `json:"issued_count"`
+	CompletedCount         uint64    `json:"completed_count"`
+	ClaimedCount           uint64    `json:"claimed_count"`
+	RevokedCount           uint64    `json:"revoked_count"`
+	RevokedAfterClaimCount uint64    `json:"revoked_after_claim_count"`
+	FailedCount            uint64    `json:"failed_count"`
+	FakeCount              uint64    `json:"fake_count"`
+	ExpiredCount           uint64    `json:"expired_count"`
+	UniqueIssuedUsers      uint64    `json:"unique_issued_users"`
+	UniqueCompletedUsers   uint64    `json:"unique_completed_users"`
+	UniqueClaimers         uint64    `json:"unique_claimers"`
 }
 
 func (q *Queries) IncrementPartnerStatsDaily(ctx context.Context, arg IncrementPartnerStatsDailyParams) error {
@@ -2566,6 +3028,8 @@ func (q *Queries) IncrementPartnerStatsDaily(ctx context.Context, arg IncrementP
 		arg.IssuedCount,
 		arg.CompletedCount,
 		arg.ClaimedCount,
+		arg.RevokedCount,
+		arg.RevokedAfterClaimCount,
 		arg.FailedCount,
 		arg.FakeCount,
 		arg.ExpiredCount,
@@ -2740,7 +3204,7 @@ func (q *Queries) InsertProgressEvent(ctx context.Context, arg InsertProgressEve
 
 const listActiveTaskBundles = `-- name: ListActiveTaskBundles :many
 SELECT t.id, t.` + "`" + `key` + "`" + `, t.group_key,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.image_url, t.start_at, t.end_at,
        gl.locale AS group_locale, gl.title AS group_title, gl.description AS group_description,
        l.locale, l.title, l.description,
@@ -2774,6 +3238,7 @@ type ListActiveTaskBundlesRow struct {
 	ActionKey        string                     `json:"action_key"`
 	ActionKind       TaskDefinitionActionKind   `json:"action_kind"`
 	ClaimMode        TaskDefinitionClaimMode    `json:"claim_mode"`
+	StartMode        TaskDefinitionStartMode    `json:"start_mode"`
 	TargetCount      uint64                     `json:"target_count"`
 	Payload          json.RawMessage            `json:"payload"`
 	Target           json.RawMessage            `json:"target"`
@@ -2817,6 +3282,7 @@ func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskB
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.Payload,
 			&i.Target,
@@ -2835,6 +3301,47 @@ func (q *Queries) ListActiveTaskBundles(ctx context.Context, arg ListActiveTaskB
 			&i.RewardQuantity,
 			&i.RewardScale,
 			&i.DurationUnit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllPartnerConfigs = `-- name: ListAllPartnerConfigs :many
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
+FROM task_partner_config
+ORDER BY workspace_id, provider, group_key, platform
+`
+
+func (q *Queries) ListAllPartnerConfigs(ctx context.Context) ([]TaskPartnerConfig, error) {
+	rows, err := q.query(ctx, q.listAllPartnerConfigsStmt, listAllPartnerConfigs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerConfig
+	for rows.Next() {
+		var i TaskPartnerConfig
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.Platform,
+			&i.IsEnabled,
+			&i.Secret,
+			&i.WebhookSecret,
+			&i.Target,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2989,9 +3496,9 @@ func (q *Queries) ListCurrentProgressForUserForUpdate(ctx context.Context, arg L
 }
 
 const listPartnerIssuesForUser = `-- name: ListPartnerIssuesForUser :many
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ?
   AND provider = ?
@@ -3042,6 +3549,8 @@ func (q *Queries) ListPartnerIssuesForUser(ctx context.Context, arg ListPartnerI
 			&i.Platform,
 			&i.ExternalID,
 			&i.ExternalType,
+			&i.ExternalClickID,
+			&i.StartMode,
 			&i.IssueKey,
 			&i.AppID,
 			&i.PlatformID,
@@ -3050,6 +3559,7 @@ func (q *Queries) ListPartnerIssuesForUser(ctx context.Context, arg ListPartnerI
 			&i.PrivatePayload,
 			&i.Status,
 			&i.IssuedAt,
+			&i.StartedAt,
 			&i.CompletedAt,
 			&i.ClaimedAt,
 			&i.ExpiresAt,
@@ -3134,7 +3644,7 @@ func (q *Queries) ListPartnerRewardRules(ctx context.Context, arg ListPartnerRew
 
 const listRecordCatalog = `-- name: ListRecordCatalog :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -3160,6 +3670,7 @@ type ListRecordCatalogRow struct {
 	ActionKey        string                   `json:"action_key"`
 	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode        TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount      uint64                   `json:"target_count"`
 	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery       uint32                   `json:"reset_every"`
@@ -3190,6 +3701,7 @@ func (q *Queries) ListRecordCatalog(ctx context.Context, arg ListRecordCatalogPa
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.ResetUnit,
 			&i.ResetEvery,
@@ -3214,7 +3726,7 @@ func (q *Queries) ListRecordCatalog(ctx context.Context, arg ListRecordCatalogPa
 
 const listRecordTasks = `-- name: ListRecordTasks :many
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -3226,7 +3738,7 @@ WHERE t.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_sequence_state s
 JOIN task_definition t
@@ -3243,7 +3755,7 @@ WHERE s.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.` + "`" + `key` + "`" + `, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 LEFT JOIN task_sequence_state s
@@ -3296,6 +3808,7 @@ type ListRecordTasksRow struct {
 	ActionKey        string                   `json:"action_key"`
 	ActionKind       TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode        TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode        TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount      uint64                   `json:"target_count"`
 	ResetUnit        TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery       uint32                   `json:"reset_every"`
@@ -3344,6 +3857,7 @@ func (q *Queries) ListRecordTasks(ctx context.Context, arg ListRecordTasksParams
 			&i.ActionKey,
 			&i.ActionKind,
 			&i.ClaimMode,
+			&i.StartMode,
 			&i.TargetCount,
 			&i.ResetUnit,
 			&i.ResetEvery,
@@ -3656,6 +4170,63 @@ type RefreshTaskDailyStatsParams struct {
 func (q *Queries) RefreshTaskDailyStats(ctx context.Context, arg RefreshTaskDailyStatsParams) error {
 	_, err := q.exec(ctx, q.refreshTaskDailyStatsStmt, refreshTaskDailyStats, arg.OccurredAt, arg.OccurredAt_2)
 	return err
+}
+
+const revokePartnerIssue = `-- name: RevokePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = CASE
+        WHEN status = 'claimed' THEN 'revoked_after_claim'
+        ELSE 'revoked'
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ?
+  AND id = ?
+  AND status IN ('issued', 'completed', 'claimed')
+`
+
+type RevokePartnerIssueParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          uint64 `json:"id"`
+}
+
+func (q *Queries) RevokePartnerIssue(ctx context.Context, arg RevokePartnerIssueParams) (int64, error) {
+	result, err := q.exec(ctx, q.revokePartnerIssueStmt, revokePartnerIssue, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updatePartnerIssueStart = `-- name: UpdatePartnerIssueStart :execrows
+UPDATE task_partner_issue
+SET external_click_id = COALESCE(NULLIF(?, ''), external_click_id),
+    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+    public_payload = ?,
+    private_payload = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'issued'
+`
+
+type UpdatePartnerIssueStartParams struct {
+	NULLIF         interface{}     `json:"NULLIF"`
+	PublicPayload  json.RawMessage `json:"public_payload"`
+	PrivatePayload json.RawMessage `json:"private_payload"`
+	WorkspaceID    string          `json:"workspace_id"`
+	ID             uint64          `json:"id"`
+}
+
+func (q *Queries) UpdatePartnerIssueStart(ctx context.Context, arg UpdatePartnerIssueStartParams) (int64, error) {
+	result, err := q.exec(ctx, q.updatePartnerIssueStartStmt, updatePartnerIssueStart,
+		arg.NULLIF,
+		arg.PublicPayload,
+		arg.PrivatePayload,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateProgress = `-- name: UpdateProgress :execrows

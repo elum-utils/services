@@ -16,16 +16,16 @@ ON DUPLICATE KEY UPDATE position = VALUES(position), is_active = VALUES(is_activ
 -- name: AdminCreateTask :execlastid
 INSERT INTO task_definition (
     workspace_id, `key`, group_key, sequence_key, sequence_position, task_kind,
-    action_key, action_kind, claim_mode, target_count, reset_unit,
+    action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
     reset_every, position, payload, target, integration_kind, integration_provider,
     integration_payload, image_url, is_visible, is_active,
     start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: AdminUpdateTask :execrows
 UPDATE task_definition
 SET group_key = ?, sequence_key = ?, sequence_position = ?, task_kind = ?, action_key = ?,
-    action_kind = ?, claim_mode = ?, target_count = ?, reset_unit = ?,
+    action_kind = ?, claim_mode = ?, start_mode = ?, target_count = ?, reset_unit = ?,
     reset_every = ?, position = ?, payload = ?, target = ?, integration_kind = ?,
     integration_provider = ?, integration_payload = ?, image_url = ?,
     is_visible = ?, is_active = ?, start_at = ?, end_at = ?
@@ -38,7 +38,7 @@ WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL;
 
 -- name: AdminGetTask :one
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -48,7 +48,7 @@ LIMIT 1;
 
 -- name: AdminGetTaskByKey :one
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -95,7 +95,7 @@ ORDER BY group_key, provider, external_type, position, reward_key;
 
 -- name: AdminListTasks :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -106,7 +106,7 @@ LIMIT ? OFFSET ?;
 
 -- name: AdminListTasksByGroup :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -117,7 +117,7 @@ LIMIT ? OFFSET ?;
 
 -- name: ExportListTasks :many
 SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
-       task_kind, action_key, action_kind, claim_mode, target_count, reset_unit,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count, reset_unit,
        reset_every, position, payload, target, integration_kind, integration_provider,
        integration_payload, image_url, is_visible, is_active,
        start_at, end_at, deleted_at, branch_sort_key, created_at, updated_at
@@ -148,7 +148,7 @@ WHERE workspace_id = ? AND task_id = ? AND reward_key = ?;
 
 -- name: ListRecordTasks :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -160,7 +160,7 @@ WHERE t.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_sequence_state s
 JOIN task_definition t
@@ -177,7 +177,7 @@ WHERE s.workspace_id = ?
   AND (t.end_at IS NULL OR t.end_at > ?)
 UNION ALL
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.branch_sort_key, t.position
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 LEFT JOIN task_sequence_state s
@@ -199,7 +199,7 @@ ORDER BY branch_sort_key, sequence_position, position, id;
 
 -- name: ListRecordCatalog :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count, t.reset_unit,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
        t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at
 FROM task_definition t FORCE INDEX (task_definition_action_idx)
 WHERE t.workspace_id = ?
@@ -293,6 +293,24 @@ INSERT INTO task_progress (
 ) VALUES (?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), period_end_at = VALUES(period_end_at);
 
+-- name: GetStartTaskByID :one
+SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count,
+       reset_unit, reset_every, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, start_at, end_at
+FROM task_definition
+WHERE workspace_id = ? AND id = ? AND is_active = TRUE AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: GetStartTaskByKey :one
+SELECT id, workspace_id, `key`, group_key, sequence_key, sequence_position,
+       task_kind, action_key, action_kind, claim_mode, start_mode, target_count,
+       reset_unit, reset_every, payload, target, integration_kind, integration_provider,
+       integration_payload, image_url, start_at, end_at
+FROM task_definition
+WHERE workspace_id = ? AND `key` = ? AND is_active = TRUE AND deleted_at IS NULL
+LIMIT 1;
+
 -- name: UpsertProgress :execrows
 INSERT INTO task_progress (
     workspace_id, task_id, app_id, platform_id, platform_user_id,
@@ -340,7 +358,7 @@ ORDER BY position, id;
 
 -- name: GetClaimCatalogByID :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
@@ -350,7 +368,7 @@ ORDER BY r.position, r.id;
 
 -- name: GetClaimCatalogByKey :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        r.id AS reward_id, r.reward_key, r.reward_type, r.quantity AS reward_quantity, r.scale AS reward_scale, r.duration_unit
 FROM task_definition t
@@ -360,7 +378,7 @@ ORDER BY r.position, r.id;
 
 -- name: GetIntegrationCheckTaskByID :one
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.reset_unit, t.reset_every, t.payload, t.target, t.integration_kind, t.integration_provider,
        t.integration_payload, t.image_url, t.start_at, t.end_at
 FROM task_definition t
@@ -368,7 +386,7 @@ WHERE t.workspace_id = ? AND t.id = ? AND t.is_active = TRUE AND t.deleted_at IS
 
 -- name: GetIntegrationCheckTaskByKey :one
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.reset_unit, t.reset_every, t.payload, t.target, t.integration_kind, t.integration_provider,
        t.integration_payload, t.image_url, t.start_at, t.end_at
 FROM task_definition t
@@ -376,7 +394,7 @@ WHERE t.workspace_id = ? AND t.`key` = ? AND t.is_active = TRUE AND t.deleted_at
 
 -- name: GetClaimBundleByIDForUpdate :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
@@ -394,7 +412,7 @@ FOR UPDATE;
 
 -- name: GetClaimBundleByKeyForUpdate :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.integration_kind, t.integration_provider, t.integration_payload, t.image_url,
        p.id AS progress_id, p.progress, p.status, p.period_start_at, p.period_end_at,
     p.ready_at, p.claimed_at, p.operation_id, COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot,
@@ -412,7 +430,7 @@ FOR UPDATE;
 
 -- name: ListActiveTaskBundles :many
 SELECT t.id, t.`key`, t.group_key,
-       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.target_count,
+       t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
        t.payload, t.target, t.image_url, t.start_at, t.end_at,
        gl.locale AS group_locale, gl.title AS group_title, gl.description AS group_description,
        l.locale, l.title, l.description,
@@ -790,25 +808,63 @@ ON DUPLICATE KEY UPDATE
 
 -- name: AdminUpsertPartnerConfig :exec
 INSERT INTO task_partner_config (
-    workspace_id, provider, group_key, platform, is_enabled, secret, target, settings
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     is_enabled = VALUES(is_enabled),
     secret = VALUES(secret),
+    webhook_secret = VALUES(webhook_secret),
     target = VALUES(target),
     settings = VALUES(settings);
 
 -- name: AdminGetPartnerConfig :one
-SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
 FROM task_partner_config
 WHERE workspace_id = ? AND provider = ? AND group_key = ? AND platform = ?
 LIMIT 1;
 
+-- name: GetPartnerConfigByWebhookSecret :one
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
+FROM task_partner_config
+WHERE workspace_id = ? AND webhook_secret = ?
+LIMIT 1;
+
 -- name: AdminListPartnerConfigs :many
-SELECT workspace_id, provider, group_key, platform, is_enabled, secret, target, settings, created_at, updated_at
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
 FROM task_partner_config
 WHERE workspace_id = ?
 ORDER BY provider, group_key, platform;
+
+-- name: ListAllPartnerConfigs :many
+SELECT workspace_id, provider, group_key, platform, is_enabled, secret, webhook_secret, target, settings, created_at, updated_at
+FROM task_partner_config
+ORDER BY workspace_id, provider, group_key, platform;
+
+-- name: AdminUpsertPartnerScript :exec
+INSERT INTO task_partner_script (
+    provider, is_enabled, version, source
+) VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    is_enabled = VALUES(is_enabled),
+    version = VALUES(version),
+    source = VALUES(source);
+
+-- name: AdminGetPartnerScript :one
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+WHERE provider = ?
+LIMIT 1;
+
+-- name: AdminListPartnerScripts :many
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+ORDER BY provider;
+
+-- name: GetEnabledPartnerScript :one
+SELECT provider, is_enabled, version, source, created_at, updated_at
+FROM task_partner_script
+WHERE provider = ? AND is_enabled = TRUE
+LIMIT 1;
 
 -- name: AdminUpsertPartnerRewardRule :exec
 INSERT INTO task_partner_reward_rule (
@@ -840,9 +896,9 @@ ORDER BY CASE WHEN external_type = ? THEN 0 ELSE 1 END, position, reward_key;
 
 -- name: CreatePartnerIssue :execlastid
 INSERT INTO task_partner_issue (
-    workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
-    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, expires_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?)
+    workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, started_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, NULL, ?)
 ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     public_payload = VALUES(public_payload),
@@ -851,26 +907,26 @@ ON DUPLICATE KEY UPDATE
     updated_at = CURRENT_TIMESTAMP;
 
 -- name: GetPartnerIssueByID :one
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ? AND id = ?
 LIMIT 1;
 
 -- name: GetPartnerIssueByIDForUpdate :one
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ? AND id = ?
 LIMIT 1
 FOR UPDATE;
 
 -- name: ListPartnerIssuesForUser :many
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, issue_key,
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
        app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, completed_at, claimed_at, expires_at, created_at, updated_at
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = ?
   AND provider = ?
@@ -883,6 +939,37 @@ WHERE workspace_id = ?
   AND (expires_at IS NULL OR expires_at > ?)
 ORDER BY issued_at DESC, id DESC;
 
+-- name: GetPartnerIssueByExternalClickID :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ? AND provider = ? AND external_click_id = ?
+LIMIT 1;
+
+-- name: GetPartnerIssueByExternalUser :one
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = ?
+  AND provider = ?
+  AND group_key = ?
+  AND platform = ?
+  AND external_id = ?
+  AND platform_user_id = ?
+ORDER BY issued_at DESC, id DESC
+LIMIT 1;
+
+-- name: UpdatePartnerIssueStart :execrows
+UPDATE task_partner_issue
+SET external_click_id = COALESCE(NULLIF(?, ''), external_click_id),
+    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+    public_payload = ?,
+    private_payload = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ? AND id = ? AND status = 'issued';
+
 -- name: CompletePartnerIssue :execrows
 UPDATE task_partner_issue
 SET status = 'completed', completed_at = ?, updated_at = CURRENT_TIMESTAMP
@@ -893,11 +980,29 @@ UPDATE task_partner_issue
 SET status = 'claimed', claimed_at = ?, updated_at = CURRENT_TIMESTAMP
 WHERE workspace_id = ? AND id = ? AND status = 'completed';
 
+-- name: RevokePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = CASE
+        WHEN status = 'claimed' THEN 'revoked_after_claim'
+        ELSE 'revoked'
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE workspace_id = ?
+  AND id = ?
+  AND status IN ('issued', 'completed', 'claimed');
+
 -- name: InsertPartnerRewardGrant :execrows
 INSERT IGNORE INTO task_partner_reward_grant (
     workspace_id, issue_id, provider, group_key, external_type,
     app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetPartnerRewardGrantByIssue :one
+SELECT id, workspace_id, issue_id, provider, group_key, external_type,
+       app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at, created_at
+FROM task_partner_reward_grant
+WHERE workspace_id = ? AND issue_id = ?
+LIMIT 1;
 
 -- name: InsertPartnerStatsEvent :execrows
 INSERT IGNORE INTO task_partner_stats_event (
@@ -914,13 +1019,16 @@ INSERT IGNORE INTO task_partner_stats_unique_user (
 -- name: IncrementPartnerStatsDaily :exec
 INSERT INTO task_partner_stats_daily (
     workspace_id, stats_date, provider, group_key, external_type,
-    issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+    issued_count, completed_count, claimed_count, revoked_count, revoked_after_claim_count,
+    failed_count, fake_count, expired_count,
     unique_issued_users, unique_completed_users, unique_claimers
-) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, DATE(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
     issued_count = issued_count + VALUES(issued_count),
     completed_count = completed_count + VALUES(completed_count),
     claimed_count = claimed_count + VALUES(claimed_count),
+    revoked_count = revoked_count + VALUES(revoked_count),
+    revoked_after_claim_count = revoked_after_claim_count + VALUES(revoked_after_claim_count),
     failed_count = failed_count + VALUES(failed_count),
     fake_count = fake_count + VALUES(fake_count),
     expired_count = expired_count + VALUES(expired_count),
@@ -930,7 +1038,8 @@ ON DUPLICATE KEY UPDATE
 
 -- name: AdminListPartnerDailyStats :many
 SELECT workspace_id, stats_date, provider, group_key, external_type,
-       issued_count, completed_count, claimed_count, failed_count, fake_count, expired_count,
+       issued_count, completed_count, claimed_count, revoked_count, revoked_after_claim_count,
+       failed_count, fake_count, expired_count,
        unique_issued_users, unique_completed_users, unique_claimers, updated_at
 FROM task_partner_stats_daily
 WHERE workspace_id = ?

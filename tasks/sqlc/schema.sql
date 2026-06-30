@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS task_definition (
     action_key VARCHAR(150) NOT NULL,
     action_kind ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external') NOT NULL,
     claim_mode ENUM('manual', 'auto') NOT NULL DEFAULT 'manual',
+    start_mode ENUM('none', 'required') NOT NULL DEFAULT 'none',
     target_count BIGINT UNSIGNED NOT NULL DEFAULT 1,
     reset_unit ENUM('never', 'second', 'minute', 'hour', 'day', 'year') NOT NULL DEFAULT 'never',
     reset_every INT UNSIGNED NOT NULL DEFAULT 1,
@@ -277,12 +278,25 @@ CREATE TABLE IF NOT EXISTS task_partner_config (
     platform VARCHAR(64) NOT NULL,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     secret TEXT NULL,
+    webhook_secret VARCHAR(128) NULL,
     target JSON NULL,
     settings JSON NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (workspace_id, provider, group_key, platform),
+    UNIQUE KEY task_partner_config_webhook_secret_uq (workspace_id, webhook_secret),
     KEY task_partner_config_list_idx (workspace_id, is_enabled, provider, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS task_partner_script (
+    provider VARCHAR(64) NOT NULL,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    version VARCHAR(64) NOT NULL,
+    source MEDIUMTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (provider),
+    KEY task_partner_script_enabled_idx (is_enabled, provider)
 );
 
 CREATE TABLE IF NOT EXISTS task_partner_reward_rule (
@@ -316,6 +330,8 @@ CREATE TABLE IF NOT EXISTS task_partner_issue (
     platform VARCHAR(64) NOT NULL,
     external_id VARCHAR(255) NOT NULL,
     external_type VARCHAR(64) NOT NULL,
+    external_click_id VARCHAR(255) NULL,
+    start_mode ENUM('none', 'required') NOT NULL DEFAULT 'none',
     issue_key VARCHAR(255) NOT NULL,
     app_id BIGINT NOT NULL,
     platform_id BIGINT NOT NULL,
@@ -324,6 +340,7 @@ CREATE TABLE IF NOT EXISTS task_partner_issue (
     private_payload JSON NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'issued',
     issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME NULL,
     completed_at DATETIME NULL,
     claimed_at DATETIME NULL,
     expires_at DATETIME NULL,
@@ -331,6 +348,7 @@ CREATE TABLE IF NOT EXISTS task_partner_issue (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY task_partner_issue_key_uq (workspace_id, issue_key),
+    UNIQUE KEY task_partner_issue_click_uq (workspace_id, external_click_id),
     UNIQUE KEY task_partner_issue_workspace_id_uq (workspace_id, id),
     KEY task_partner_issue_user_idx (workspace_id, app_id, platform_id, platform_user_id, provider, group_key, status),
     KEY task_partner_issue_external_idx (workspace_id, provider, group_key, external_type, external_id),
@@ -392,6 +410,8 @@ CREATE TABLE IF NOT EXISTS task_partner_stats_daily (
     issued_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     completed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     claimed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    revoked_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    revoked_after_claim_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     failed_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     fake_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     expired_count BIGINT UNSIGNED NOT NULL DEFAULT 0,

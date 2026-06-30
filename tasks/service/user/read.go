@@ -17,6 +17,29 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]TaskG
 	return groupTasks(tasks), nil
 }
 
+func (u *User) StartTask(ctx context.Context, params StartTaskParams) (StartTaskResult, error) {
+	if _, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
+		result, err := u.StartPartner(ctx, PartnerStartParams{
+			Identity: params.Identity, IssueRef: params.TaskRef, Now: params.Now,
+		})
+		return StartTaskResult{Status: result.Status, Started: result.Started, Task: result.Task}, err
+	}
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	result, err := u.repository.StartTask(mergedCtx, repository.StartTaskParams{
+		Identity: repositoryIdentity(params.Identity), TaskRef: params.TaskRef, Now: params.Now,
+	})
+	if err != nil {
+		return StartTaskResult{}, err
+	}
+	output := StartTaskResult{Status: result.Status, Started: result.Status == repository.StartStatusStarted}
+	if result.Task != nil {
+		task := mapTask(*result.Task)
+		output.Task = &task
+	}
+	return output, nil
+}
+
 func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
@@ -93,7 +116,7 @@ func groupTasks(tasks []repository.ActiveTask) []TaskGroupModel {
 func mapTask(task repository.Task) TaskModel {
 	result := TaskModel{
 		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
-		ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
+		ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode, StartMode: task.StartMode,
 		TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
 		Rewards: task.Rewards,
 	}

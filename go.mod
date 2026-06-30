@@ -10,6 +10,7 @@ require (
 require (
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+	github.com/yuin/gopher-lua v1.1.2 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 )

@@ -13,9 +13,11 @@ const (
 	PartnerStatusDisabled       = "disabled"
 	PartnerStatusTargetMismatch = "target_mismatch"
 	PartnerStatusNoProvider     = "no_provider"
+	PartnerStatusNotSupported   = "not_supported"
 	PartnerStatusNotFound       = repository.ClaimStatusNotFound
 	PartnerStatusNotCompleted   = "not_completed"
 	PartnerStatusReady          = repository.StatusReady
+	PartnerStatusStarted        = "started"
 )
 
 func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]TaskModel, error) {
@@ -54,7 +56,7 @@ func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]Tas
 		result = append(result, partnerIssueTask(issue, rewards, now))
 		seen[issue.IssueKey] = struct{}{}
 	}
-	provider := u.providers[params.Provider]
+	provider := u.partnerProvider(params.Provider)
 	if provider == nil {
 		return result, nil
 	}
@@ -79,7 +81,7 @@ func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]Tas
 			ExternalID: external.ExternalID, ExternalType: external.ExternalType,
 			IssueKey:      issueKey,
 			PublicPayload: external.PublicPayload, PrivatePayload: external.PrivatePayload,
-			ExpiresAt: external.ExpiresAt, Now: now,
+			ExpiresAt: external.ExpiresAt, StartMode: external.StartMode, Now: now,
 		})
 		if err != nil {
 			return nil, err
@@ -116,6 +118,9 @@ func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (Par
 	if issue.Status == repository.PartnerIssueStatusCompleted || issue.Status == repository.PartnerIssueStatusClaimed {
 		return PartnerCheckOutput{Status: task.Progress.Status, Completed: true, Task: &task}, nil
 	}
+	if issue.StartMode == repository.StartModeRequired && issue.StartedAt == nil {
+		return PartnerCheckOutput{Status: repository.ClaimStatusNotStarted, Completed: false, Task: &task}, nil
+	}
 	config, found, err := u.repository.GetPartnerConfig(mergedCtx, issue.WorkspaceID, issue.Provider, issue.GroupKey, issue.Platform)
 	if err != nil {
 		return PartnerCheckOutput{}, err
@@ -123,7 +128,7 @@ func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (Par
 	if !found || !config.IsEnabled {
 		return PartnerCheckOutput{Status: PartnerStatusNotConfigured, Task: &task}, nil
 	}
-	provider := u.providers[issue.Provider]
+	provider := u.partnerProvider(issue.Provider)
 	if provider == nil {
 		return PartnerCheckOutput{Status: PartnerStatusNoProvider, Task: &task}, nil
 	}
@@ -144,6 +149,77 @@ func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (Par
 	return PartnerCheckOutput{Status: PartnerStatusReady, Completed: true, Task: &task}, nil
 }
 
+func (u *User) StartPartner(ctx context.Context, params PartnerStartParams) (PartnerStartOutput, error) {
+	mergedCtx, cancel := u.withContext(ctx)
+	defer cancel()
+	now := params.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	issueID, ok := repository.ParsePartnerIssueRef(params.IssueRef)
+	if !ok {
+		return PartnerStartOutput{Status: PartnerStatusNotFound}, nil
+	}
+	issue, found, err := u.repository.GetPartnerIssue(mergedCtx, params.Identity.WorkspaceID, issueID)
+	if err != nil {
+		return PartnerStartOutput{}, err
+	}
+	if !found || issue.AppID != params.Identity.AppID || issue.PlatformID != params.Identity.PlatformID || issue.PlatformUserID != params.Identity.PlatformUserID {
+		return PartnerStartOutput{Status: PartnerStatusNotFound}, nil
+	}
+	rewards, err := u.repository.PartnerRewards(mergedCtx, issue.WorkspaceID, issue.Provider, issue.GroupKey, issue.ExternalType)
+	if err != nil {
+		return PartnerStartOutput{}, err
+	}
+	task := partnerIssueTask(issue, rewards, now)
+	config, found, err := u.repository.GetPartnerConfig(mergedCtx, issue.WorkspaceID, issue.Provider, issue.GroupKey, issue.Platform)
+	if err != nil {
+		return PartnerStartOutput{}, err
+	}
+	if !found || !config.IsEnabled {
+		return PartnerStartOutput{Status: PartnerStatusNotConfigured, Task: &task}, nil
+	}
+	provider := u.partnerProvider(issue.Provider)
+	starter, ok := provider.(PartnerStarter)
+	if !ok || starter == nil {
+		if issue.StartMode == repository.StartModeRequired {
+			updated, changed, err := u.repository.UpdatePartnerIssueStart(
+				mergedCtx, issue.WorkspaceID, issue.ID, "", nil, nil,
+			)
+			if err != nil {
+				return PartnerStartOutput{}, err
+			}
+			if changed {
+				issue = updated
+				task = partnerIssueTask(issue, rewards, now)
+			}
+			return PartnerStartOutput{Status: PartnerStatusStarted, Started: true, Task: &task}, nil
+		}
+		return PartnerStartOutput{Status: PartnerStatusNotSupported, Task: &task}, nil
+	}
+	started, err := starter.StartPartnerTask(mergedCtx, PartnerStartProviderParams{
+		Identity: params.Identity, Config: config, Issue: issue, Variables: params.Variables, Now: now,
+	})
+	if err != nil {
+		return PartnerStartOutput{}, err
+	}
+	if !started.Started {
+		return PartnerStartOutput{Status: started.Status, Started: false, Task: &task}, nil
+	}
+	updated, changed, err := u.repository.UpdatePartnerIssueStart(
+		mergedCtx, issue.WorkspaceID, issue.ID, started.ExternalClickID,
+		started.PublicPayloadPatch, started.PrivatePayloadPatch,
+	)
+	if err != nil {
+		return PartnerStartOutput{}, err
+	}
+	if changed {
+		issue = updated
+		task = partnerIssueTask(issue, rewards, now)
+	}
+	return PartnerStartOutput{Status: PartnerStatusStarted, Started: true, ActionURL: started.ActionURL, Task: &task}, nil
+}
+
 func partnerIssueKey(config repository.PartnerConfig, identity Identity, external PartnerExternalTask) string {
 	return config.Provider + ":" + config.GroupKey + ":" + config.Platform + ":" + external.ExternalID + ":" +
 		identity.PlatformUserID + ":" + external.ExternalType
@@ -159,6 +235,8 @@ func partnerIssueTask(issue repository.PartnerIssue, rewards []repository.Reward
 	case repository.PartnerIssueStatusClaimed:
 		status = repository.StatusClaimed
 		progressValue = 1
+	case repository.PartnerIssueStatusRevoked, repository.PartnerIssueStatusRevokedAfterClaim:
+		status = issue.Status
 	}
 	periodEnd := now
 	if issue.ExpiresAt != nil {
@@ -168,7 +246,7 @@ func partnerIssueTask(issue repository.PartnerIssue, rewards []repository.Reward
 		ID: issue.ID, Key: repository.PartnerIssueKey(issue.ID), GroupKey: issue.GroupKey,
 		TaskKind: repository.TaskKindPartner, ActionKey: "partner:" + issue.Provider,
 		ActionKind: repository.ActionKindExternal, ClaimMode: repository.ClaimModeManual,
-		TargetCount: 1, Payload: issue.PublicPayload, Rewards: rewards,
+		StartMode: issue.StartMode, TargetCount: 1, Payload: issue.PublicPayload, Rewards: rewards,
 		Progress: &repository.ActiveProgress{
 			Progress: progressValue, Status: status,
 			PeriodStartAt: issue.IssuedAt, PeriodEndAt: periodEnd,

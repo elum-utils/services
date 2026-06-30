@@ -46,6 +46,10 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 	if taskKind == "" {
 		taskKind = TaskKindInternal
 	}
+	startMode := params.StartMode
+	if startMode == "" {
+		startMode = StartModeNone
+	}
 	payload := params.Payload
 	if len(payload) == 0 {
 		payload = []byte("{}")
@@ -65,7 +69,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 				SequenceKey: nullString(params.SequenceKey), SequencePosition: nullInt32FromUint32(params.SequencePosition),
 				TaskKind:  taskKind,
 				ActionKey: params.ActionKey, ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
-				ClaimMode: tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
+				ClaimMode: tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), StartMode: tasksqlc.TaskDefinitionStartMode(startMode), TargetCount: params.TargetCount,
 				ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
 				Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
 				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
@@ -84,7 +88,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 			GroupKey: params.GroupKey, SequenceKey: nullString(params.SequenceKey),
 			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: taskKind, ActionKey: params.ActionKey,
 			ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
-			ClaimMode:  tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), TargetCount: params.TargetCount,
+			ClaimMode:  tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), StartMode: tasksqlc.TaskDefinitionStartMode(startMode), TargetCount: params.TargetCount,
 			ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
 			Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
 			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,

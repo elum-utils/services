@@ -80,7 +80,7 @@ func activeTasksFromTasks(tasks []Task) []ActiveTask {
 		out := ActiveTask{
 			ID: task.ID, Key: task.Key, GroupKey: task.GroupKey, TaskKind: task.TaskKind,
 			GroupTitle: task.GroupTitle, GroupDesc: task.GroupDesc,
-			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode,
+			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode, StartMode: task.StartMode,
 			TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
 			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt, Target: task.Target,
 		}

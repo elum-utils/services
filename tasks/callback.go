@@ -28,6 +28,7 @@ type Context struct {
 	callbackutil.Context
 	Payload *services.RewardPayload
 	Claimed *CallbackPayload
+	Revoked *CallbackPayload
 }
 
 type CallbackHandler func(Context) error
@@ -82,7 +83,7 @@ func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts .
 		if err := json.Unmarshal(callbackCtx.Payload, &payload); err != nil {
 			return serviceerrors.Wrap(serviceerrors.CodeInternalError, "tasks callback payload decode failed", err)
 		}
-		return handler(Context{
+		eventCtx := Context{
 			Context: callbackCtx,
 			Payload: &services.RewardPayload{
 				Identity: services.Identity{
@@ -92,7 +93,13 @@ func (t *Tasks) runCallback(ctx context.Context, handler CallbackHandler, opts .
 				},
 				Rewards: payload.Rewards,
 			},
-			Claimed: &payload,
-		})
+		}
+		switch callbackCtx.EventType {
+		case "task.partner.revoked":
+			eventCtx.Revoked = &payload
+		default:
+			eventCtx.Claimed = &payload
+		}
+		return handler(eventCtx)
 	}, opts...)
 }

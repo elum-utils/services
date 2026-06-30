@@ -146,6 +146,90 @@ func (ns NullTaskDefinitionResetUnit) Value() (driver.Value, error) {
 	return string(ns.TaskDefinitionResetUnit), nil
 }
 
+type TaskDefinitionStartMode string
+
+const (
+	TaskDefinitionStartModeNone     TaskDefinitionStartMode = "none"
+	TaskDefinitionStartModeRequired TaskDefinitionStartMode = "required"
+)
+
+func (e *TaskDefinitionStartMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskDefinitionStartMode(s)
+	case string:
+		*e = TaskDefinitionStartMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskDefinitionStartMode: %T", src)
+	}
+	return nil
+}
+
+type NullTaskDefinitionStartMode struct {
+	TaskDefinitionStartMode TaskDefinitionStartMode `json:"task_definition_start_mode"`
+	Valid                   bool                    `json:"valid"` // Valid is true if TaskDefinitionStartMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskDefinitionStartMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskDefinitionStartMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskDefinitionStartMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskDefinitionStartMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskDefinitionStartMode), nil
+}
+
+type TaskPartnerIssueStartMode string
+
+const (
+	TaskPartnerIssueStartModeNone     TaskPartnerIssueStartMode = "none"
+	TaskPartnerIssueStartModeRequired TaskPartnerIssueStartMode = "required"
+)
+
+func (e *TaskPartnerIssueStartMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskPartnerIssueStartMode(s)
+	case string:
+		*e = TaskPartnerIssueStartMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskPartnerIssueStartMode: %T", src)
+	}
+	return nil
+}
+
+type NullTaskPartnerIssueStartMode struct {
+	TaskPartnerIssueStartMode TaskPartnerIssueStartMode `json:"task_partner_issue_start_mode"`
+	Valid                     bool                      `json:"valid"` // Valid is true if TaskPartnerIssueStartMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskPartnerIssueStartMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskPartnerIssueStartMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskPartnerIssueStartMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskPartnerIssueStartMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskPartnerIssueStartMode), nil
+}
+
 type TaskPartnerRewardRuleDurationUnit string
 
 const (
@@ -506,6 +590,7 @@ type TaskDefinition struct {
 	ActionKey           string                   `json:"action_key"`
 	ActionKind          TaskDefinitionActionKind `json:"action_kind"`
 	ClaimMode           TaskDefinitionClaimMode  `json:"claim_mode"`
+	StartMode           TaskDefinitionStartMode  `json:"start_mode"`
 	TargetCount         uint64                   `json:"target_count"`
 	ResetUnit           TaskDefinitionResetUnit  `json:"reset_unit"`
 	ResetEvery          uint32                   `json:"reset_every"`
@@ -557,39 +642,43 @@ type TaskLocalization struct {
 }
 
 type TaskPartnerConfig struct {
-	WorkspaceID string          `json:"workspace_id"`
-	Provider    string          `json:"provider"`
-	GroupKey    string          `json:"group_key"`
-	Platform    string          `json:"platform"`
-	IsEnabled   bool            `json:"is_enabled"`
-	Secret      sql.NullString  `json:"secret"`
-	Target      json.RawMessage `json:"target"`
-	Settings    json.RawMessage `json:"settings"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	WorkspaceID   string          `json:"workspace_id"`
+	Provider      string          `json:"provider"`
+	GroupKey      string          `json:"group_key"`
+	Platform      string          `json:"platform"`
+	IsEnabled     bool            `json:"is_enabled"`
+	Secret        sql.NullString  `json:"secret"`
+	WebhookSecret sql.NullString  `json:"webhook_secret"`
+	Target        json.RawMessage `json:"target"`
+	Settings      json.RawMessage `json:"settings"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
 type TaskPartnerIssue struct {
-	ID             uint64          `json:"id"`
-	WorkspaceID    string          `json:"workspace_id"`
-	Provider       string          `json:"provider"`
-	GroupKey       string          `json:"group_key"`
-	Platform       string          `json:"platform"`
-	ExternalID     string          `json:"external_id"`
-	ExternalType   string          `json:"external_type"`
-	IssueKey       string          `json:"issue_key"`
-	AppID          int64           `json:"app_id"`
-	PlatformID     int64           `json:"platform_id"`
-	PlatformUserID string          `json:"platform_user_id"`
-	PublicPayload  json.RawMessage `json:"public_payload"`
-	PrivatePayload json.RawMessage `json:"private_payload"`
-	Status         string          `json:"status"`
-	IssuedAt       time.Time       `json:"issued_at"`
-	CompletedAt    sql.NullTime    `json:"completed_at"`
-	ClaimedAt      sql.NullTime    `json:"claimed_at"`
-	ExpiresAt      sql.NullTime    `json:"expires_at"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	ID              uint64                    `json:"id"`
+	WorkspaceID     string                    `json:"workspace_id"`
+	Provider        string                    `json:"provider"`
+	GroupKey        string                    `json:"group_key"`
+	Platform        string                    `json:"platform"`
+	ExternalID      string                    `json:"external_id"`
+	ExternalType    string                    `json:"external_type"`
+	ExternalClickID sql.NullString            `json:"external_click_id"`
+	StartMode       TaskPartnerIssueStartMode `json:"start_mode"`
+	IssueKey        string                    `json:"issue_key"`
+	AppID           int64                     `json:"app_id"`
+	PlatformID      int64                     `json:"platform_id"`
+	PlatformUserID  string                    `json:"platform_user_id"`
+	PublicPayload   json.RawMessage           `json:"public_payload"`
+	PrivatePayload  json.RawMessage           `json:"private_payload"`
+	Status          string                    `json:"status"`
+	IssuedAt        time.Time                 `json:"issued_at"`
+	StartedAt       sql.NullTime              `json:"started_at"`
+	CompletedAt     sql.NullTime              `json:"completed_at"`
+	ClaimedAt       sql.NullTime              `json:"claimed_at"`
+	ExpiresAt       sql.NullTime              `json:"expires_at"`
+	CreatedAt       time.Time                 `json:"created_at"`
+	UpdatedAt       time.Time                 `json:"updated_at"`
 }
 
 type TaskPartnerRewardGrant struct {
@@ -624,22 +713,33 @@ type TaskPartnerRewardRule struct {
 	UpdatedAt    time.Time                             `json:"updated_at"`
 }
 
+type TaskPartnerScript struct {
+	Provider  string    `json:"provider"`
+	IsEnabled bool      `json:"is_enabled"`
+	Version   string    `json:"version"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type TaskPartnerStatsDaily struct {
-	WorkspaceID          string    `json:"workspace_id"`
-	StatsDate            time.Time `json:"stats_date"`
-	Provider             string    `json:"provider"`
-	GroupKey             string    `json:"group_key"`
-	ExternalType         string    `json:"external_type"`
-	IssuedCount          uint64    `json:"issued_count"`
-	CompletedCount       uint64    `json:"completed_count"`
-	ClaimedCount         uint64    `json:"claimed_count"`
-	FailedCount          uint64    `json:"failed_count"`
-	FakeCount            uint64    `json:"fake_count"`
-	ExpiredCount         uint64    `json:"expired_count"`
-	UniqueIssuedUsers    uint64    `json:"unique_issued_users"`
-	UniqueCompletedUsers uint64    `json:"unique_completed_users"`
-	UniqueClaimers       uint64    `json:"unique_claimers"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	WorkspaceID            string    `json:"workspace_id"`
+	StatsDate              time.Time `json:"stats_date"`
+	Provider               string    `json:"provider"`
+	GroupKey               string    `json:"group_key"`
+	ExternalType           string    `json:"external_type"`
+	IssuedCount            uint64    `json:"issued_count"`
+	CompletedCount         uint64    `json:"completed_count"`
+	ClaimedCount           uint64    `json:"claimed_count"`
+	RevokedCount           uint64    `json:"revoked_count"`
+	RevokedAfterClaimCount uint64    `json:"revoked_after_claim_count"`
+	FailedCount            uint64    `json:"failed_count"`
+	FakeCount              uint64    `json:"fake_count"`
+	ExpiredCount           uint64    `json:"expired_count"`
+	UniqueIssuedUsers      uint64    `json:"unique_issued_users"`
+	UniqueCompletedUsers   uint64    `json:"unique_completed_users"`
+	UniqueClaimers         uint64    `json:"unique_claimers"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 type TaskPartnerStatsEvent struct {

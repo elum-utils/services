@@ -120,6 +120,27 @@ func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
 	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_reward_rule", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
 		return fmt.Errorf("tasks schema upgrade task_partner_reward_rule.scale failed: %w", err)
 	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_config", "webhook_secret", "VARCHAR(128) NULL AFTER secret"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_config.webhook_secret failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_definition", "start_mode", "ENUM('none', 'required') NOT NULL DEFAULT 'none' AFTER claim_mode"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_definition.start_mode failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "external_click_id", "VARCHAR(255) NULL AFTER external_type"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_issue.external_click_id failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "start_mode", "ENUM('none', 'required') NOT NULL DEFAULT 'none' AFTER external_click_id"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_issue.start_mode failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "started_at", "DATETIME NULL AFTER issued_at"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_issue.started_at failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_stats_daily", "revoked_count", "BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER claimed_count"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_stats_daily.revoked_count failed: %w", err)
+	}
+	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_stats_daily", "revoked_after_claim_count", "BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER revoked_count"); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_partner_stats_daily.revoked_after_claim_count failed: %w", err)
+	}
 	return nil
 }
 
