@@ -229,6 +229,7 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 		pricingBaseURL:    options.PriceUpdateBaseURL,
 	}
 	payments.startPriceUpdater()
+	tonAPI.StartManagedSubscribers(rootCtx, options.TONWalletSyncInterval)
 	return payments
 }
 

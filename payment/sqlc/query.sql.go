@@ -973,6 +973,43 @@ func (q *Queries) AdminGetSubscription(ctx context.Context, arg AdminGetSubscrip
 	return i, err
 }
 
+const adminGetTONWallet = `-- name: AdminGetTONWallet :one
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND network = ?
+  AND wallet_address = ?
+LIMIT 1
+`
+
+type AdminGetTONWalletParams struct {
+	WorkspaceID   string `json:"workspace_id"`
+	Network       string `json:"network"`
+	WalletAddress string `json:"wallet_address"`
+}
+
+func (q *Queries) AdminGetTONWallet(ctx context.Context, arg AdminGetTONWalletParams) (PaymentTonWallet, error) {
+	row := q.queryRow(ctx, q.adminGetTONWalletStmt, adminGetTONWallet, arg.WorkspaceID, arg.Network, arg.WalletAddress)
+	var i PaymentTonWallet
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Network,
+		&i.WalletAddress,
+		&i.NetworkConfigUrl,
+		&i.IsEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const adminListAssetRates = `-- name: AdminListAssetRates :many
 SELECT
     asset_code, reference_asset_code, reference_per_asset_minor, source, observed_at,
@@ -2768,6 +2805,72 @@ func (q *Queries) AdminListSubscriptions(ctx context.Context, arg AdminListSubsc
 	return items, nil
 }
 
+const adminListTONWallets = `-- name: AdminListTONWallets :many
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND (? = '' OR network = ?)
+  AND (? OR is_enabled = ?)
+ORDER BY network, wallet_address
+LIMIT ? OFFSET ?
+`
+
+type AdminListTONWalletsParams struct {
+	WorkspaceID string      `json:"workspace_id"`
+	Column2     interface{} `json:"column_2"`
+	Network     string      `json:"network"`
+	Column4     interface{} `json:"column_4"`
+	IsEnabled   bool        `json:"is_enabled"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
+}
+
+func (q *Queries) AdminListTONWallets(ctx context.Context, arg AdminListTONWalletsParams) ([]PaymentTonWallet, error) {
+	rows, err := q.query(ctx, q.adminListTONWalletsStmt, adminListTONWallets,
+		arg.WorkspaceID,
+		arg.Column2,
+		arg.Network,
+		arg.Column4,
+		arg.IsEnabled,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentTonWallet
+	for rows.Next() {
+		var i PaymentTonWallet
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Network,
+			&i.WalletAddress,
+			&i.NetworkConfigUrl,
+			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminSetRefundProviderID = `-- name: AdminSetRefundProviderID :execrows
 UPDATE payment_refund
 SET provider_refund_id = ?,
@@ -3981,6 +4084,27 @@ type DeleteProviderAssetParams struct {
 
 func (q *Queries) DeleteProviderAsset(ctx context.Context, arg DeleteProviderAssetParams) (int64, error) {
 	result, err := q.exec(ctx, q.deleteProviderAssetStmt, deleteProviderAsset, arg.ProviderCode, arg.AssetCode)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteTONWallet = `-- name: DeleteTONWallet :execrows
+DELETE FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND network = ?
+  AND wallet_address = ?
+`
+
+type DeleteTONWalletParams struct {
+	WorkspaceID   string `json:"workspace_id"`
+	Network       string `json:"network"`
+	WalletAddress string `json:"wallet_address"`
+}
+
+func (q *Queries) DeleteTONWallet(ctx context.Context, arg DeleteTONWalletParams) (int64, error) {
+	result, err := q.exec(ctx, q.deleteTONWalletStmt, deleteTONWallet, arg.WorkspaceID, arg.Network, arg.WalletAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -6147,6 +6271,51 @@ func (q *Queries) ListDynamicPricesForRate(ctx context.Context, arg ListDynamicP
 			&i.ReferenceListAmountMinor,
 			&i.ReferenceDiscountAmountMinor,
 			&i.Coefficient,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledTONWallets = `-- name: ListEnabledTONWallets :many
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE is_enabled = 1
+ORDER BY workspace_id, network, wallet_address
+`
+
+func (q *Queries) ListEnabledTONWallets(ctx context.Context) ([]PaymentTonWallet, error) {
+	rows, err := q.query(ctx, q.listEnabledTONWalletsStmt, listEnabledTONWallets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentTonWallet
+	for rows.Next() {
+		var i PaymentTonWallet
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Network,
+			&i.WalletAddress,
+			&i.NetworkConfigUrl,
+			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -8639,4 +8808,38 @@ func (q *Queries) UpsertProviderCursor(ctx context.Context, arg UpsertProviderCu
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const upsertTONWallet = `-- name: UpsertTONWallet :exec
+INSERT INTO payment_ton_wallet (
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled
+)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    network_config_url = VALUES(network_config_url),
+    is_enabled = VALUES(is_enabled),
+    updated_at = NOW()
+`
+
+type UpsertTONWalletParams struct {
+	WorkspaceID      string         `json:"workspace_id"`
+	Network          string         `json:"network"`
+	WalletAddress    string         `json:"wallet_address"`
+	NetworkConfigUrl sql.NullString `json:"network_config_url"`
+	IsEnabled        bool           `json:"is_enabled"`
+}
+
+func (q *Queries) UpsertTONWallet(ctx context.Context, arg UpsertTONWalletParams) error {
+	_, err := q.exec(ctx, q.upsertTONWalletStmt, upsertTONWallet,
+		arg.WorkspaceID,
+		arg.Network,
+		arg.WalletAddress,
+		arg.NetworkConfigUrl,
+		arg.IsEnabled,
+	)
+	return err
 }

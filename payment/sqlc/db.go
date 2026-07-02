@@ -84,6 +84,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminGetSubscriptionStmt, err = db.PrepareContext(ctx, adminGetSubscription); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminGetSubscription: %w", err)
 	}
+	if q.adminGetTONWalletStmt, err = db.PrepareContext(ctx, adminGetTONWallet); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminGetTONWallet: %w", err)
+	}
 	if q.adminListAssetRatesStmt, err = db.PrepareContext(ctx, adminListAssetRates); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListAssetRates: %w", err)
 	}
@@ -149,6 +152,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.adminListSubscriptionsStmt, err = db.PrepareContext(ctx, adminListSubscriptions); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListSubscriptions: %w", err)
+	}
+	if q.adminListTONWalletsStmt, err = db.PrepareContext(ctx, adminListTONWallets); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminListTONWallets: %w", err)
 	}
 	if q.adminSetRefundProviderIDStmt, err = db.PrepareContext(ctx, adminSetRefundProviderID); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminSetRefundProviderID: %w", err)
@@ -254,6 +260,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.deleteProviderAssetStmt, err = db.PrepareContext(ctx, deleteProviderAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteProviderAsset: %w", err)
+	}
+	if q.deleteTONWalletStmt, err = db.PrepareContext(ctx, deleteTONWallet); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteTONWallet: %w", err)
 	}
 	if q.deleteWorkspaceProductCacheStmt, err = db.PrepareContext(ctx, deleteWorkspaceProductCache); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteWorkspaceProductCache: %w", err)
@@ -362,6 +371,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listDynamicPricesForRateStmt, err = db.PrepareContext(ctx, listDynamicPricesForRate); err != nil {
 		return nil, fmt.Errorf("error preparing query ListDynamicPricesForRate: %w", err)
+	}
+	if q.listEnabledTONWalletsStmt, err = db.PrepareContext(ctx, listEnabledTONWallets); err != nil {
+		return nil, fmt.Errorf("error preparing query ListEnabledTONWallets: %w", err)
 	}
 	if q.listProductCatalogCacheRowsStmt, err = db.PrepareContext(ctx, listProductCatalogCacheRows); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProductCatalogCacheRows: %w", err)
@@ -486,6 +498,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.upsertProviderCursorStmt, err = db.PrepareContext(ctx, upsertProviderCursor); err != nil {
 		return nil, fmt.Errorf("error preparing query UpsertProviderCursor: %w", err)
 	}
+	if q.upsertTONWalletStmt, err = db.PrepareContext(ctx, upsertTONWallet); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertTONWallet: %w", err)
+	}
 	return &q, nil
 }
 
@@ -589,6 +604,11 @@ func (q *Queries) Close() error {
 	if q.adminGetSubscriptionStmt != nil {
 		if cerr := q.adminGetSubscriptionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminGetSubscriptionStmt: %w", cerr)
+		}
+	}
+	if q.adminGetTONWalletStmt != nil {
+		if cerr := q.adminGetTONWalletStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminGetTONWalletStmt: %w", cerr)
 		}
 	}
 	if q.adminListAssetRatesStmt != nil {
@@ -699,6 +719,11 @@ func (q *Queries) Close() error {
 	if q.adminListSubscriptionsStmt != nil {
 		if cerr := q.adminListSubscriptionsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminListSubscriptionsStmt: %w", cerr)
+		}
+	}
+	if q.adminListTONWalletsStmt != nil {
+		if cerr := q.adminListTONWalletsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminListTONWalletsStmt: %w", cerr)
 		}
 	}
 	if q.adminSetRefundProviderIDStmt != nil {
@@ -874,6 +899,11 @@ func (q *Queries) Close() error {
 	if q.deleteProviderAssetStmt != nil {
 		if cerr := q.deleteProviderAssetStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteProviderAssetStmt: %w", cerr)
+		}
+	}
+	if q.deleteTONWalletStmt != nil {
+		if cerr := q.deleteTONWalletStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteTONWalletStmt: %w", cerr)
 		}
 	}
 	if q.deleteWorkspaceProductCacheStmt != nil {
@@ -1054,6 +1084,11 @@ func (q *Queries) Close() error {
 	if q.listDynamicPricesForRateStmt != nil {
 		if cerr := q.listDynamicPricesForRateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listDynamicPricesForRateStmt: %w", cerr)
+		}
+	}
+	if q.listEnabledTONWalletsStmt != nil {
+		if cerr := q.listEnabledTONWalletsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listEnabledTONWalletsStmt: %w", cerr)
 		}
 	}
 	if q.listProductCatalogCacheRowsStmt != nil {
@@ -1261,6 +1296,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing upsertProviderCursorStmt: %w", cerr)
 		}
 	}
+	if q.upsertTONWalletStmt != nil {
+		if cerr := q.upsertTONWalletStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertTONWalletStmt: %w", cerr)
+		}
+	}
 	return err
 }
 
@@ -1320,6 +1360,7 @@ type Queries struct {
 	adminGetPurchaseKeyStmt                               *sql.Stmt
 	adminGetRefundStmt                                    *sql.Stmt
 	adminGetSubscriptionStmt                              *sql.Stmt
+	adminGetTONWalletStmt                                 *sql.Stmt
 	adminListAssetRatesStmt                               *sql.Stmt
 	adminListFulfillmentItemsStmt                         *sql.Stmt
 	adminListFulfillmentsStmt                             *sql.Stmt
@@ -1342,6 +1383,7 @@ type Queries struct {
 	adminListPurchaseKeysStmt                             *sql.Stmt
 	adminListRefundsStmt                                  *sql.Stmt
 	adminListSubscriptionsStmt                            *sql.Stmt
+	adminListTONWalletsStmt                               *sql.Stmt
 	adminSetRefundProviderIDStmt                          *sql.Stmt
 	adminUpdateFulfillmentStatusStmt                      *sql.Stmt
 	adminUpdateOrderStatusStmt                            *sql.Stmt
@@ -1377,6 +1419,7 @@ type Queries struct {
 	deleteProductItemStmt                                 *sql.Stmt
 	deleteProductPriceStmt                                *sql.Stmt
 	deleteProviderAssetStmt                               *sql.Stmt
+	deleteTONWalletStmt                                   *sql.Stmt
 	deleteWorkspaceProductCacheStmt                       *sql.Stmt
 	ensureProductLimitCounterStmt                         *sql.Stmt
 	failAssetRateUpdateStmt                               *sql.Stmt
@@ -1413,6 +1456,7 @@ type Queries struct {
 	listAssetsStmt                                        *sql.Stmt
 	listDueAssetRateUpdatesStmt                           *sql.Stmt
 	listDynamicPricesForRateStmt                          *sql.Stmt
+	listEnabledTONWalletsStmt                             *sql.Stmt
 	listProductCatalogCacheRowsStmt                       *sql.Stmt
 	listProductIDsForItemStmt                             *sql.Stmt
 	listProductLocalesStmt                                *sql.Stmt
@@ -1454,6 +1498,7 @@ type Queries struct {
 	upsertProductItemStmt                                 *sql.Stmt
 	upsertProviderAssetStmt                               *sql.Stmt
 	upsertProviderCursorStmt                              *sql.Stmt
+	upsertTONWalletStmt                                   *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -1480,6 +1525,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminGetPurchaseKeyStmt:                               q.adminGetPurchaseKeyStmt,
 		adminGetRefundStmt:                                    q.adminGetRefundStmt,
 		adminGetSubscriptionStmt:                              q.adminGetSubscriptionStmt,
+		adminGetTONWalletStmt:                                 q.adminGetTONWalletStmt,
 		adminListAssetRatesStmt:                               q.adminListAssetRatesStmt,
 		adminListFulfillmentItemsStmt:                         q.adminListFulfillmentItemsStmt,
 		adminListFulfillmentsStmt:                             q.adminListFulfillmentsStmt,
@@ -1502,6 +1548,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminListPurchaseKeysStmt:                             q.adminListPurchaseKeysStmt,
 		adminListRefundsStmt:                                  q.adminListRefundsStmt,
 		adminListSubscriptionsStmt:                            q.adminListSubscriptionsStmt,
+		adminListTONWalletsStmt:                               q.adminListTONWalletsStmt,
 		adminSetRefundProviderIDStmt:                          q.adminSetRefundProviderIDStmt,
 		adminUpdateFulfillmentStatusStmt:                      q.adminUpdateFulfillmentStatusStmt,
 		adminUpdateOrderStatusStmt:                            q.adminUpdateOrderStatusStmt,
@@ -1537,6 +1584,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteProductItemStmt:                                 q.deleteProductItemStmt,
 		deleteProductPriceStmt:                                q.deleteProductPriceStmt,
 		deleteProviderAssetStmt:                               q.deleteProviderAssetStmt,
+		deleteTONWalletStmt:                                   q.deleteTONWalletStmt,
 		deleteWorkspaceProductCacheStmt:                       q.deleteWorkspaceProductCacheStmt,
 		ensureProductLimitCounterStmt:                         q.ensureProductLimitCounterStmt,
 		failAssetRateUpdateStmt:                               q.failAssetRateUpdateStmt,
@@ -1573,6 +1621,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listAssetsStmt:                                        q.listAssetsStmt,
 		listDueAssetRateUpdatesStmt:                           q.listDueAssetRateUpdatesStmt,
 		listDynamicPricesForRateStmt:                          q.listDynamicPricesForRateStmt,
+		listEnabledTONWalletsStmt:                             q.listEnabledTONWalletsStmt,
 		listProductCatalogCacheRowsStmt:                       q.listProductCatalogCacheRowsStmt,
 		listProductIDsForItemStmt:                             q.listProductIDsForItemStmt,
 		listProductLocalesStmt:                                q.listProductLocalesStmt,
@@ -1614,5 +1663,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		upsertProductItemStmt:                                 q.upsertProductItemStmt,
 		upsertProviderAssetStmt:                               q.upsertProviderAssetStmt,
 		upsertProviderCursorStmt:                              q.upsertProviderCursorStmt,
+		upsertTONWalletStmt:                                   q.upsertTONWalletStmt,
 	}
 }

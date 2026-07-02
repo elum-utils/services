@@ -23,15 +23,15 @@ func (a *TON) StartSubscriber(ctx context.Context, params SubscriberParams) (*Su
 	if params.WorkspaceID == "" {
 		return nil, ErrWorkspaceIDRequired
 	}
-	if params.NetworkConfigURL == "" {
-		return nil, ErrNetworkConfigURLRequired
-	}
 	if params.WalletAddress == "" {
 		return nil, ErrWalletAddressRequired
 	}
 	network, err := validateNetwork(params.Network)
 	if err != nil {
 		return nil, err
+	}
+	if params.NetworkConfigURL == "" {
+		params.NetworkConfigURL = defaultNetworkConfigURL(network)
 	}
 	lastLT := uint64(0)
 	cursor, err := a.repository.GetProviderCursor(ctx, paymentsqlc.GetProviderCursorParams{

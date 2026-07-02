@@ -1779,6 +1779,70 @@ ON DUPLICATE KEY UPDATE
     cursor_sequence = GREATEST(cursor_sequence, VALUES(cursor_sequence)),
     updated_at = NOW();
 
+-- name: UpsertTONWallet :exec
+INSERT INTO payment_ton_wallet (
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled
+)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    network_config_url = VALUES(network_config_url),
+    is_enabled = VALUES(is_enabled),
+    updated_at = NOW();
+
+-- name: DeleteTONWallet :execrows
+DELETE FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND network = ?
+  AND wallet_address = ?;
+
+-- name: AdminGetTONWallet :one
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND network = ?
+  AND wallet_address = ?
+LIMIT 1;
+
+-- name: AdminListTONWallets :many
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND (? = '' OR network = ?)
+  AND (? OR is_enabled = ?)
+ORDER BY network, wallet_address
+LIMIT ? OFFSET ?;
+
+-- name: ListEnabledTONWallets :many
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE is_enabled = 1
+ORDER BY workspace_id, network, wallet_address;
+
 -- name: CreateProviderTransaction :execlastid
 INSERT INTO payment_provider_transaction (
     workspace_id,

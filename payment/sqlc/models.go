@@ -1842,3 +1842,13 @@ type PaymentSubscription struct {
 	CreatedAt              time.Time                 `json:"created_at"`
 	UpdatedAt              time.Time                 `json:"updated_at"`
 }
+
+type PaymentTonWallet struct {
+	WorkspaceID      string         `json:"workspace_id"`
+	Network          string         `json:"network"`
+	WalletAddress    string         `json:"wallet_address"`
+	NetworkConfigUrl sql.NullString `json:"network_config_url"`
+	IsEnabled        bool           `json:"is_enabled"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+}

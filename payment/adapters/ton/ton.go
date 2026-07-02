@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"time"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 
 	"github.com/elum-utils/services/payment/repository"
@@ -23,10 +25,15 @@ const (
 )
 
 type TON struct {
-	repository  *repository.PaymentRepository
-	rootCtx     context.Context
-	subscribers map[*Sub]struct{}
-	mu          sync.Mutex
+	repository     *repository.PaymentRepository
+	rootCtx        context.Context
+	subscribers    map[*Sub]struct{}
+	managed        map[string]managedSubscriber
+	managedDone    chan struct{}
+	managedCancel  context.CancelFunc
+	managedStarted bool
+	goroutines     *goroutinemanager.Manager
+	mu             sync.Mutex
 }
 
 func New(ctx context.Context, db *sqlwrap.Client) *TON {
@@ -42,6 +49,8 @@ func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options repository.
 		repository:  repo,
 		rootCtx:     ctx,
 		subscribers: make(map[*Sub]struct{}),
+		managed:     make(map[string]managedSubscriber),
+		goroutines:  goroutinemanager.New(),
 	}
 }
 
@@ -50,11 +59,25 @@ func (a *TON) Close() error {
 		return nil
 	}
 	a.mu.Lock()
+	if a.managedCancel != nil {
+		a.managedCancel()
+	}
+	done := a.managedDone
 	subs := make([]*Sub, 0, len(a.subscribers))
 	for sub := range a.subscribers {
 		subs = append(subs, sub)
 	}
 	a.mu.Unlock()
+
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	if a.goroutines != nil {
+		a.goroutines.Close()
+	}
 
 	for _, sub := range subs {
 		_ = sub.Close()

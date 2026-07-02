@@ -739,6 +739,18 @@ CREATE TABLE IF NOT EXISTS payment_provider_cursor (
         FOREIGN KEY (provider_code) REFERENCES payment_provider (code)
 );
 
+CREATE TABLE IF NOT EXISTS payment_ton_wallet (
+    workspace_id CHAR(36) NOT NULL,
+    network VARCHAR(32) NOT NULL,
+    wallet_address VARCHAR(255) NOT NULL,
+    network_config_url VARCHAR(512) NULL,
+    is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, network, wallet_address),
+    KEY payment_ton_wallet_enabled_idx (is_enabled, network, updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS payment_provider_transaction (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     workspace_id CHAR(36) NOT NULL,

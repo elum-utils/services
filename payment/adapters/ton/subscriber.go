@@ -8,6 +8,7 @@ import (
 	"time"
 
 	serviceerrors "github.com/elum-utils/services/errors"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/tlb"
@@ -27,6 +28,7 @@ type Sub struct {
 	done    chan struct{}
 	onClose func()
 	wallet  *address.Address
+	manager *goroutinemanager.Manager
 
 	closeOnce sync.Once
 	startOnce sync.Once
@@ -148,6 +150,7 @@ func NewSub(ctx context.Context, stop context.CancelFunc, addr string, networkCo
 		pool:    client,
 		done:    make(chan struct{}),
 		wallet:  treasuryAddress,
+		manager: goroutinemanager.New(),
 	}
 
 	return sub, nil
@@ -163,15 +166,17 @@ func (s *Sub) Start() {
 		s.mu.Unlock()
 
 		transactions := make(chan *tlb.Transaction)
-		go func() {
+		s.manager.Go("payment.ton.subscriber.dispatch", func() {
 			defer s.finish()
 			s.subscribe(transactions)
-		}()
-		go func() {
+		})
+		s.manager.Go("payment.ton.subscriber.stop_pool", func() {
 			<-s.Context.Done()
 			s.pool.Stop()
-		}()
-		go s.Api.SubscribeOnTransactions(s.Context, s.wallet, s.LastLT(), transactions)
+		})
+		s.manager.Go("payment.ton.subscriber.transactions", func() {
+			s.Api.SubscribeOnTransactions(s.Context, s.wallet, s.LastLT(), transactions)
+		})
 	})
 }
 
@@ -215,6 +220,9 @@ func (s *Sub) Close() error {
 		select {
 		case <-s.done:
 		case <-time.After(5 * time.Second):
+		}
+		if s.manager != nil {
+			s.manager.Close()
 		}
 		if s.onClose != nil {
 			s.onClose()

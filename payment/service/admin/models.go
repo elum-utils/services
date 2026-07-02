@@ -118,6 +118,21 @@ type ProviderAssetListParams struct {
 	Page         PageParams
 }
 
+type TONWalletUpsertParams struct {
+	WorkspaceID      string
+	Network          string
+	WalletAddress    string
+	NetworkConfigURL *string
+	IsEnabled        bool
+}
+
+type TONWalletListParams struct {
+	WorkspaceID string
+	Network     string
+	IsEnabled   *bool
+	Page        PageParams
+}
+
 type ProductGroupListParams struct {
 	WorkspaceID string
 	Page        PageParams

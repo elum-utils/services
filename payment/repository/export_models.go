@@ -22,13 +22,13 @@ type ExportPackage struct {
 	CreatedAt time.Time            `json:"created_at"`
 	Groups    []ExportProductGroup `json:"groups,omitempty"`
 	Products  []ExportProduct      `json:"products,omitempty"`
-	Items     []ExportItem         `json:"items,omitempty"`
+	Items     []ExportItem         `json:"-"`
 }
 
 type ExportProductGroup struct {
-	Code           string                `json:"code"`
-	TitleKey       *string               `json:"title_key,omitempty"`
-	DescriptionKey *string               `json:"description_key,omitempty"`
+	Code           string                `json:"key"`
+	TitleKey       *string               `json:"-"`
+	DescriptionKey *string               `json:"-"`
 	Position       int32                 `json:"position"`
 	IsActive       bool                  `json:"is_active"`
 	Localization   map[string]ExportText `json:"localization,omitempty"`
@@ -41,10 +41,10 @@ type ExportText struct {
 }
 
 type ExportProduct struct {
-	ID                   string                `json:"id"`
+	ID                   string                `json:"key"`
 	GroupCode            *string               `json:"group_code,omitempty"`
-	TitleKey             string                `json:"title_key"`
-	DescriptionKey       *string               `json:"description_key,omitempty"`
+	TitleKey             string                `json:"-"`
+	DescriptionKey       *string               `json:"-"`
 	Target               json.RawMessage       `json:"target,omitempty"`
 	ImageURL             *string               `json:"image_url,omitempty"`
 	LinkURL              *string               `json:"link_url,omitempty"`
@@ -71,8 +71,8 @@ type ExportProduct struct {
 type ExportItem struct {
 	ID             string                `json:"id"`
 	ItemType       *string               `json:"item_type,omitempty"`
-	TitleKey       string                `json:"title_key"`
-	DescriptionKey *string               `json:"description_key,omitempty"`
+	TitleKey       string                `json:"-"`
+	DescriptionKey *string               `json:"-"`
 	Rarity         string                `json:"rarity"`
 	Position       int32                 `json:"position"`
 	Localization   map[string]ExportText `json:"localization,omitempty"`

@@ -45,6 +45,8 @@ type Options struct {
 	PriceUpdateHTTPClient *http.Client
 	PriceUpdateInterval   time.Duration
 	PriceUpdateBaseURL    string
+
+	TONWalletSyncInterval time.Duration
 }
 
 type DatabaseParams struct {

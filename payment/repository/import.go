@@ -13,6 +13,7 @@ func (r *PaymentRepository) PreviewImport(ctx context.Context, workspaceID strin
 	if err != nil {
 		return ImportPreview{}, err
 	}
+	pkg = normalizeExportPackage(pkg)
 	if err := validateExportPackage(pkg); err != nil {
 		return ImportPreview{}, err
 	}
@@ -49,6 +50,7 @@ func (r *PaymentRepository) Import(ctx context.Context, workspaceID string, req 
 	if err != nil {
 		return ImportResult{}, err
 	}
+	req.Package = normalizeExportPackage(req.Package)
 	if err := validateExportPackage(req.Package); err != nil {
 		return ImportResult{}, err
 	}
@@ -424,6 +426,50 @@ func flattenProducts(pkg ExportPackage) []ExportProduct {
 	}
 	result = append(result, pkg.Products...)
 	return result
+}
+
+func normalizeExportPackage(pkg ExportPackage) ExportPackage {
+	for index := range pkg.Groups {
+		group := &pkg.Groups[index]
+		if group.TitleKey == nil && group.Code != "" {
+			group.TitleKey = stringPtr("payment.group." + group.Code + ".title")
+		}
+		if group.DescriptionKey == nil && group.Code != "" {
+			group.DescriptionKey = stringPtr("payment.group." + group.Code + ".description")
+		}
+		for productIndex := range group.Products {
+			normalizeExportProduct(&group.Products[productIndex])
+		}
+	}
+	for index := range pkg.Products {
+		normalizeExportProduct(&pkg.Products[index])
+	}
+	for index := range pkg.Items {
+		item := &pkg.Items[index]
+		if item.TitleKey == "" && item.ID != "" {
+			item.TitleKey = "payment.item." + item.ID + ".title"
+		}
+		if item.DescriptionKey == nil && item.ID != "" {
+			item.DescriptionKey = stringPtr("payment.item." + item.ID + ".description")
+		}
+	}
+	return pkg
+}
+
+func normalizeExportProduct(product *ExportProduct) {
+	if product == nil || product.ID == "" {
+		return
+	}
+	if product.TitleKey == "" {
+		product.TitleKey = "payment.product." + product.ID + ".title"
+	}
+	if product.DescriptionKey == nil {
+		product.DescriptionKey = stringPtr("payment.product." + product.ID + ".description")
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func defaultString(value, fallback string) string {
