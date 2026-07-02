@@ -9,6 +9,7 @@ import (
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
@@ -31,7 +32,7 @@ type Tasks struct {
 	ownsClient bool
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
-	background sync.WaitGroup
+	goroutines *goroutinemanager.Manager
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -82,13 +83,11 @@ func (t *Tasks) Run(ctx context.Context) error {
 	defer t.Close()
 
 	errCh := make(chan error, len(registrations))
-	t.background.Add(len(registrations))
 	for _, registration := range registrations {
 		registration := registration
-		go func() {
-			defer t.background.Done()
+		t.goroutines.Go("tasks.callback", func() {
 			errCh <- t.runCallback(registration.ctx, registration.handler, registration.options...)
-		}()
+		})
 	}
 	select {
 	case <-t.rootCtx.Done():
@@ -138,6 +137,7 @@ func (t *Tasks) adopt(running *Tasks) {
 	t.Admin, t.Internal, t.Integration, t.User = running.Admin, running.Internal, running.Integration, running.User
 	t.callbacks, t.runtime, t.client, t.ownsClient = running.callbacks, running.runtime, running.client, running.ownsClient
 	t.rootCtx, t.rootCancel = running.rootCtx, running.rootCancel
+	t.goroutines = running.goroutines
 	t.options = running.options
 }
 
@@ -161,7 +161,7 @@ func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options 
 			Runtime:           runtimeManager,
 		}),
 		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), runtime: runtimeManager, client: db, ownsClient: ownsClient,
-		rootCtx: rootCtx, rootCancel: cancel, options: options,
+		rootCtx: rootCtx, rootCancel: cancel, options: options, goroutines: goroutinemanager.New(),
 	}
 }
 
@@ -198,7 +198,9 @@ func (t *Tasks) Close() error {
 	if t.rootCancel != nil {
 		t.rootCancel()
 	}
-	t.background.Wait()
+	if t.goroutines != nil {
+		t.goroutines.Close()
+	}
 	var err error
 	if t.Admin != nil {
 		err = errors.Join(err, t.Admin.Close())

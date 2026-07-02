@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/elum-utils/services/internal/utils/contextutil"
 	json "github.com/goccy/go-json"
 	lua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
@@ -177,17 +178,8 @@ func (m *Manager) Handle(ctx context.Context, provider string, event Event) (Res
 	}
 	runCtx, cancel := context.WithTimeout(ctx, m.options.Timeout)
 	defer cancel()
-	runCtx, runCancel := context.WithCancel(runCtx)
+	runCtx, runCancel := contextutil.Merge(m.rootCtx, runCtx)
 	defer runCancel()
-	if m.rootCtx != nil {
-		go func() {
-			select {
-			case <-m.rootCtx.Done():
-				runCancel()
-			case <-runCtx.Done():
-			}
-		}()
-	}
 	state, pooled, err := m.acquireState(runCtx, script, proto)
 	if err != nil {
 		return nil, err
