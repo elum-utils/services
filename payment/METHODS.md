@@ -72,9 +72,8 @@
 | `Admin.UpsertProviderAsset(ctx, params)` | `paymentsqlc.UpsertProviderAssetParams`. | Создает или обновляет связь провайдера и asset. |
 | `Admin.DeleteProviderAsset(ctx, providerCode, assetCode)` | `providerCode`, `assetCode`. | Удаляет связь провайдера и asset. |
 | `Admin.SaveTONWallet(ctx, params)` | `TONWalletUpsertParams{WorkspaceID, Network, WalletAddress, NetworkConfigURL, IsEnabled}`. | Создает или обновляет TON merchant wallet workspace для автоматической подписки на входящие платежи. `NetworkConfigURL` опционален, по умолчанию берется config mainnet/testnet. |
-| `Admin.ListTONWallets(ctx, params)` | `TONWalletListParams{WorkspaceID, Network, IsEnabled, Page}`. | Возвращает TON wallets workspace с опциональным фильтром по network и enabled. |
-| `Admin.GetTONWallet(ctx, workspaceID, network, walletAddress)` | `workspaceID`, `network`, `walletAddress`. | Возвращает конфигурацию TON wallet. |
-| `Admin.DeleteTONWallet(ctx, workspaceID, network, walletAddress)` | `workspaceID`, `network`, `walletAddress`. | Удаляет TON wallet; runtime-синхронизация автоматически остановит соответствующий subscriber. |
+| `Admin.GetTONWallet(ctx, workspaceID)` | `workspaceID`. | Возвращает единственную конфигурацию TON wallet workspace. |
+| `Admin.DeleteTONWallet(ctx, workspaceID)` | `workspaceID`. | Удаляет TON wallet workspace; runtime-синхронизация автоматически остановит соответствующий subscriber. |
 | `Admin.GetAssetRate(ctx, assetCode, referenceAssetCode)` | `assetCode`, `referenceAssetCode`. | Возвращает курс asset к reference asset. |
 | `Admin.ListAssetRates(ctx, params)` | `AssetRateListParams{AssetCode, ReferenceAssetCode, Page}`. | Возвращает список курсов assets. |
 | `Admin.UpdateAssetRate(ctx, params)` | `UpdateAssetRateParams{AssetCode, ReferenceAssetCode, ReferencePerAssetMinor, Source, ObservedAt}`. | Обновляет курс asset и связанные динамические цены. |

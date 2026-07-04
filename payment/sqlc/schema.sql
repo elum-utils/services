@@ -748,6 +748,7 @@ CREATE TABLE IF NOT EXISTS payment_ton_wallet (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (workspace_id, network, wallet_address),
+    UNIQUE KEY payment_ton_wallet_workspace_uq (workspace_id),
     KEY payment_ton_wallet_enabled_idx (is_enabled, network, updated_at)
 );
 

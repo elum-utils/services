@@ -12,8 +12,6 @@ type CreatePaymentParams struct {
 	Quantity       uint64
 	AssetCode      string
 	Locale         string
-	WalletAddress  string
-	Network        string
 	ExpiresAt      *time.Time
 	ReservedUntil  *time.Time
 }

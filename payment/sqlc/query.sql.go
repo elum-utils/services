@@ -984,19 +984,11 @@ SELECT
     updated_at
 FROM payment_ton_wallet
 WHERE workspace_id = ?
-  AND network = ?
-  AND wallet_address = ?
 LIMIT 1
 `
 
-type AdminGetTONWalletParams struct {
-	WorkspaceID   string `json:"workspace_id"`
-	Network       string `json:"network"`
-	WalletAddress string `json:"wallet_address"`
-}
-
-func (q *Queries) AdminGetTONWallet(ctx context.Context, arg AdminGetTONWalletParams) (PaymentTonWallet, error) {
-	row := q.queryRow(ctx, q.adminGetTONWalletStmt, adminGetTONWallet, arg.WorkspaceID, arg.Network, arg.WalletAddress)
+func (q *Queries) AdminGetTONWallet(ctx context.Context, workspaceID string) (PaymentTonWallet, error) {
+	row := q.queryRow(ctx, q.adminGetTONWalletStmt, adminGetTONWallet, workspaceID)
 	var i PaymentTonWallet
 	err := row.Scan(
 		&i.WorkspaceID,
@@ -2805,72 +2797,6 @@ func (q *Queries) AdminListSubscriptions(ctx context.Context, arg AdminListSubsc
 	return items, nil
 }
 
-const adminListTONWallets = `-- name: AdminListTONWallets :many
-SELECT
-    workspace_id,
-    network,
-    wallet_address,
-    network_config_url,
-    is_enabled,
-    created_at,
-    updated_at
-FROM payment_ton_wallet
-WHERE workspace_id = ?
-  AND (? = '' OR network = ?)
-  AND (? OR is_enabled = ?)
-ORDER BY network, wallet_address
-LIMIT ? OFFSET ?
-`
-
-type AdminListTONWalletsParams struct {
-	WorkspaceID string      `json:"workspace_id"`
-	Column2     interface{} `json:"column_2"`
-	Network     string      `json:"network"`
-	Column4     interface{} `json:"column_4"`
-	IsEnabled   bool        `json:"is_enabled"`
-	Limit       int32       `json:"limit"`
-	Offset      int32       `json:"offset"`
-}
-
-func (q *Queries) AdminListTONWallets(ctx context.Context, arg AdminListTONWalletsParams) ([]PaymentTonWallet, error) {
-	rows, err := q.query(ctx, q.adminListTONWalletsStmt, adminListTONWallets,
-		arg.WorkspaceID,
-		arg.Column2,
-		arg.Network,
-		arg.Column4,
-		arg.IsEnabled,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []PaymentTonWallet
-	for rows.Next() {
-		var i PaymentTonWallet
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.Network,
-			&i.WalletAddress,
-			&i.NetworkConfigUrl,
-			&i.IsEnabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const adminSetRefundProviderID = `-- name: AdminSetRefundProviderID :execrows
 UPDATE payment_refund
 SET provider_refund_id = ?,
@@ -4093,18 +4019,10 @@ func (q *Queries) DeleteProviderAsset(ctx context.Context, arg DeleteProviderAss
 const deleteTONWallet = `-- name: DeleteTONWallet :execrows
 DELETE FROM payment_ton_wallet
 WHERE workspace_id = ?
-  AND network = ?
-  AND wallet_address = ?
 `
 
-type DeleteTONWalletParams struct {
-	WorkspaceID   string `json:"workspace_id"`
-	Network       string `json:"network"`
-	WalletAddress string `json:"wallet_address"`
-}
-
-func (q *Queries) DeleteTONWallet(ctx context.Context, arg DeleteTONWalletParams) (int64, error) {
-	result, err := q.exec(ctx, q.deleteTONWalletStmt, deleteTONWallet, arg.WorkspaceID, arg.Network, arg.WalletAddress)
+func (q *Queries) DeleteTONWallet(ctx context.Context, workspaceID string) (int64, error) {
+	result, err := q.exec(ctx, q.deleteTONWalletStmt, deleteTONWallet, workspaceID)
 	if err != nil {
 		return 0, err
 	}
@@ -4530,6 +4448,36 @@ func (q *Queries) GetCurrentProductPrice(ctx context.Context, arg GetCurrentProd
 		&i.IsPromotion,
 		&i.StartsAt,
 		&i.EndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEnabledTONWalletForWorkspace = `-- name: GetEnabledTONWalletForWorkspace :one
+SELECT
+    workspace_id,
+    network,
+    wallet_address,
+    network_config_url,
+    is_enabled,
+    created_at,
+    updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = ?
+  AND is_enabled = 1
+LIMIT 1
+`
+
+func (q *Queries) GetEnabledTONWalletForWorkspace(ctx context.Context, workspaceID string) (PaymentTonWallet, error) {
+	row := q.queryRow(ctx, q.getEnabledTONWalletForWorkspaceStmt, getEnabledTONWalletForWorkspace, workspaceID)
+	var i PaymentTonWallet
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Network,
+		&i.WalletAddress,
+		&i.NetworkConfigUrl,
+		&i.IsEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -8820,6 +8768,8 @@ INSERT INTO payment_ton_wallet (
 )
 VALUES (?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
+    network = VALUES(network),
+    wallet_address = VALUES(wallet_address),
     network_config_url = VALUES(network_config_url),
     is_enabled = VALUES(is_enabled),
     updated_at = NOW()

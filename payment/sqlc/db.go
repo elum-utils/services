@@ -153,9 +153,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminListSubscriptionsStmt, err = db.PrepareContext(ctx, adminListSubscriptions); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListSubscriptions: %w", err)
 	}
-	if q.adminListTONWalletsStmt, err = db.PrepareContext(ctx, adminListTONWallets); err != nil {
-		return nil, fmt.Errorf("error preparing query AdminListTONWallets: %w", err)
-	}
 	if q.adminSetRefundProviderIDStmt, err = db.PrepareContext(ctx, adminSetRefundProviderID); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminSetRefundProviderID: %w", err)
 	}
@@ -290,6 +287,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getCurrentProductPriceStmt, err = db.PrepareContext(ctx, getCurrentProductPrice); err != nil {
 		return nil, fmt.Errorf("error preparing query GetCurrentProductPrice: %w", err)
+	}
+	if q.getEnabledTONWalletForWorkspaceStmt, err = db.PrepareContext(ctx, getEnabledTONWalletForWorkspace); err != nil {
+		return nil, fmt.Errorf("error preparing query GetEnabledTONWalletForWorkspace: %w", err)
 	}
 	if q.getFulfilledAttemptResultStmt, err = db.PrepareContext(ctx, getFulfilledAttemptResult); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFulfilledAttemptResult: %w", err)
@@ -721,11 +721,6 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminListSubscriptionsStmt: %w", cerr)
 		}
 	}
-	if q.adminListTONWalletsStmt != nil {
-		if cerr := q.adminListTONWalletsStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing adminListTONWalletsStmt: %w", cerr)
-		}
-	}
 	if q.adminSetRefundProviderIDStmt != nil {
 		if cerr := q.adminSetRefundProviderIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminSetRefundProviderIDStmt: %w", cerr)
@@ -949,6 +944,11 @@ func (q *Queries) Close() error {
 	if q.getCurrentProductPriceStmt != nil {
 		if cerr := q.getCurrentProductPriceStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getCurrentProductPriceStmt: %w", cerr)
+		}
+	}
+	if q.getEnabledTONWalletForWorkspaceStmt != nil {
+		if cerr := q.getEnabledTONWalletForWorkspaceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getEnabledTONWalletForWorkspaceStmt: %w", cerr)
 		}
 	}
 	if q.getFulfilledAttemptResultStmt != nil {
@@ -1383,7 +1383,6 @@ type Queries struct {
 	adminListPurchaseKeysStmt                             *sql.Stmt
 	adminListRefundsStmt                                  *sql.Stmt
 	adminListSubscriptionsStmt                            *sql.Stmt
-	adminListTONWalletsStmt                               *sql.Stmt
 	adminSetRefundProviderIDStmt                          *sql.Stmt
 	adminUpdateFulfillmentStatusStmt                      *sql.Stmt
 	adminUpdateOrderStatusStmt                            *sql.Stmt
@@ -1429,6 +1428,7 @@ type Queries struct {
 	getAssetUSDTPriceStmt                                 *sql.Stmt
 	getCheckoutProductStmt                                *sql.Stmt
 	getCurrentProductPriceStmt                            *sql.Stmt
+	getEnabledTONWalletForWorkspaceStmt                   *sql.Stmt
 	getFulfilledAttemptResultStmt                         *sql.Stmt
 	getFulfillmentForOrderStmt                            *sql.Stmt
 	getFulfillmentItemsForOrderStmt                       *sql.Stmt
@@ -1548,7 +1548,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminListPurchaseKeysStmt:                             q.adminListPurchaseKeysStmt,
 		adminListRefundsStmt:                                  q.adminListRefundsStmt,
 		adminListSubscriptionsStmt:                            q.adminListSubscriptionsStmt,
-		adminListTONWalletsStmt:                               q.adminListTONWalletsStmt,
 		adminSetRefundProviderIDStmt:                          q.adminSetRefundProviderIDStmt,
 		adminUpdateFulfillmentStatusStmt:                      q.adminUpdateFulfillmentStatusStmt,
 		adminUpdateOrderStatusStmt:                            q.adminUpdateOrderStatusStmt,
@@ -1594,6 +1593,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getAssetUSDTPriceStmt:                                 q.getAssetUSDTPriceStmt,
 		getCheckoutProductStmt:                                q.getCheckoutProductStmt,
 		getCurrentProductPriceStmt:                            q.getCurrentProductPriceStmt,
+		getEnabledTONWalletForWorkspaceStmt:                   q.getEnabledTONWalletForWorkspaceStmt,
 		getFulfilledAttemptResultStmt:                         q.getFulfilledAttemptResultStmt,
 		getFulfillmentForOrderStmt:                            q.getFulfillmentForOrderStmt,
 		getFulfillmentItemsForOrderStmt:                       q.getFulfillmentItemsForOrderStmt,

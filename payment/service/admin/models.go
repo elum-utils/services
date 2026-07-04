@@ -126,13 +126,6 @@ type TONWalletUpsertParams struct {
 	IsEnabled        bool
 }
 
-type TONWalletListParams struct {
-	WorkspaceID string
-	Network     string
-	IsEnabled   *bool
-	Page        PageParams
-}
-
 type ProductGroupListParams struct {
 	WorkspaceID string
 	Page        PageParams

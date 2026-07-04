@@ -22,42 +22,14 @@ func (a *Admin) SaveTONWallet(ctx context.Context, params TONWalletUpsertParams)
 	})
 }
 
-func (a *Admin) DeleteTONWallet(ctx context.Context, workspaceID string, network string, walletAddress string) (int64, error) {
+func (a *Admin) DeleteTONWallet(ctx context.Context, workspaceID string) (int64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
-	return a.repository.DeleteTONWallet(mergedCtx, paymentsqlc.DeleteTONWalletParams{
-		WorkspaceID:   workspaceID,
-		Network:       network,
-		WalletAddress: walletAddress,
-	})
+	return a.repository.DeleteTONWallet(mergedCtx, workspaceID)
 }
 
-func (a *Admin) GetTONWallet(ctx context.Context, workspaceID string, network string, walletAddress string) (paymentsqlc.PaymentTonWallet, error) {
+func (a *Admin) GetTONWallet(ctx context.Context, workspaceID string) (paymentsqlc.PaymentTonWallet, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
-	return a.repository.AdminGetTONWallet(mergedCtx, paymentsqlc.AdminGetTONWalletParams{
-		WorkspaceID:   workspaceID,
-		Network:       network,
-		WalletAddress: walletAddress,
-	})
-}
-
-func (a *Admin) ListTONWallets(ctx context.Context, params TONWalletListParams) ([]paymentsqlc.PaymentTonWallet, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	limit, offset := normalizePage(params.Page)
-	filterEnabled := params.IsEnabled != nil
-	enabled := false
-	if params.IsEnabled != nil {
-		enabled = *params.IsEnabled
-	}
-	return a.repository.AdminListTONWallets(mergedCtx, paymentsqlc.AdminListTONWalletsParams{
-		WorkspaceID: params.WorkspaceID,
-		Column2:     params.Network,
-		Network:     params.Network,
-		Column4:     !filterEnabled,
-		IsEnabled:   enabled,
-		Limit:       limit,
-		Offset:      offset,
-	})
+	return a.repository.AdminGetTONWallet(mergedCtx, workspaceID)
 }

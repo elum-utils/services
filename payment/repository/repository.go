@@ -151,6 +151,13 @@ func (r *PaymentRepository) applySchemaUpgrades(ctx context.Context) error {
 			return fmt.Errorf("payment schema upgrade %s.%s failed: %w", upgrade.table, upgrade.column, err)
 		}
 	}
+	if err := sqlwrap.EnsureIndex(ctx, r.db, bootstrapQueryTimeout,
+		"payment_ton_wallet",
+		"payment_ton_wallet_workspace_uq",
+		"UNIQUE KEY `payment_ton_wallet_workspace_uq` (`workspace_id`)",
+	); err != nil {
+		return fmt.Errorf("payment schema upgrade payment_ton_wallet.workspace unique key failed: %w", err)
+	}
 	return nil
 }
 

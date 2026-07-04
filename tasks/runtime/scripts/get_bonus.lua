@@ -1,6 +1,19 @@
+local GETBONUS_WEBHOOK_API_KEY = "***"
+
 function getbonus_base_url(event)
     event.config.settings = event.config.settings or {}
     return event.config.settings.base_url or "https://stage.gb-platform.online"
+end
+
+function getbonus_header(headers, name)
+    headers = headers or {}
+    local expected = string.lower(name)
+    for key, value in pairs(headers) do
+        if string.lower(tostring(key)) == expected then
+            return value
+        end
+    end
+    return nil
 end
 
 function list(event)
@@ -120,7 +133,17 @@ function check(event)
 end
 
 function callback(event)
-    local body = event.request.body or {}
+    local request = event.request or {}
+    local api_key = getbonus_header(request.headers, "X-Api-Key")
+    local expected_api_key = GETBONUS_WEBHOOK_API_KEY
+    if expected_api_key == nil or expected_api_key == "" or api_key ~= expected_api_key then
+        return {
+            ok = false,
+            error = "invalid_api_key"
+        }
+    end
+
+    local body = request.body or {}
     if body.event ~= "step_completed" then
         return {
             ok = false,
