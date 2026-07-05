@@ -45,7 +45,55 @@ func (r *Repository) ListActive(ctx context.Context, identity Identity, locale, 
 			tasks[index].Progress = &progress
 		}
 	}
+	if err := r.attachComplexConditions(ctx, identity.WorkspaceID, tasks); err != nil {
+		return nil, err
+	}
 	return tasks, nil
+}
+
+func (r *Repository) attachComplexConditions(ctx context.Context, workspaceID string, tasks []ActiveTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	taskByID := make(map[uint64]int, len(tasks))
+	hasComplex := false
+	for index, task := range tasks {
+		taskByID[task.ID] = index
+		if task.TaskKind == TaskKindComplex {
+			hasComplex = true
+		}
+	}
+	if !hasComplex {
+		return nil
+	}
+	key := activeComplexConditionsCacheKey(workspaceID)
+	rememberTaskCacheKey(workspaceID, key)
+	rows, err := repositoryQuery(ctx, r, sqlwrap.Params{
+		Key:          key,
+		CacheL1Delay: r.cacheL1Delay,
+		CacheL2Delay: r.cacheL2Delay,
+	}, func(ctx context.Context) ([]tasksqlc.ListActiveComplexConditionsRow, error) {
+		return r.q.ListActiveComplexConditions(ctx, workspaceID)
+	})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		parentIndex, parentOK := taskByID[row.ParentTaskID]
+		childIndex, childOK := taskByID[row.ConditionTaskID]
+		if !parentOK || !childOK || tasks[parentIndex].TaskKind != TaskKindComplex {
+			continue
+		}
+		child := tasks[childIndex]
+		child.Conditions = nil
+		tasks[parentIndex].Conditions = append(tasks[parentIndex].Conditions, child)
+	}
+	for index := range tasks {
+		if tasks[index].TaskKind == TaskKindComplex && len(tasks[index].Conditions) > 0 {
+			tasks[index].TargetCount = uint64(len(tasks[index].Conditions))
+		}
+	}
+	return nil
 }
 
 func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale, groupKey string) ([]ActiveTask, error) {
@@ -83,6 +131,7 @@ func activeTasksFromTasks(tasks []Task) []ActiveTask {
 			ActionKey: task.ActionKey, ActionKind: task.ActionKind, ClaimMode: task.ClaimMode, StartMode: task.StartMode,
 			TargetCount: task.TargetCount, Payload: task.Payload, ImageURL: task.ImageURL,
 			Rewards: task.Rewards, StartAt: task.StartAt, EndAt: task.EndAt, Target: task.Target,
+			Conditions: task.Conditions,
 		}
 		if task.Localization != nil {
 			out.Title = task.Localization.Title

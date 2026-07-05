@@ -71,6 +71,15 @@ type RewardModel struct {
 	Unit     *string `json:"unit,omitempty"`
 }
 
+type ComplexConditionModel struct {
+	WorkspaceID     string `json:"workspace_id,omitempty"`
+	ParentTaskID    uint64 `json:"parent_task_id"`
+	ConditionTaskID uint64 `json:"condition_task_id"`
+	RequiredStatus  string `json:"required_status"`
+	Position        int32  `json:"position"`
+	IsRequired      bool   `json:"is_required"`
+}
+
 type StatsModel struct {
 	TasksTotal         uint64 `json:"tasks_total"`
 	ActiveTasks        uint64 `json:"active_tasks"`
@@ -184,6 +193,7 @@ type PartnerDailyStatsModel struct {
 	UniqueClaimers         uint64    `json:"unique_claimers"`
 }
 
+type SaveComplexConditionParams = repository.SaveComplexConditionParams
 type ExportPackage = repository.ExportPackage
 type ExportRequest = repository.ExportRequest
 type ExportManifest = repository.ExportManifest

@@ -12,6 +12,48 @@ import (
 	"time"
 )
 
+type TaskComplexConditionRequiredStatus string
+
+const (
+	TaskComplexConditionRequiredStatusReady   TaskComplexConditionRequiredStatus = "ready"
+	TaskComplexConditionRequiredStatusClaimed TaskComplexConditionRequiredStatus = "claimed"
+)
+
+func (e *TaskComplexConditionRequiredStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskComplexConditionRequiredStatus(s)
+	case string:
+		*e = TaskComplexConditionRequiredStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskComplexConditionRequiredStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTaskComplexConditionRequiredStatus struct {
+	TaskComplexConditionRequiredStatus TaskComplexConditionRequiredStatus `json:"task_complex_condition_required_status"`
+	Valid                              bool                               `json:"valid"` // Valid is true if TaskComplexConditionRequiredStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskComplexConditionRequiredStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskComplexConditionRequiredStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskComplexConditionRequiredStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskComplexConditionRequiredStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskComplexConditionRequiredStatus), nil
+}
+
 type TaskDefinitionActionKind string
 
 const (
@@ -21,6 +63,7 @@ const (
 	TaskDefinitionActionKindChannelBoost      TaskDefinitionActionKind = "channel_boost"
 	TaskDefinitionActionKindAdvertisementView TaskDefinitionActionKind = "advertisement_view"
 	TaskDefinitionActionKindExternal          TaskDefinitionActionKind = "external"
+	TaskDefinitionActionKindComposite         TaskDefinitionActionKind = "composite"
 )
 
 func (e *TaskDefinitionActionKind) Scan(src interface{}) error {
@@ -577,6 +620,17 @@ func (ns NullTaskStatsEventEventType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.TaskStatsEventEventType), nil
+}
+
+type TaskComplexCondition struct {
+	WorkspaceID     string                             `json:"workspace_id"`
+	ParentTaskID    uint64                             `json:"parent_task_id"`
+	ConditionTaskID uint64                             `json:"condition_task_id"`
+	RequiredStatus  TaskComplexConditionRequiredStatus `json:"required_status"`
+	Position        int32                              `json:"position"`
+	IsRequired      bool                               `json:"is_required"`
+	CreatedAt       time.Time                          `json:"created_at"`
+	UpdatedAt       time.Time                          `json:"updated_at"`
 }
 
 type TaskDefinition struct {

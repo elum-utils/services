@@ -13,6 +13,10 @@ func activeCatalogCacheKey(workspaceID, locale, groupKey string) string {
 	return sqlwrap.CreateKey("tasks", "active_catalog", workspaceID, locale, groupKey)
 }
 
+func activeComplexConditionsCacheKey(workspaceID string) string {
+	return sqlwrap.CreateKey("tasks", "active_complex_conditions", workspaceID)
+}
+
 func recordCatalogCacheKey(workspaceID, actionKey string) string {
 	return sqlwrap.CreateKey("tasks", "record_catalog", workspaceID, actionKey)
 }

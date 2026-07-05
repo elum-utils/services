@@ -22,6 +22,7 @@ func (r *Repository) ExportManifest() ExportManifest {
 			{Key: ExportSectionIntegration, Title: "Integration", Description: "Private integration configuration without secret values.", DefaultEnabled: true},
 			{Key: ExportSectionPartnerConfigs, Title: "Partner configs", Description: "Partner provider settings without secret values.", DefaultEnabled: true},
 			{Key: ExportSectionPartnerRewards, Title: "Partner rewards", Description: "Partner reward rules.", DefaultEnabled: true},
+			{Key: ExportSectionComplex, Title: "Complex tasks", Description: "Complex task conditions.", DefaultEnabled: true},
 		},
 	}
 }
@@ -101,6 +102,15 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			return ExportPackage{}, err
 		}
 	}
+	var complexConditions []tasksqlc.TaskComplexCondition
+	if sections[ExportSectionComplex] {
+		complexConditions, err = repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskComplexCondition, error) {
+			return r.q.AdminListComplexConditions(ctx, workspaceID)
+		})
+		if err != nil {
+			return ExportPackage{}, err
+		}
+	}
 
 	groupIndexByKey := make(map[string]int, len(groups))
 	out := ExportPackage{
@@ -145,6 +155,23 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			Scale: reward.Scale, Unit: taskDurationUnitPtr(reward.DurationUnit), Position: reward.Position,
 		})
 	}
+	taskKeyByID := make(map[uint64]string, len(taskRows))
+	for _, row := range taskRows {
+		taskKeyByID[row.ID] = row.Key
+	}
+	conditionsByParentID := make(map[uint64][]ExportCondition)
+	for _, condition := range complexConditions {
+		taskKey, ok := taskKeyByID[condition.ConditionTaskID]
+		if !ok {
+			continue
+		}
+		conditionsByParentID[condition.ParentTaskID] = append(conditionsByParentID[condition.ParentTaskID], ExportCondition{
+			TaskKey:        taskKey,
+			RequiredStatus: string(condition.RequiredStatus),
+			Position:       condition.Position,
+			IsRequired:     condition.IsRequired,
+		})
+	}
 	for _, row := range taskRows {
 		index, ok := groupIndexByKey[row.GroupKey]
 		if !ok {
@@ -177,7 +204,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			Integration: integration,
 			ImageURL:    task.ImageURL, IsVisible: task.IsVisible, IsActive: task.IsActive,
 			StartAt: task.StartAt, EndAt: task.EndAt, Localization: taskLocalizationsByID[task.ID],
-			Rewards: rewardsByTaskID[task.ID],
+			Rewards: rewardsByTaskID[task.ID], Conditions: conditionsByParentID[task.ID],
 		})
 	}
 	for _, row := range partnerConfigs {
@@ -216,7 +243,7 @@ func exportSections(values []string) map[string]bool {
 	all := []string{
 		ExportSectionGroups, ExportSectionSequences, ExportSectionTasks, ExportSectionLocalization,
 		ExportSectionRewards, ExportSectionTarget, ExportSectionIntegration, ExportSectionPartnerConfigs,
-		ExportSectionPartnerRewards,
+		ExportSectionPartnerRewards, ExportSectionComplex,
 	}
 	out := make(map[string]bool, len(all))
 	if len(values) == 0 {

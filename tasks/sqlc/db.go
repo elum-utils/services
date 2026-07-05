@@ -27,6 +27,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminCreateTaskStmt, err = db.PrepareContext(ctx, adminCreateTask); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminCreateTask: %w", err)
 	}
+	if q.adminDeleteComplexConditionStmt, err = db.PrepareContext(ctx, adminDeleteComplexCondition); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminDeleteComplexCondition: %w", err)
+	}
 	if q.adminDeletePartnerRewardRuleStmt, err = db.PrepareContext(ctx, adminDeletePartnerRewardRule); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminDeletePartnerRewardRule: %w", err)
 	}
@@ -56,6 +59,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.adminListAllRewardsStmt, err = db.PrepareContext(ctx, adminListAllRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListAllRewards: %w", err)
+	}
+	if q.adminListComplexConditionsStmt, err = db.PrepareContext(ctx, adminListComplexConditions); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminListComplexConditions: %w", err)
 	}
 	if q.adminListGroupLocalizationsStmt, err = db.PrepareContext(ctx, adminListGroupLocalizations); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListGroupLocalizations: %w", err)
@@ -95,6 +101,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.adminUpdateTaskStmt, err = db.PrepareContext(ctx, adminUpdateTask); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpdateTask: %w", err)
+	}
+	if q.adminUpsertComplexConditionStmt, err = db.PrepareContext(ctx, adminUpsertComplexCondition); err != nil {
+		return nil, fmt.Errorf("error preparing query AdminUpsertComplexCondition: %w", err)
 	}
 	if q.adminUpsertGroupStmt, err = db.PrepareContext(ctx, adminUpsertGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertGroup: %w", err)
@@ -210,11 +219,20 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.insertProgressEventStmt, err = db.PrepareContext(ctx, insertProgressEvent); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertProgressEvent: %w", err)
 	}
+	if q.listActiveComplexConditionsStmt, err = db.PrepareContext(ctx, listActiveComplexConditions); err != nil {
+		return nil, fmt.Errorf("error preparing query ListActiveComplexConditions: %w", err)
+	}
 	if q.listActiveTaskBundlesStmt, err = db.PrepareContext(ctx, listActiveTaskBundles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveTaskBundles: %w", err)
 	}
 	if q.listAllPartnerConfigsStmt, err = db.PrepareContext(ctx, listAllPartnerConfigs); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAllPartnerConfigs: %w", err)
+	}
+	if q.listComplexConditionProgressForParentStmt, err = db.PrepareContext(ctx, listComplexConditionProgressForParent); err != nil {
+		return nil, fmt.Errorf("error preparing query ListComplexConditionProgressForParent: %w", err)
+	}
+	if q.listComplexParentIDsForConditionTasksStmt, err = db.PrepareContext(ctx, listComplexParentIDsForConditionTasks); err != nil {
+		return nil, fmt.Errorf("error preparing query ListComplexParentIDsForConditionTasks: %w", err)
 	}
 	if q.listCurrentProgressForUserStmt, err = db.PrepareContext(ctx, listCurrentProgressForUser); err != nil {
 		return nil, fmt.Errorf("error preparing query ListCurrentProgressForUser: %w", err)
@@ -274,6 +292,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminCreateTaskStmt: %w", cerr)
 		}
 	}
+	if q.adminDeleteComplexConditionStmt != nil {
+		if cerr := q.adminDeleteComplexConditionStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminDeleteComplexConditionStmt: %w", cerr)
+		}
+	}
 	if q.adminDeletePartnerRewardRuleStmt != nil {
 		if cerr := q.adminDeletePartnerRewardRuleStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminDeletePartnerRewardRuleStmt: %w", cerr)
@@ -322,6 +345,11 @@ func (q *Queries) Close() error {
 	if q.adminListAllRewardsStmt != nil {
 		if cerr := q.adminListAllRewardsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminListAllRewardsStmt: %w", cerr)
+		}
+	}
+	if q.adminListComplexConditionsStmt != nil {
+		if cerr := q.adminListComplexConditionsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminListComplexConditionsStmt: %w", cerr)
 		}
 	}
 	if q.adminListGroupLocalizationsStmt != nil {
@@ -387,6 +415,11 @@ func (q *Queries) Close() error {
 	if q.adminUpdateTaskStmt != nil {
 		if cerr := q.adminUpdateTaskStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminUpdateTaskStmt: %w", cerr)
+		}
+	}
+	if q.adminUpsertComplexConditionStmt != nil {
+		if cerr := q.adminUpsertComplexConditionStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing adminUpsertComplexConditionStmt: %w", cerr)
 		}
 	}
 	if q.adminUpsertGroupStmt != nil {
@@ -579,6 +612,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing insertProgressEventStmt: %w", cerr)
 		}
 	}
+	if q.listActiveComplexConditionsStmt != nil {
+		if cerr := q.listActiveComplexConditionsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listActiveComplexConditionsStmt: %w", cerr)
+		}
+	}
 	if q.listActiveTaskBundlesStmt != nil {
 		if cerr := q.listActiveTaskBundlesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listActiveTaskBundlesStmt: %w", cerr)
@@ -587,6 +625,16 @@ func (q *Queries) Close() error {
 	if q.listAllPartnerConfigsStmt != nil {
 		if cerr := q.listAllPartnerConfigsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAllPartnerConfigsStmt: %w", cerr)
+		}
+	}
+	if q.listComplexConditionProgressForParentStmt != nil {
+		if cerr := q.listComplexConditionProgressForParentStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listComplexConditionProgressForParentStmt: %w", cerr)
+		}
+	}
+	if q.listComplexParentIDsForConditionTasksStmt != nil {
+		if cerr := q.listComplexParentIDsForConditionTasksStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listComplexParentIDsForConditionTasksStmt: %w", cerr)
 		}
 	}
 	if q.listCurrentProgressForUserStmt != nil {
@@ -706,173 +754,185 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                                      DBTX
-	tx                                      *sql.Tx
-	adminCreateTaskStmt                     *sql.Stmt
-	adminDeletePartnerRewardRuleStmt        *sql.Stmt
-	adminDeleteRewardStmt                   *sql.Stmt
-	adminDeleteTaskStmt                     *sql.Stmt
-	adminGetPartnerConfigStmt               *sql.Stmt
-	adminGetPartnerScriptStmt               *sql.Stmt
-	adminGetSingleTaskStatsStmt             *sql.Stmt
-	adminGetTaskStmt                        *sql.Stmt
-	adminGetTaskByKeyStmt                   *sql.Stmt
-	adminGetTaskStatsStmt                   *sql.Stmt
-	adminListAllRewardsStmt                 *sql.Stmt
-	adminListGroupLocalizationsStmt         *sql.Stmt
-	adminListGroupsStmt                     *sql.Stmt
-	adminListPartnerConfigsStmt             *sql.Stmt
-	adminListPartnerDailyStatsStmt          *sql.Stmt
-	adminListPartnerRewardRulesStmt         *sql.Stmt
-	adminListPartnerScriptsStmt             *sql.Stmt
-	adminListSequencesStmt                  *sql.Stmt
-	adminListTaskDailyOverviewStmt          *sql.Stmt
-	adminListTaskDailyStatsStmt             *sql.Stmt
-	adminListTaskLocalizationsStmt          *sql.Stmt
-	adminListTasksStmt                      *sql.Stmt
-	adminListTasksByGroupStmt               *sql.Stmt
-	adminUpdateTaskStmt                     *sql.Stmt
-	adminUpsertGroupStmt                    *sql.Stmt
-	adminUpsertGroupLocalizationStmt        *sql.Stmt
-	adminUpsertPartnerConfigStmt            *sql.Stmt
-	adminUpsertPartnerRewardRuleStmt        *sql.Stmt
-	adminUpsertPartnerScriptStmt            *sql.Stmt
-	adminUpsertRewardStmt                   *sql.Stmt
-	adminUpsertSequenceStmt                 *sql.Stmt
-	adminUpsertTaskLocalizationStmt         *sql.Stmt
-	claimPartnerIssueStmt                   *sql.Stmt
-	completePartnerIssueStmt                *sql.Stmt
-	countProgressEventsByExternalKeyStmt    *sql.Stmt
-	createPartnerIssueStmt                  *sql.Stmt
-	ensureProgressStmt                      *sql.Stmt
-	exportListTasksStmt                     *sql.Stmt
-	getClaimBundleByIDForUpdateStmt         *sql.Stmt
-	getClaimBundleByKeyForUpdateStmt        *sql.Stmt
-	getClaimCatalogByIDStmt                 *sql.Stmt
-	getClaimCatalogByKeyStmt                *sql.Stmt
-	getCurrentProgressForUpdateStmt         *sql.Stmt
-	getEnabledPartnerScriptStmt             *sql.Stmt
-	getIntegrationCheckTaskByIDStmt         *sql.Stmt
-	getIntegrationCheckTaskByKeyStmt        *sql.Stmt
-	getNextSequenceTaskIDStmt               *sql.Stmt
-	getPartnerConfigByWebhookSecretStmt     *sql.Stmt
-	getPartnerIssueByExternalClickIDStmt    *sql.Stmt
-	getPartnerIssueByExternalUserStmt       *sql.Stmt
-	getPartnerIssueByIDStmt                 *sql.Stmt
-	getPartnerIssueByIDForUpdateStmt        *sql.Stmt
-	getPartnerIssueByPrivatePayloadUserStmt *sql.Stmt
-	getPartnerRewardGrantByIssueStmt        *sql.Stmt
-	getSequenceStateForUpdateStmt           *sql.Stmt
-	getStartTaskByIDStmt                    *sql.Stmt
-	getStartTaskByKeyStmt                   *sql.Stmt
-	incrementPartnerStatsDailyStmt          *sql.Stmt
-	insertPartnerRewardGrantStmt            *sql.Stmt
-	insertPartnerStatsEventStmt             *sql.Stmt
-	insertPartnerStatsUniqueUserStmt        *sql.Stmt
-	insertProgressEventStmt                 *sql.Stmt
-	listActiveTaskBundlesStmt               *sql.Stmt
-	listAllPartnerConfigsStmt               *sql.Stmt
-	listCurrentProgressForUserStmt          *sql.Stmt
-	listCurrentProgressForUserForUpdateStmt *sql.Stmt
-	listPartnerIssuesForUserStmt            *sql.Stmt
-	listPartnerRewardRulesStmt              *sql.Stmt
-	listRecordCatalogStmt                   *sql.Stmt
-	listRecordTasksStmt                     *sql.Stmt
-	listRewardsStmt                         *sql.Stmt
-	listRewardsCatalogStmt                  *sql.Stmt
-	listSequenceStatesForUserStmt           *sql.Stmt
-	refreshTaskDailyOverviewStmt            *sql.Stmt
-	refreshTaskDailyStatsStmt               *sql.Stmt
-	revokePartnerIssueStmt                  *sql.Stmt
-	updatePartnerIssueStartStmt             *sql.Stmt
-	updateProgressStmt                      *sql.Stmt
-	upsertProgressStmt                      *sql.Stmt
-	upsertSequenceStateStmt                 *sql.Stmt
+	db                                        DBTX
+	tx                                        *sql.Tx
+	adminCreateTaskStmt                       *sql.Stmt
+	adminDeleteComplexConditionStmt           *sql.Stmt
+	adminDeletePartnerRewardRuleStmt          *sql.Stmt
+	adminDeleteRewardStmt                     *sql.Stmt
+	adminDeleteTaskStmt                       *sql.Stmt
+	adminGetPartnerConfigStmt                 *sql.Stmt
+	adminGetPartnerScriptStmt                 *sql.Stmt
+	adminGetSingleTaskStatsStmt               *sql.Stmt
+	adminGetTaskStmt                          *sql.Stmt
+	adminGetTaskByKeyStmt                     *sql.Stmt
+	adminGetTaskStatsStmt                     *sql.Stmt
+	adminListAllRewardsStmt                   *sql.Stmt
+	adminListComplexConditionsStmt            *sql.Stmt
+	adminListGroupLocalizationsStmt           *sql.Stmt
+	adminListGroupsStmt                       *sql.Stmt
+	adminListPartnerConfigsStmt               *sql.Stmt
+	adminListPartnerDailyStatsStmt            *sql.Stmt
+	adminListPartnerRewardRulesStmt           *sql.Stmt
+	adminListPartnerScriptsStmt               *sql.Stmt
+	adminListSequencesStmt                    *sql.Stmt
+	adminListTaskDailyOverviewStmt            *sql.Stmt
+	adminListTaskDailyStatsStmt               *sql.Stmt
+	adminListTaskLocalizationsStmt            *sql.Stmt
+	adminListTasksStmt                        *sql.Stmt
+	adminListTasksByGroupStmt                 *sql.Stmt
+	adminUpdateTaskStmt                       *sql.Stmt
+	adminUpsertComplexConditionStmt           *sql.Stmt
+	adminUpsertGroupStmt                      *sql.Stmt
+	adminUpsertGroupLocalizationStmt          *sql.Stmt
+	adminUpsertPartnerConfigStmt              *sql.Stmt
+	adminUpsertPartnerRewardRuleStmt          *sql.Stmt
+	adminUpsertPartnerScriptStmt              *sql.Stmt
+	adminUpsertRewardStmt                     *sql.Stmt
+	adminUpsertSequenceStmt                   *sql.Stmt
+	adminUpsertTaskLocalizationStmt           *sql.Stmt
+	claimPartnerIssueStmt                     *sql.Stmt
+	completePartnerIssueStmt                  *sql.Stmt
+	countProgressEventsByExternalKeyStmt      *sql.Stmt
+	createPartnerIssueStmt                    *sql.Stmt
+	ensureProgressStmt                        *sql.Stmt
+	exportListTasksStmt                       *sql.Stmt
+	getClaimBundleByIDForUpdateStmt           *sql.Stmt
+	getClaimBundleByKeyForUpdateStmt          *sql.Stmt
+	getClaimCatalogByIDStmt                   *sql.Stmt
+	getClaimCatalogByKeyStmt                  *sql.Stmt
+	getCurrentProgressForUpdateStmt           *sql.Stmt
+	getEnabledPartnerScriptStmt               *sql.Stmt
+	getIntegrationCheckTaskByIDStmt           *sql.Stmt
+	getIntegrationCheckTaskByKeyStmt          *sql.Stmt
+	getNextSequenceTaskIDStmt                 *sql.Stmt
+	getPartnerConfigByWebhookSecretStmt       *sql.Stmt
+	getPartnerIssueByExternalClickIDStmt      *sql.Stmt
+	getPartnerIssueByExternalUserStmt         *sql.Stmt
+	getPartnerIssueByIDStmt                   *sql.Stmt
+	getPartnerIssueByIDForUpdateStmt          *sql.Stmt
+	getPartnerIssueByPrivatePayloadUserStmt   *sql.Stmt
+	getPartnerRewardGrantByIssueStmt          *sql.Stmt
+	getSequenceStateForUpdateStmt             *sql.Stmt
+	getStartTaskByIDStmt                      *sql.Stmt
+	getStartTaskByKeyStmt                     *sql.Stmt
+	incrementPartnerStatsDailyStmt            *sql.Stmt
+	insertPartnerRewardGrantStmt              *sql.Stmt
+	insertPartnerStatsEventStmt               *sql.Stmt
+	insertPartnerStatsUniqueUserStmt          *sql.Stmt
+	insertProgressEventStmt                   *sql.Stmt
+	listActiveComplexConditionsStmt           *sql.Stmt
+	listActiveTaskBundlesStmt                 *sql.Stmt
+	listAllPartnerConfigsStmt                 *sql.Stmt
+	listComplexConditionProgressForParentStmt *sql.Stmt
+	listComplexParentIDsForConditionTasksStmt *sql.Stmt
+	listCurrentProgressForUserStmt            *sql.Stmt
+	listCurrentProgressForUserForUpdateStmt   *sql.Stmt
+	listPartnerIssuesForUserStmt              *sql.Stmt
+	listPartnerRewardRulesStmt                *sql.Stmt
+	listRecordCatalogStmt                     *sql.Stmt
+	listRecordTasksStmt                       *sql.Stmt
+	listRewardsStmt                           *sql.Stmt
+	listRewardsCatalogStmt                    *sql.Stmt
+	listSequenceStatesForUserStmt             *sql.Stmt
+	refreshTaskDailyOverviewStmt              *sql.Stmt
+	refreshTaskDailyStatsStmt                 *sql.Stmt
+	revokePartnerIssueStmt                    *sql.Stmt
+	updatePartnerIssueStartStmt               *sql.Stmt
+	updateProgressStmt                        *sql.Stmt
+	upsertProgressStmt                        *sql.Stmt
+	upsertSequenceStateStmt                   *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                                      tx,
-		tx:                                      tx,
-		adminCreateTaskStmt:                     q.adminCreateTaskStmt,
-		adminDeletePartnerRewardRuleStmt:        q.adminDeletePartnerRewardRuleStmt,
-		adminDeleteRewardStmt:                   q.adminDeleteRewardStmt,
-		adminDeleteTaskStmt:                     q.adminDeleteTaskStmt,
-		adminGetPartnerConfigStmt:               q.adminGetPartnerConfigStmt,
-		adminGetPartnerScriptStmt:               q.adminGetPartnerScriptStmt,
-		adminGetSingleTaskStatsStmt:             q.adminGetSingleTaskStatsStmt,
-		adminGetTaskStmt:                        q.adminGetTaskStmt,
-		adminGetTaskByKeyStmt:                   q.adminGetTaskByKeyStmt,
-		adminGetTaskStatsStmt:                   q.adminGetTaskStatsStmt,
-		adminListAllRewardsStmt:                 q.adminListAllRewardsStmt,
-		adminListGroupLocalizationsStmt:         q.adminListGroupLocalizationsStmt,
-		adminListGroupsStmt:                     q.adminListGroupsStmt,
-		adminListPartnerConfigsStmt:             q.adminListPartnerConfigsStmt,
-		adminListPartnerDailyStatsStmt:          q.adminListPartnerDailyStatsStmt,
-		adminListPartnerRewardRulesStmt:         q.adminListPartnerRewardRulesStmt,
-		adminListPartnerScriptsStmt:             q.adminListPartnerScriptsStmt,
-		adminListSequencesStmt:                  q.adminListSequencesStmt,
-		adminListTaskDailyOverviewStmt:          q.adminListTaskDailyOverviewStmt,
-		adminListTaskDailyStatsStmt:             q.adminListTaskDailyStatsStmt,
-		adminListTaskLocalizationsStmt:          q.adminListTaskLocalizationsStmt,
-		adminListTasksStmt:                      q.adminListTasksStmt,
-		adminListTasksByGroupStmt:               q.adminListTasksByGroupStmt,
-		adminUpdateTaskStmt:                     q.adminUpdateTaskStmt,
-		adminUpsertGroupStmt:                    q.adminUpsertGroupStmt,
-		adminUpsertGroupLocalizationStmt:        q.adminUpsertGroupLocalizationStmt,
-		adminUpsertPartnerConfigStmt:            q.adminUpsertPartnerConfigStmt,
-		adminUpsertPartnerRewardRuleStmt:        q.adminUpsertPartnerRewardRuleStmt,
-		adminUpsertPartnerScriptStmt:            q.adminUpsertPartnerScriptStmt,
-		adminUpsertRewardStmt:                   q.adminUpsertRewardStmt,
-		adminUpsertSequenceStmt:                 q.adminUpsertSequenceStmt,
-		adminUpsertTaskLocalizationStmt:         q.adminUpsertTaskLocalizationStmt,
-		claimPartnerIssueStmt:                   q.claimPartnerIssueStmt,
-		completePartnerIssueStmt:                q.completePartnerIssueStmt,
-		countProgressEventsByExternalKeyStmt:    q.countProgressEventsByExternalKeyStmt,
-		createPartnerIssueStmt:                  q.createPartnerIssueStmt,
-		ensureProgressStmt:                      q.ensureProgressStmt,
-		exportListTasksStmt:                     q.exportListTasksStmt,
-		getClaimBundleByIDForUpdateStmt:         q.getClaimBundleByIDForUpdateStmt,
-		getClaimBundleByKeyForUpdateStmt:        q.getClaimBundleByKeyForUpdateStmt,
-		getClaimCatalogByIDStmt:                 q.getClaimCatalogByIDStmt,
-		getClaimCatalogByKeyStmt:                q.getClaimCatalogByKeyStmt,
-		getCurrentProgressForUpdateStmt:         q.getCurrentProgressForUpdateStmt,
-		getEnabledPartnerScriptStmt:             q.getEnabledPartnerScriptStmt,
-		getIntegrationCheckTaskByIDStmt:         q.getIntegrationCheckTaskByIDStmt,
-		getIntegrationCheckTaskByKeyStmt:        q.getIntegrationCheckTaskByKeyStmt,
-		getNextSequenceTaskIDStmt:               q.getNextSequenceTaskIDStmt,
-		getPartnerConfigByWebhookSecretStmt:     q.getPartnerConfigByWebhookSecretStmt,
-		getPartnerIssueByExternalClickIDStmt:    q.getPartnerIssueByExternalClickIDStmt,
-		getPartnerIssueByExternalUserStmt:       q.getPartnerIssueByExternalUserStmt,
-		getPartnerIssueByIDStmt:                 q.getPartnerIssueByIDStmt,
-		getPartnerIssueByIDForUpdateStmt:        q.getPartnerIssueByIDForUpdateStmt,
-		getPartnerIssueByPrivatePayloadUserStmt: q.getPartnerIssueByPrivatePayloadUserStmt,
-		getPartnerRewardGrantByIssueStmt:        q.getPartnerRewardGrantByIssueStmt,
-		getSequenceStateForUpdateStmt:           q.getSequenceStateForUpdateStmt,
-		getStartTaskByIDStmt:                    q.getStartTaskByIDStmt,
-		getStartTaskByKeyStmt:                   q.getStartTaskByKeyStmt,
-		incrementPartnerStatsDailyStmt:          q.incrementPartnerStatsDailyStmt,
-		insertPartnerRewardGrantStmt:            q.insertPartnerRewardGrantStmt,
-		insertPartnerStatsEventStmt:             q.insertPartnerStatsEventStmt,
-		insertPartnerStatsUniqueUserStmt:        q.insertPartnerStatsUniqueUserStmt,
-		insertProgressEventStmt:                 q.insertProgressEventStmt,
-		listActiveTaskBundlesStmt:               q.listActiveTaskBundlesStmt,
-		listAllPartnerConfigsStmt:               q.listAllPartnerConfigsStmt,
-		listCurrentProgressForUserStmt:          q.listCurrentProgressForUserStmt,
-		listCurrentProgressForUserForUpdateStmt: q.listCurrentProgressForUserForUpdateStmt,
-		listPartnerIssuesForUserStmt:            q.listPartnerIssuesForUserStmt,
-		listPartnerRewardRulesStmt:              q.listPartnerRewardRulesStmt,
-		listRecordCatalogStmt:                   q.listRecordCatalogStmt,
-		listRecordTasksStmt:                     q.listRecordTasksStmt,
-		listRewardsStmt:                         q.listRewardsStmt,
-		listRewardsCatalogStmt:                  q.listRewardsCatalogStmt,
-		listSequenceStatesForUserStmt:           q.listSequenceStatesForUserStmt,
-		refreshTaskDailyOverviewStmt:            q.refreshTaskDailyOverviewStmt,
-		refreshTaskDailyStatsStmt:               q.refreshTaskDailyStatsStmt,
-		revokePartnerIssueStmt:                  q.revokePartnerIssueStmt,
-		updatePartnerIssueStartStmt:             q.updatePartnerIssueStartStmt,
-		updateProgressStmt:                      q.updateProgressStmt,
-		upsertProgressStmt:                      q.upsertProgressStmt,
-		upsertSequenceStateStmt:                 q.upsertSequenceStateStmt,
+		db:                                        tx,
+		tx:                                        tx,
+		adminCreateTaskStmt:                       q.adminCreateTaskStmt,
+		adminDeleteComplexConditionStmt:           q.adminDeleteComplexConditionStmt,
+		adminDeletePartnerRewardRuleStmt:          q.adminDeletePartnerRewardRuleStmt,
+		adminDeleteRewardStmt:                     q.adminDeleteRewardStmt,
+		adminDeleteTaskStmt:                       q.adminDeleteTaskStmt,
+		adminGetPartnerConfigStmt:                 q.adminGetPartnerConfigStmt,
+		adminGetPartnerScriptStmt:                 q.adminGetPartnerScriptStmt,
+		adminGetSingleTaskStatsStmt:               q.adminGetSingleTaskStatsStmt,
+		adminGetTaskStmt:                          q.adminGetTaskStmt,
+		adminGetTaskByKeyStmt:                     q.adminGetTaskByKeyStmt,
+		adminGetTaskStatsStmt:                     q.adminGetTaskStatsStmt,
+		adminListAllRewardsStmt:                   q.adminListAllRewardsStmt,
+		adminListComplexConditionsStmt:            q.adminListComplexConditionsStmt,
+		adminListGroupLocalizationsStmt:           q.adminListGroupLocalizationsStmt,
+		adminListGroupsStmt:                       q.adminListGroupsStmt,
+		adminListPartnerConfigsStmt:               q.adminListPartnerConfigsStmt,
+		adminListPartnerDailyStatsStmt:            q.adminListPartnerDailyStatsStmt,
+		adminListPartnerRewardRulesStmt:           q.adminListPartnerRewardRulesStmt,
+		adminListPartnerScriptsStmt:               q.adminListPartnerScriptsStmt,
+		adminListSequencesStmt:                    q.adminListSequencesStmt,
+		adminListTaskDailyOverviewStmt:            q.adminListTaskDailyOverviewStmt,
+		adminListTaskDailyStatsStmt:               q.adminListTaskDailyStatsStmt,
+		adminListTaskLocalizationsStmt:            q.adminListTaskLocalizationsStmt,
+		adminListTasksStmt:                        q.adminListTasksStmt,
+		adminListTasksByGroupStmt:                 q.adminListTasksByGroupStmt,
+		adminUpdateTaskStmt:                       q.adminUpdateTaskStmt,
+		adminUpsertComplexConditionStmt:           q.adminUpsertComplexConditionStmt,
+		adminUpsertGroupStmt:                      q.adminUpsertGroupStmt,
+		adminUpsertGroupLocalizationStmt:          q.adminUpsertGroupLocalizationStmt,
+		adminUpsertPartnerConfigStmt:              q.adminUpsertPartnerConfigStmt,
+		adminUpsertPartnerRewardRuleStmt:          q.adminUpsertPartnerRewardRuleStmt,
+		adminUpsertPartnerScriptStmt:              q.adminUpsertPartnerScriptStmt,
+		adminUpsertRewardStmt:                     q.adminUpsertRewardStmt,
+		adminUpsertSequenceStmt:                   q.adminUpsertSequenceStmt,
+		adminUpsertTaskLocalizationStmt:           q.adminUpsertTaskLocalizationStmt,
+		claimPartnerIssueStmt:                     q.claimPartnerIssueStmt,
+		completePartnerIssueStmt:                  q.completePartnerIssueStmt,
+		countProgressEventsByExternalKeyStmt:      q.countProgressEventsByExternalKeyStmt,
+		createPartnerIssueStmt:                    q.createPartnerIssueStmt,
+		ensureProgressStmt:                        q.ensureProgressStmt,
+		exportListTasksStmt:                       q.exportListTasksStmt,
+		getClaimBundleByIDForUpdateStmt:           q.getClaimBundleByIDForUpdateStmt,
+		getClaimBundleByKeyForUpdateStmt:          q.getClaimBundleByKeyForUpdateStmt,
+		getClaimCatalogByIDStmt:                   q.getClaimCatalogByIDStmt,
+		getClaimCatalogByKeyStmt:                  q.getClaimCatalogByKeyStmt,
+		getCurrentProgressForUpdateStmt:           q.getCurrentProgressForUpdateStmt,
+		getEnabledPartnerScriptStmt:               q.getEnabledPartnerScriptStmt,
+		getIntegrationCheckTaskByIDStmt:           q.getIntegrationCheckTaskByIDStmt,
+		getIntegrationCheckTaskByKeyStmt:          q.getIntegrationCheckTaskByKeyStmt,
+		getNextSequenceTaskIDStmt:                 q.getNextSequenceTaskIDStmt,
+		getPartnerConfigByWebhookSecretStmt:       q.getPartnerConfigByWebhookSecretStmt,
+		getPartnerIssueByExternalClickIDStmt:      q.getPartnerIssueByExternalClickIDStmt,
+		getPartnerIssueByExternalUserStmt:         q.getPartnerIssueByExternalUserStmt,
+		getPartnerIssueByIDStmt:                   q.getPartnerIssueByIDStmt,
+		getPartnerIssueByIDForUpdateStmt:          q.getPartnerIssueByIDForUpdateStmt,
+		getPartnerIssueByPrivatePayloadUserStmt:   q.getPartnerIssueByPrivatePayloadUserStmt,
+		getPartnerRewardGrantByIssueStmt:          q.getPartnerRewardGrantByIssueStmt,
+		getSequenceStateForUpdateStmt:             q.getSequenceStateForUpdateStmt,
+		getStartTaskByIDStmt:                      q.getStartTaskByIDStmt,
+		getStartTaskByKeyStmt:                     q.getStartTaskByKeyStmt,
+		incrementPartnerStatsDailyStmt:            q.incrementPartnerStatsDailyStmt,
+		insertPartnerRewardGrantStmt:              q.insertPartnerRewardGrantStmt,
+		insertPartnerStatsEventStmt:               q.insertPartnerStatsEventStmt,
+		insertPartnerStatsUniqueUserStmt:          q.insertPartnerStatsUniqueUserStmt,
+		insertProgressEventStmt:                   q.insertProgressEventStmt,
+		listActiveComplexConditionsStmt:           q.listActiveComplexConditionsStmt,
+		listActiveTaskBundlesStmt:                 q.listActiveTaskBundlesStmt,
+		listAllPartnerConfigsStmt:                 q.listAllPartnerConfigsStmt,
+		listComplexConditionProgressForParentStmt: q.listComplexConditionProgressForParentStmt,
+		listComplexParentIDsForConditionTasksStmt: q.listComplexParentIDsForConditionTasksStmt,
+		listCurrentProgressForUserStmt:            q.listCurrentProgressForUserStmt,
+		listCurrentProgressForUserForUpdateStmt:   q.listCurrentProgressForUserForUpdateStmt,
+		listPartnerIssuesForUserStmt:              q.listPartnerIssuesForUserStmt,
+		listPartnerRewardRulesStmt:                q.listPartnerRewardRulesStmt,
+		listRecordCatalogStmt:                     q.listRecordCatalogStmt,
+		listRecordTasksStmt:                       q.listRecordTasksStmt,
+		listRewardsStmt:                           q.listRewardsStmt,
+		listRewardsCatalogStmt:                    q.listRewardsCatalogStmt,
+		listSequenceStatesForUserStmt:             q.listSequenceStatesForUserStmt,
+		refreshTaskDailyOverviewStmt:              q.refreshTaskDailyOverviewStmt,
+		refreshTaskDailyStatsStmt:                 q.refreshTaskDailyStatsStmt,
+		revokePartnerIssueStmt:                    q.revokePartnerIssueStmt,
+		updatePartnerIssueStartStmt:               q.updatePartnerIssueStartStmt,
+		updateProgressStmt:                        q.updateProgressStmt,
+		upsertProgressStmt:                        q.upsertProgressStmt,
+		upsertSequenceStateStmt:                   q.upsertSequenceStateStmt,
 	}
 }

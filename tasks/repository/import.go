@@ -120,6 +120,9 @@ func (r *Repository) importBulk(ctx context.Context, workspaceID string, req Imp
 	if err := r.importRewardsBulk(ctx, workspaceID, req.Package.Groups, taskIDs, strategy, preview, result); err != nil {
 		return err
 	}
+	if err := r.importComplexConditionsBulk(ctx, workspaceID, req.Package.Groups, taskIDs, strategy, preview, result); err != nil {
+		return err
+	}
 	if err := r.importPartnerConfigsBulk(ctx, workspaceID, req.Package.Groups, strategy, req.Secrets, preview, result); err != nil {
 		return err
 	}
@@ -298,6 +301,42 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 		rows,
 		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
 			"duration_unit = VALUES(duration_unit), position = VALUES(position), updated_at = NOW()",
+	)
+}
+
+func (r *Repository) importComplexConditionsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0)
+	for _, group := range groups {
+		for _, task := range group.Tasks {
+			if previewHasConflict(preview, "task", task.Key) && strategy == ImportConflictSkip {
+				continue
+			}
+			parentID, ok := taskIDs[task.Key]
+			if !ok {
+				continue
+			}
+			for _, condition := range task.Conditions {
+				conditionID, ok := taskIDs[condition.TaskKey]
+				if !ok {
+					continue
+				}
+				rows = append(rows, []any{
+					workspaceID,
+					parentID,
+					conditionID,
+					defaultString(condition.RequiredStatus, ComplexRequiredStatusReady),
+					condition.Position,
+					condition.IsRequired,
+				})
+				result.Imported.Conditions++
+			}
+		}
+	}
+	return r.execImportBulk(ctx, "task_complex_condition",
+		[]string{"workspace_id", "parent_task_id", "condition_task_id", "required_status", "position", "is_required"},
+		rows,
+		"required_status = VALUES(required_status), position = VALUES(position), "+
+			"is_required = VALUES(is_required), updated_at = NOW()",
 	)
 }
 
@@ -505,6 +544,7 @@ func countPackage(pkg ExportPackage) ImportCounts {
 		for _, task := range group.Tasks {
 			out.TaskLocalizations += len(task.Localization)
 			out.Rewards += len(task.Rewards)
+			out.Conditions += len(task.Conditions)
 		}
 	}
 	return out
@@ -530,6 +570,14 @@ func validateExportPackage(pkg ExportPackage) error {
 			}
 			if task.SequenceKey != nil && task.SequencePosition == nil {
 				return fmt.Errorf("task %s has sequence_key without sequence_position", task.Key)
+			}
+			for _, condition := range task.Conditions {
+				if condition.TaskKey == "" {
+					return fmt.Errorf("task %s condition task_key is required", task.Key)
+				}
+				if condition.TaskKey == task.Key {
+					return fmt.Errorf("task %s cannot reference itself as condition", task.Key)
+				}
 			}
 		}
 	}

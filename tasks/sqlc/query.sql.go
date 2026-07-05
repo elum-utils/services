@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -80,6 +81,27 @@ func (q *Queries) AdminCreateTask(ctx context.Context, arg AdminCreateTaskParams
 		return 0, err
 	}
 	return result.LastInsertId()
+}
+
+const adminDeleteComplexCondition = `-- name: AdminDeleteComplexCondition :execrows
+DELETE FROM task_complex_condition
+WHERE workspace_id = ?
+  AND parent_task_id = ?
+  AND condition_task_id = ?
+`
+
+type AdminDeleteComplexConditionParams struct {
+	WorkspaceID     string `json:"workspace_id"`
+	ParentTaskID    uint64 `json:"parent_task_id"`
+	ConditionTaskID uint64 `json:"condition_task_id"`
+}
+
+func (q *Queries) AdminDeleteComplexCondition(ctx context.Context, arg AdminDeleteComplexConditionParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminDeleteComplexConditionStmt, adminDeleteComplexCondition, arg.WorkspaceID, arg.ParentTaskID, arg.ConditionTaskID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const adminDeletePartnerRewardRule = `-- name: AdminDeletePartnerRewardRule :execrows
@@ -548,6 +570,45 @@ func (q *Queries) AdminListAllRewards(ctx context.Context, workspaceID string) (
 			&i.Scale,
 			&i.DurationUnit,
 			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListComplexConditions = `-- name: AdminListComplexConditions :many
+SELECT workspace_id, parent_task_id, condition_task_id, required_status, position, is_required, created_at, updated_at
+FROM task_complex_condition
+WHERE workspace_id = ?
+ORDER BY parent_task_id, position, condition_task_id
+`
+
+func (q *Queries) AdminListComplexConditions(ctx context.Context, workspaceID string) ([]TaskComplexCondition, error) {
+	rows, err := q.query(ctx, q.adminListComplexConditionsStmt, adminListComplexConditions, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskComplexCondition
+	for rows.Next() {
+		var i TaskComplexCondition
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ParentTaskID,
+			&i.ConditionTaskID,
+			&i.RequiredStatus,
+			&i.Position,
+			&i.IsRequired,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1374,6 +1435,39 @@ func (q *Queries) AdminUpdateTask(ctx context.Context, arg AdminUpdateTaskParams
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const adminUpsertComplexCondition = `-- name: AdminUpsertComplexCondition :exec
+INSERT INTO task_complex_condition (
+    workspace_id, parent_task_id, condition_task_id, required_status, position, is_required
+)
+VALUES (?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    required_status = VALUES(required_status),
+    position = VALUES(position),
+    is_required = VALUES(is_required),
+    updated_at = NOW()
+`
+
+type AdminUpsertComplexConditionParams struct {
+	WorkspaceID     string                             `json:"workspace_id"`
+	ParentTaskID    uint64                             `json:"parent_task_id"`
+	ConditionTaskID uint64                             `json:"condition_task_id"`
+	RequiredStatus  TaskComplexConditionRequiredStatus `json:"required_status"`
+	Position        int32                              `json:"position"`
+	IsRequired      bool                               `json:"is_required"`
+}
+
+func (q *Queries) AdminUpsertComplexCondition(ctx context.Context, arg AdminUpsertComplexConditionParams) error {
+	_, err := q.exec(ctx, q.adminUpsertComplexConditionStmt, adminUpsertComplexCondition,
+		arg.WorkspaceID,
+		arg.ParentTaskID,
+		arg.ConditionTaskID,
+		arg.RequiredStatus,
+		arg.Position,
+		arg.IsRequired,
+	)
+	return err
 }
 
 const adminUpsertGroup = `-- name: AdminUpsertGroup :exec
@@ -3266,6 +3360,60 @@ func (q *Queries) InsertProgressEvent(ctx context.Context, arg InsertProgressEve
 	return result.RowsAffected()
 }
 
+const listActiveComplexConditions = `-- name: ListActiveComplexConditions :many
+SELECT c.parent_task_id, c.condition_task_id, c.required_status, c.position, c.is_required
+FROM task_complex_condition c
+JOIN task_definition parent
+  ON parent.workspace_id = c.workspace_id
+ AND parent.id = c.parent_task_id
+ AND parent.is_active = TRUE
+ AND parent.deleted_at IS NULL
+JOIN task_definition child
+  ON child.workspace_id = c.workspace_id
+ AND child.id = c.condition_task_id
+ AND child.is_active = TRUE
+ AND child.deleted_at IS NULL
+WHERE c.workspace_id = ?
+ORDER BY c.parent_task_id, c.position, c.condition_task_id
+`
+
+type ListActiveComplexConditionsRow struct {
+	ParentTaskID    uint64                             `json:"parent_task_id"`
+	ConditionTaskID uint64                             `json:"condition_task_id"`
+	RequiredStatus  TaskComplexConditionRequiredStatus `json:"required_status"`
+	Position        int32                              `json:"position"`
+	IsRequired      bool                               `json:"is_required"`
+}
+
+func (q *Queries) ListActiveComplexConditions(ctx context.Context, workspaceID string) ([]ListActiveComplexConditionsRow, error) {
+	rows, err := q.query(ctx, q.listActiveComplexConditionsStmt, listActiveComplexConditions, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveComplexConditionsRow
+	for rows.Next() {
+		var i ListActiveComplexConditionsRow
+		if err := rows.Scan(
+			&i.ParentTaskID,
+			&i.ConditionTaskID,
+			&i.RequiredStatus,
+			&i.Position,
+			&i.IsRequired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveTaskBundles = `-- name: ListActiveTaskBundles :many
 SELECT t.id, t.` + "`" + `key` + "`" + `, t.group_key,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count,
@@ -3410,6 +3558,189 @@ func (q *Queries) ListAllPartnerConfigs(ctx context.Context) ([]TaskPartnerConfi
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listComplexConditionProgressForParent = `-- name: ListComplexConditionProgressForParent :many
+SELECT
+    parent.id AS parent_id,
+    parent.task_kind AS parent_task_kind,
+    parent.target_count AS parent_target_count,
+    parent.reset_unit AS parent_reset_unit,
+    parent.reset_every AS parent_reset_every,
+    parent.start_at AS parent_start_at,
+    parent.end_at AS parent_end_at,
+    c.parent_task_id,
+    c.condition_task_id,
+    c.required_status,
+    c.position,
+    c.is_required,
+    p.id AS progress_id,
+    p.progress,
+    p.status,
+    p.period_start_at,
+    p.period_end_at,
+    p.ready_at,
+    p.claimed_at,
+    p.operation_id,
+    COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot
+FROM task_complex_condition c
+JOIN task_definition parent
+  ON parent.workspace_id = c.workspace_id
+ AND parent.id = c.parent_task_id
+ AND parent.is_active = TRUE
+ AND parent.deleted_at IS NULL
+JOIN task_definition t
+  ON t.workspace_id = c.workspace_id
+ AND t.id = c.condition_task_id
+ AND t.is_active = TRUE
+ AND t.deleted_at IS NULL
+LEFT JOIN task_progress p
+  ON p.workspace_id = c.workspace_id
+ AND p.task_id = c.condition_task_id
+ AND p.app_id = ?
+ AND p.platform_id = ?
+ AND p.platform_user_id = ?
+ AND p.period_start_at <= ?
+ AND p.period_end_at > ?
+WHERE c.workspace_id = ?
+  AND c.parent_task_id = ?
+  AND c.is_required = TRUE
+ORDER BY c.position, c.condition_task_id
+`
+
+type ListComplexConditionProgressForParentParams struct {
+	AppID          int64     `json:"app_id"`
+	PlatformID     int64     `json:"platform_id"`
+	PlatformUserID string    `json:"platform_user_id"`
+	PeriodStartAt  time.Time `json:"period_start_at"`
+	PeriodEndAt    time.Time `json:"period_end_at"`
+	WorkspaceID    string    `json:"workspace_id"`
+	ParentTaskID   uint64    `json:"parent_task_id"`
+}
+
+type ListComplexConditionProgressForParentRow struct {
+	ParentID          uint64                             `json:"parent_id"`
+	ParentTaskKind    string                             `json:"parent_task_kind"`
+	ParentTargetCount uint64                             `json:"parent_target_count"`
+	ParentResetUnit   TaskDefinitionResetUnit            `json:"parent_reset_unit"`
+	ParentResetEvery  uint32                             `json:"parent_reset_every"`
+	ParentStartAt     sql.NullTime                       `json:"parent_start_at"`
+	ParentEndAt       sql.NullTime                       `json:"parent_end_at"`
+	ParentTaskID      uint64                             `json:"parent_task_id"`
+	ConditionTaskID   uint64                             `json:"condition_task_id"`
+	RequiredStatus    TaskComplexConditionRequiredStatus `json:"required_status"`
+	Position          int32                              `json:"position"`
+	IsRequired        bool                               `json:"is_required"`
+	ProgressID        sql.NullInt64                      `json:"progress_id"`
+	Progress          sql.NullInt64                      `json:"progress"`
+	Status            NullTaskProgressStatus             `json:"status"`
+	PeriodStartAt     sql.NullTime                       `json:"period_start_at"`
+	PeriodEndAt       sql.NullTime                       `json:"period_end_at"`
+	ReadyAt           sql.NullTime                       `json:"ready_at"`
+	ClaimedAt         sql.NullTime                       `json:"claimed_at"`
+	OperationID       sql.NullString                     `json:"operation_id"`
+	RewardsSnapshot   json.RawMessage                    `json:"rewards_snapshot"`
+}
+
+func (q *Queries) ListComplexConditionProgressForParent(ctx context.Context, arg ListComplexConditionProgressForParentParams) ([]ListComplexConditionProgressForParentRow, error) {
+	rows, err := q.query(ctx, q.listComplexConditionProgressForParentStmt, listComplexConditionProgressForParent,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.PeriodStartAt,
+		arg.PeriodEndAt,
+		arg.WorkspaceID,
+		arg.ParentTaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListComplexConditionProgressForParentRow
+	for rows.Next() {
+		var i ListComplexConditionProgressForParentRow
+		if err := rows.Scan(
+			&i.ParentID,
+			&i.ParentTaskKind,
+			&i.ParentTargetCount,
+			&i.ParentResetUnit,
+			&i.ParentResetEvery,
+			&i.ParentStartAt,
+			&i.ParentEndAt,
+			&i.ParentTaskID,
+			&i.ConditionTaskID,
+			&i.RequiredStatus,
+			&i.Position,
+			&i.IsRequired,
+			&i.ProgressID,
+			&i.Progress,
+			&i.Status,
+			&i.PeriodStartAt,
+			&i.PeriodEndAt,
+			&i.ReadyAt,
+			&i.ClaimedAt,
+			&i.OperationID,
+			&i.RewardsSnapshot,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listComplexParentIDsForConditionTasks = `-- name: ListComplexParentIDsForConditionTasks :many
+SELECT DISTINCT parent_task_id
+FROM task_complex_condition
+WHERE workspace_id = ?
+  AND condition_task_id IN (/*SLICE:condition_task_ids*/?)
+  AND is_required = TRUE
+ORDER BY parent_task_id
+`
+
+type ListComplexParentIDsForConditionTasksParams struct {
+	WorkspaceID      string   `json:"workspace_id"`
+	ConditionTaskIds []uint64 `json:"condition_task_ids"`
+}
+
+func (q *Queries) ListComplexParentIDsForConditionTasks(ctx context.Context, arg ListComplexParentIDsForConditionTasksParams) ([]uint64, error) {
+	query := listComplexParentIDsForConditionTasks
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.WorkspaceID)
+	if len(arg.ConditionTaskIds) > 0 {
+		for _, v := range arg.ConditionTaskIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:condition_task_ids*/?", strings.Repeat(",?", len(arg.ConditionTaskIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:condition_task_ids*/?", "NULL", 1)
+	}
+	rows, err := q.query(ctx, nil, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uint64
+	for rows.Next() {
+		var parent_task_id uint64
+		if err := rows.Scan(&parent_task_id); err != nil {
+			return nil, err
+		}
+		items = append(items, parent_task_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

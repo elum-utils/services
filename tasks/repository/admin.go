@@ -224,6 +224,62 @@ func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskI
 	return rows, nil
 }
 
+func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComplexConditionParams) error {
+	requiredStatus := params.RequiredStatus
+	if requiredStatus == "" {
+		requiredStatus = ComplexRequiredStatusReady
+	}
+	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
+		return r.q.AdminUpsertComplexCondition(ctx, tasksqlc.AdminUpsertComplexConditionParams{
+			WorkspaceID:     params.WorkspaceID,
+			ParentTaskID:    params.ParentTaskID,
+			ConditionTaskID: params.ConditionTaskID,
+			RequiredStatus:  tasksqlc.TaskComplexConditionRequiredStatus(requiredStatus),
+			Position:        params.Position,
+			IsRequired:      params.IsRequired,
+		})
+	}); err != nil {
+		return err
+	}
+	return r.invalidateTaskCache(ctx, params.WorkspaceID)
+}
+
+func (r *Repository) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
+	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
+		return r.q.AdminDeleteComplexCondition(ctx, tasksqlc.AdminDeleteComplexConditionParams{
+			WorkspaceID: workspaceID, ParentTaskID: parentTaskID, ConditionTaskID: conditionTaskID,
+		})
+	})
+	if err != nil {
+		return 0, err
+	}
+	if rows > 0 {
+		return rows, r.invalidateTaskCache(ctx, workspaceID)
+	}
+	return rows, nil
+}
+
+func (r *Repository) ListComplexConditions(ctx context.Context, workspaceID string) ([]ComplexCondition, error) {
+	rows, err := repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskComplexCondition, error) {
+		return r.q.AdminListComplexConditions(ctx, workspaceID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ComplexCondition, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, ComplexCondition{
+			WorkspaceID:     row.WorkspaceID,
+			ParentTaskID:    row.ParentTaskID,
+			ConditionTaskID: row.ConditionTaskID,
+			RequiredStatus:  string(row.RequiredStatus),
+			Position:        row.Position,
+			IsRequired:      row.IsRequired,
+		})
+	}
+	return out, nil
+}
+
 func sqlNullString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }

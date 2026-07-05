@@ -116,6 +116,39 @@ func (a *Admin) DeleteReward(ctx context.Context, workspaceID string, taskID uin
 	return a.repository.DeleteReward(mergedCtx, workspaceID, taskID, key)
 }
 
+func (a *Admin) UpsertComplexCondition(ctx context.Context, params SaveComplexConditionParams) error {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.UpsertComplexCondition(mergedCtx, repository.SaveComplexConditionParams(params))
+}
+
+func (a *Admin) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	return a.repository.DeleteComplexCondition(mergedCtx, workspaceID, parentTaskID, conditionTaskID)
+}
+
+func (a *Admin) ListComplexConditions(ctx context.Context, workspaceID string) ([]ComplexConditionModel, error) {
+	mergedCtx, cancel := a.withContext(ctx)
+	defer cancel()
+	conditions, err := a.repository.ListComplexConditions(mergedCtx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ComplexConditionModel, 0, len(conditions))
+	for _, condition := range conditions {
+		out = append(out, ComplexConditionModel{
+			WorkspaceID:     condition.WorkspaceID,
+			ParentTaskID:    condition.ParentTaskID,
+			ConditionTaskID: condition.ConditionTaskID,
+			RequiredStatus:  condition.RequiredStatus,
+			Position:        condition.Position,
+			IsRequired:      condition.IsRequired,
+		})
+	}
+	return out, nil
+}
+
 func mapTask(task repository.Task) TaskModel {
 	return TaskModel{
 		ID: task.ID, Key: task.Key, GroupKey: task.GroupKey,

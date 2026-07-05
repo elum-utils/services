@@ -146,6 +146,100 @@ ON DUPLICATE KEY UPDATE
 DELETE FROM task_reward
 WHERE workspace_id = ? AND task_id = ? AND reward_key = ?;
 
+-- name: AdminUpsertComplexCondition :exec
+INSERT INTO task_complex_condition (
+    workspace_id, parent_task_id, condition_task_id, required_status, position, is_required
+)
+VALUES (?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+    required_status = VALUES(required_status),
+    position = VALUES(position),
+    is_required = VALUES(is_required),
+    updated_at = NOW();
+
+-- name: AdminDeleteComplexCondition :execrows
+DELETE FROM task_complex_condition
+WHERE workspace_id = ?
+  AND parent_task_id = ?
+  AND condition_task_id = ?;
+
+-- name: AdminListComplexConditions :many
+SELECT workspace_id, parent_task_id, condition_task_id, required_status, position, is_required, created_at, updated_at
+FROM task_complex_condition
+WHERE workspace_id = ?
+ORDER BY parent_task_id, position, condition_task_id;
+
+-- name: ListComplexParentIDsForConditionTasks :many
+SELECT DISTINCT parent_task_id
+FROM task_complex_condition
+WHERE workspace_id = ?
+  AND condition_task_id IN (sqlc.slice('condition_task_ids'))
+  AND is_required = TRUE
+ORDER BY parent_task_id;
+
+-- name: ListComplexConditionProgressForParent :many
+SELECT
+    parent.id AS parent_id,
+    parent.task_kind AS parent_task_kind,
+    parent.target_count AS parent_target_count,
+    parent.reset_unit AS parent_reset_unit,
+    parent.reset_every AS parent_reset_every,
+    parent.start_at AS parent_start_at,
+    parent.end_at AS parent_end_at,
+    c.parent_task_id,
+    c.condition_task_id,
+    c.required_status,
+    c.position,
+    c.is_required,
+    p.id AS progress_id,
+    p.progress,
+    p.status,
+    p.period_start_at,
+    p.period_end_at,
+    p.ready_at,
+    p.claimed_at,
+    p.operation_id,
+    COALESCE(p.rewards_snapshot, JSON_ARRAY()) AS rewards_snapshot
+FROM task_complex_condition c
+JOIN task_definition parent
+  ON parent.workspace_id = c.workspace_id
+ AND parent.id = c.parent_task_id
+ AND parent.is_active = TRUE
+ AND parent.deleted_at IS NULL
+JOIN task_definition t
+  ON t.workspace_id = c.workspace_id
+ AND t.id = c.condition_task_id
+ AND t.is_active = TRUE
+ AND t.deleted_at IS NULL
+LEFT JOIN task_progress p
+  ON p.workspace_id = c.workspace_id
+ AND p.task_id = c.condition_task_id
+ AND p.app_id = ?
+ AND p.platform_id = ?
+ AND p.platform_user_id = ?
+ AND p.period_start_at <= ?
+ AND p.period_end_at > ?
+WHERE c.workspace_id = ?
+  AND c.parent_task_id = ?
+  AND c.is_required = TRUE
+ORDER BY c.position, c.condition_task_id;
+
+-- name: ListActiveComplexConditions :many
+SELECT c.parent_task_id, c.condition_task_id, c.required_status, c.position, c.is_required
+FROM task_complex_condition c
+JOIN task_definition parent
+  ON parent.workspace_id = c.workspace_id
+ AND parent.id = c.parent_task_id
+ AND parent.is_active = TRUE
+ AND parent.deleted_at IS NULL
+JOIN task_definition child
+  ON child.workspace_id = c.workspace_id
+ AND child.id = c.condition_task_id
+ AND child.is_active = TRUE
+ AND child.deleted_at IS NULL
+WHERE c.workspace_id = ?
+ORDER BY c.parent_task_id, c.position, c.condition_task_id;
+
 -- name: ListRecordTasks :many
 SELECT t.id, t.workspace_id, t.`key`, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,

@@ -11,6 +11,7 @@ const (
 	TaskKindChannelSubscribe   = "channel_subscribe"
 	TaskKindExternalCheck      = "external_check"
 	TaskKindExternalConfirming = "external_confirming"
+	TaskKindComplex            = "complex"
 
 	ActionKindAppAction         = "app_action"
 	ActionKindAmountAction      = "amount_action"
@@ -18,6 +19,7 @@ const (
 	ActionKindChannelSubscribe  = "channel_subscribe"
 	ActionKindAdvertisementView = "advertisement_view"
 	ActionKindExternal          = "external"
+	ActionKindComposite         = "composite"
 
 	ClaimModeManual   = "manual"
 	ClaimModeAuto     = "auto"
@@ -34,6 +36,9 @@ const (
 	StatusOpen    = "open"
 	StatusReady   = "ready"
 	StatusClaimed = "claimed"
+
+	ComplexRequiredStatusReady   = "ready"
+	ComplexRequiredStatusClaimed = "claimed"
 
 	RecordStatusRecorded   = "recorded"
 	RecordStatusDuplicate  = "duplicate"
@@ -78,6 +83,7 @@ const (
 	ExportSectionIntegration    = "integration"
 	ExportSectionPartnerConfigs = "partner_configs"
 	ExportSectionPartnerRewards = "partner_rewards"
+	ExportSectionComplex        = "complex"
 
 	ImportConflictFail   = "fail_on_conflict"
 	ImportConflictSkip   = "skip_existing"
@@ -154,6 +160,14 @@ type ExportTask struct {
 	EndAt            *time.Time            `json:"end_at,omitempty"`
 	Localization     map[string]ExportText `json:"localization,omitempty"`
 	Rewards          []ExportReward        `json:"rewards,omitempty"`
+	Conditions       []ExportCondition     `json:"conditions,omitempty"`
+}
+
+type ExportCondition struct {
+	TaskKey        string `json:"task_key"`
+	RequiredStatus string `json:"required_status"`
+	Position       int32  `json:"position"`
+	IsRequired     bool   `json:"is_required"`
 }
 
 type ExportReset struct {
@@ -219,6 +233,7 @@ type ImportCounts struct {
 	Groups             int `json:"groups"`
 	Sequences          int `json:"sequences"`
 	Tasks              int `json:"tasks"`
+	Conditions         int `json:"conditions"`
 	TaskLocalizations  int `json:"task_localizations"`
 	GroupLocalizations int `json:"group_localizations"`
 	Rewards            int `json:"rewards"`
@@ -281,6 +296,7 @@ type Task struct {
 	Localization        *Localization
 	Rewards             []Reward
 	Progress            *Progress
+	Conditions          []ActiveTask
 }
 
 type ActiveTask struct {
@@ -301,9 +317,29 @@ type ActiveTask struct {
 	Description string          `json:"description,omitempty"`
 	Rewards     []Reward        `json:"rewards"`
 	Progress    *ActiveProgress `json:"progress,omitempty"`
+	Conditions  []ActiveTask    `json:"conditions,omitempty"`
 	StartAt     *time.Time      `json:"-" msgpack:"start_at"`
 	EndAt       *time.Time      `json:"-" msgpack:"end_at"`
 	Target      json.RawMessage `json:"-" msgpack:"target"`
+}
+
+type ComplexCondition struct {
+	WorkspaceID     string
+	ParentTaskID    uint64
+	ConditionTaskID uint64
+	RequiredStatus  string
+	Position        int32
+	IsRequired      bool
+	TaskKey         string
+}
+
+type SaveComplexConditionParams struct {
+	WorkspaceID     string
+	ParentTaskID    uint64
+	ConditionTaskID uint64
+	RequiredStatus  string
+	Position        int32
+	IsRequired      bool
 }
 
 type ActiveProgress struct {

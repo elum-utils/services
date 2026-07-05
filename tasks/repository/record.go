@@ -82,9 +82,13 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 		if len(catalog) == 0 {
 			return nil
 		}
-		sequenceStates, err := txRepo.sequenceStatesForUser(ctx, params.Identity)
-		if err != nil {
-			return err
+		var sequenceStates map[string]uint64
+		if catalogHasSequenceTasks(catalog) {
+			var err error
+			sequenceStates, err = txRepo.sequenceStatesForUser(ctx, params.Identity)
+			if err != nil {
+				return err
+			}
 		}
 		progressRows, err := repositoryValue[[]tasksqlc.TaskProgress](ctx, txRepo, func(ctx context.Context) ([]tasksqlc.TaskProgress, error) {
 			return txRepo.q.ListCurrentProgressForUserForUpdate(ctx, tasksqlc.ListCurrentProgressForUserForUpdateParams{
@@ -100,6 +104,7 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 		for _, row := range progressRows {
 			progressByTask[row.TaskID] = mapProgress(row)
 		}
+		changedTaskIDs := make([]uint64, 0, len(catalog))
 		branches := make(map[string]struct{})
 		progressUpserts := make([]recordProgressUpsert, 0, len(catalog))
 		autoClaims := make([]recordAutoClaim, 0)
@@ -168,6 +173,7 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 						taskID: task.ID, periodStartAt: periodStart, periodEndAt: periodEnd,
 						progress: progress.Progress, status: progress.Status, readyAt: progress.ReadyAt,
 					})
+					changedTaskIDs = append(changedTaskIDs, task.ID)
 				}
 			} else {
 				progressUpserts = append(progressUpserts, recordProgressUpsert{
@@ -213,6 +219,9 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 		if _, err := txRepo.batchUpsertProgress(ctx, params.Identity, progressUpserts); err != nil {
 			return err
 		}
+		if err := txRepo.refreshComplexParentsForChangedTasks(ctx, params.Identity, changedTaskIDs, now); err != nil {
+			return err
+		}
 		for _, item := range autoClaims {
 			progress := item.progress
 			if !item.exists {
@@ -250,6 +259,15 @@ func branchKey(task Task) string {
 	return fmt.Sprintf("task:%d", task.ID)
 }
 
+func catalogHasSequenceTasks(catalog []Task) bool {
+	for _, task := range catalog {
+		if task.SequenceKey != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
 	now := params.Now
 	if now.IsZero() {
@@ -272,17 +290,26 @@ func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult
 			return err
 		}
 		result.Task = &task
-		progress, err := txRepo.currentProgressForUpdate(ctx, params.Identity, task.ID, now)
+		refreshedProgress, err := txRepo.refreshComplexTaskBeforeClaim(ctx, params.Identity, task, now)
 		if err != nil {
-			if isNoRows(err) {
-				if task.StartMode == StartModeRequired {
-					result.Status = ClaimStatusNotStarted
-				} else {
-					result.Status = ClaimStatusNotReady
-				}
-				return nil
-			}
 			return err
+		}
+		var progress Progress
+		if refreshedProgress != nil && refreshedProgress.ID != 0 {
+			progress = *refreshedProgress
+		} else {
+			progress, err = txRepo.currentProgressForUpdate(ctx, params.Identity, task.ID, now)
+			if err != nil {
+				if isNoRows(err) {
+					if task.StartMode == StartModeRequired {
+						result.Status = ClaimStatusNotStarted
+					} else {
+						result.Status = ClaimStatusNotReady
+					}
+					return nil
+				}
+				return err
+			}
 		}
 		task.Progress = &progress
 		result.Task = &task
@@ -459,6 +486,9 @@ func (r *Repository) claimProgress(ctx context.Context, identity Identity, task 
 		return err
 	}
 	if err := r.advanceSequenceState(ctx, identity, task); err != nil {
+		return err
+	}
+	if err := r.refreshComplexParentsForChangedTasks(ctx, identity, []uint64{task.ID}, now); err != nil {
 		return err
 	}
 	task.Rewards = rewards

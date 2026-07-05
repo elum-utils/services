@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS task_definition (
     sequence_position INT NULL,
     task_kind VARCHAR(64) NOT NULL DEFAULT 'internal',
     action_key VARCHAR(150) NOT NULL,
-    action_kind ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external') NOT NULL,
+    action_kind ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external', 'composite') NOT NULL,
     claim_mode ENUM('manual', 'auto') NOT NULL DEFAULT 'manual',
     start_mode ENUM('none', 'required') NOT NULL DEFAULT 'none',
     target_count BIGINT UNSIGNED NOT NULL DEFAULT 1,
@@ -92,6 +92,27 @@ CREATE TABLE IF NOT EXISTS task_definition (
     CONSTRAINT task_definition_target_chk CHECK (target_count > 0),
     CONSTRAINT task_definition_reset_chk CHECK (reset_every > 0),
     CONSTRAINT task_definition_window_chk CHECK (start_at IS NULL OR end_at IS NULL OR start_at < end_at)
+);
+
+CREATE TABLE IF NOT EXISTS task_complex_condition (
+    workspace_id VARCHAR(64) NOT NULL,
+    parent_task_id BIGINT UNSIGNED NOT NULL,
+    condition_task_id BIGINT UNSIGNED NOT NULL,
+    required_status ENUM('ready', 'claimed') NOT NULL DEFAULT 'ready',
+    position INT NOT NULL DEFAULT 0,
+    is_required BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, parent_task_id, condition_task_id),
+    KEY task_complex_condition_parent_idx (workspace_id, parent_task_id, position, condition_task_id),
+    KEY task_complex_condition_condition_idx (workspace_id, condition_task_id, parent_task_id),
+    CONSTRAINT task_complex_condition_parent_fk
+        FOREIGN KEY (workspace_id, parent_task_id)
+        REFERENCES task_definition (workspace_id, id) ON DELETE RESTRICT,
+    CONSTRAINT task_complex_condition_condition_fk
+        FOREIGN KEY (workspace_id, condition_task_id)
+        REFERENCES task_definition (workspace_id, id) ON DELETE RESTRICT,
+    CONSTRAINT task_complex_condition_not_self_chk CHECK (parent_task_id <> condition_task_id)
 );
 
 CREATE TABLE IF NOT EXISTS task_localization (

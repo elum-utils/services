@@ -73,6 +73,9 @@ func (r *Repository) MarkIntegrationTaskReady(ctx context.Context, params MarkIn
 			task.Progress = &progress
 			result.Task = task
 			result.Status = RecordStatusRecorded
+			if err := txRepo.refreshComplexParentsForChangedTasks(ctx, params.Identity, []uint64{task.ID}, now); err != nil {
+				return err
+			}
 			return nil
 		})
 		if isRetryableTxError(err) && attempt < 2 {

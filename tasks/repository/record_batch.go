@@ -2,9 +2,8 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
-
-	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
 type recordProgressUpsert struct {
@@ -32,20 +31,47 @@ func (r *Repository) batchUpsertProgress(
 	if len(items) == 0 {
 		return 0, nil
 	}
+	query, args := compileProgressBulkUpsert(identity, items)
 	return repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
-		var total int64
-		for _, item := range items {
-			rows, err := r.q.UpsertProgress(ctx, tasksqlc.UpsertProgressParams{
-				WorkspaceID: identity.WorkspaceID, TaskID: item.taskID,
-				AppID: identity.AppID, PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
-				PeriodStartAt: item.periodStartAt, PeriodEndAt: item.periodEndAt,
-				Progress: item.progress, Status: tasksqlc.TaskProgressStatus(item.status), ReadyAt: nullTime(item.readyAt),
-			})
-			if err != nil {
-				return 0, err
-			}
-			total += rows
+		result, err := r.executor.ExecContext(ctx, query, args...)
+		if err != nil {
+			return 0, err
 		}
-		return total, nil
+		return result.RowsAffected()
 	})
+}
+
+func compileProgressBulkUpsert(identity Identity, items []recordProgressUpsert) (string, []any) {
+	const columns = 10
+	var builder strings.Builder
+	builder.Grow(len(items)*columns*4 + 320)
+	builder.WriteString("INSERT INTO task_progress (")
+	builder.WriteString("workspace_id, task_id, app_id, platform_id, platform_user_id, ")
+	builder.WriteString("period_start_at, period_end_at, progress, status, ready_at")
+	builder.WriteString(") VALUES ")
+	args := make([]any, 0, len(items)*columns)
+	for index, item := range items {
+		if index > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		args = append(args,
+			identity.WorkspaceID,
+			item.taskID,
+			identity.AppID,
+			identity.PlatformID,
+			identity.PlatformUserID,
+			item.periodStartAt,
+			item.periodEndAt,
+			item.progress,
+			item.status,
+			nullTime(item.readyAt),
+		)
+	}
+	builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+	builder.WriteString("period_end_at = VALUES(period_end_at), ")
+	builder.WriteString("progress = VALUES(progress), ")
+	builder.WriteString("status = VALUES(status), ")
+	builder.WriteString("ready_at = VALUES(ready_at)")
+	return builder.String(), args
 }
