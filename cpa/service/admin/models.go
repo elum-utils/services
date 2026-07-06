@@ -88,6 +88,7 @@ type AssignmentEventModel struct {
 
 type ExportRequest = repository.ExportRequest
 type ExportPackage = repository.ExportPackage
+type ExportItem = repository.ExportItem
 type ExportOffer = repository.ExportOffer
 type ExportText = repository.ExportText
 type ExportReward = repository.ExportReward

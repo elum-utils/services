@@ -198,6 +198,7 @@ type ExportPackage = repository.ExportPackage
 type ExportRequest = repository.ExportRequest
 type ExportManifest = repository.ExportManifest
 type ExportManifestSection = repository.ExportManifestSection
+type ExportItem = repository.ExportItem
 type ExportGroup = repository.ExportGroup
 type ExportText = repository.ExportText
 type ExportSequence = repository.ExportSequence

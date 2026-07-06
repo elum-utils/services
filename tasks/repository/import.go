@@ -535,7 +535,7 @@ func (r *Repository) importExistingKeys(ctx context.Context, workspaceID string)
 }
 
 func countPackage(pkg ExportPackage) ImportCounts {
-	out := ImportCounts{Groups: len(pkg.Groups), Sequences: len(pkg.Sequences)}
+	out := ImportCounts{Items: len(pkg.Items), Groups: len(pkg.Groups), Sequences: len(pkg.Sequences)}
 	for _, group := range pkg.Groups {
 		out.GroupLocalizations += len(group.Localization)
 		out.Tasks += len(group.Tasks)
@@ -556,6 +556,11 @@ func validateExportPackage(pkg ExportPackage) error {
 	}
 	if pkg.Service != "" && pkg.Service != "tasks" {
 		return fmt.Errorf("unsupported export service: %s", pkg.Service)
+	}
+	for _, item := range pkg.Items {
+		if item.ID == "" {
+			return fmt.Errorf("item id is required")
+		}
 	}
 	for _, group := range pkg.Groups {
 		if group.Key == "" {

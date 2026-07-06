@@ -22,7 +22,7 @@ type ExportPackage struct {
 	CreatedAt time.Time            `json:"created_at"`
 	Groups    []ExportProductGroup `json:"groups,omitempty"`
 	Products  []ExportProduct      `json:"products,omitempty"`
-	Items     []ExportItem         `json:"-"`
+	Items     []ExportItem         `json:"items,omitempty"`
 }
 
 type ExportProductGroup struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -31,6 +32,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		Format: ExportFormat, Service: "calendar", CreatedAt: now.UTC(),
 		Calendars: make([]ExportCalendar, 0, len(calendars)),
 	}
+	items := make(exportItemCollector)
 	for _, calendar := range calendars {
 		item := ExportCalendar{
 			ID: calendar.ID, Type: calendar.Type, Mode: calendar.Mode,
@@ -41,8 +43,14 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			StartAt: calendar.StartAt, EndAt: calendar.EndAt,
 			Localization: localizations[calendar.ID], Steps: steps[calendar.ID],
 		}
+		for _, step := range item.Steps {
+			for _, reward := range step.Rewards {
+				items.add(reward.Key)
+			}
+		}
 		out.Calendars = append(out.Calendars, item)
 	}
+	out.Items = items.list()
 	return out, nil
 }
 
@@ -69,6 +77,31 @@ ORDER BY calendar_id, locale`, workspaceID)
 		result[calendarID][locale] = text
 	}
 	return result, rows.Err()
+}
+
+type exportItemCollector map[string]struct{}
+
+func (c exportItemCollector) add(id string) {
+	if id == "" {
+		return
+	}
+	c[id] = struct{}{}
+}
+
+func (c exportItemCollector) list() []ExportItem {
+	if len(c) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(c))
+	for id := range c {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	items := make([]ExportItem, 0, len(ids))
+	for index, id := range ids {
+		items = append(items, ExportItem{ID: id, Position: int32((index + 1) * 10)})
+	}
+	return items
 }
 
 func (r *Repository) exportSteps(ctx context.Context, workspaceID string) (map[string][]ExportStep, error) {

@@ -195,11 +195,17 @@ func validateExportPackage(pkg ExportPackage) error {
 	if pkg.Format != ExportFormat || pkg.Service != "promo" {
 		return fmt.Errorf("unsupported export package: %s/%s", pkg.Service, pkg.Format)
 	}
+	for _, item := range pkg.Items {
+		if item.ID == "" {
+			return fmt.Errorf("item id is required")
+		}
+	}
 	return nil
 }
 
 func countPackage(pkg ExportPackage) ImportCounts {
 	var counts ImportCounts
+	counts.Items = uint64(len(pkg.Items))
 	counts.Promos = uint64(len(pkg.Promos))
 	for _, promo := range pkg.Promos {
 		counts.Localizations += uint64(len(promo.Localization))

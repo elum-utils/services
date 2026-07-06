@@ -176,11 +176,17 @@ func validateExportPackage(pkg ExportPackage) error {
 	if pkg.Service != "cpa" {
 		return fmt.Errorf("unsupported export service: %s", pkg.Service)
 	}
+	for _, item := range pkg.Items {
+		if item.ID == "" {
+			return fmt.Errorf("item id is required")
+		}
+	}
 	return nil
 }
 
 func countPackage(pkg ExportPackage) ImportCounts {
 	var counts ImportCounts
+	counts.Items = uint64(len(pkg.Items))
 	counts.Offers = uint64(len(pkg.Offers))
 	for _, offer := range pkg.Offers {
 		counts.Localizations += uint64(len(offer.Localization))

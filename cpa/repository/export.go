@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"sort"
 	"time"
 )
 
@@ -21,6 +22,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		Format: ExportFormat, Service: "cpa", CreatedAt: now.UTC(),
 		Offers: make([]ExportOffer, 0, len(bundles)),
 	}
+	items := make(exportItemCollector)
 	for _, bundle := range bundles {
 		offer := ExportOffer{
 			ID: bundle.Offer.ID, Payload: bundle.Offer.Payload, Target: nullableJSON(bundle.Offer.Target),
@@ -40,9 +42,11 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			offer.Rewards = append(offer.Rewards, ExportReward{
 				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
 			})
+			items.add(reward.Key)
 		}
 		out.Offers = append(out.Offers, offer)
 	}
+	out.Items = items.list()
 	return out, nil
 }
 
@@ -51,4 +55,29 @@ func nullableJSON(value []byte) []byte {
 		return nil
 	}
 	return value
+}
+
+type exportItemCollector map[string]struct{}
+
+func (c exportItemCollector) add(id string) {
+	if id == "" {
+		return
+	}
+	c[id] = struct{}{}
+}
+
+func (c exportItemCollector) list() []ExportItem {
+	if len(c) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(c))
+	for id := range c {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	items := make([]ExportItem, 0, len(ids))
+	for index, id := range ids {
+		items = append(items, ExportItem{ID: id, Position: int32((index + 1) * 10)})
+	}
+	return items
 }

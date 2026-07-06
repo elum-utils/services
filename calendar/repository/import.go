@@ -250,11 +250,17 @@ func validateExportPackage(pkg ExportPackage) error {
 	if pkg.Service != "calendar" {
 		return fmt.Errorf("unsupported export service: %s", pkg.Service)
 	}
+	for _, item := range pkg.Items {
+		if item.ID == "" {
+			return fmt.Errorf("item id is required")
+		}
+	}
 	return nil
 }
 
 func countPackage(pkg ExportPackage) ImportCounts {
 	var counts ImportCounts
+	counts.Items = uint64(len(pkg.Items))
 	counts.Calendars = uint64(len(pkg.Calendars))
 	for _, calendar := range pkg.Calendars {
 		counts.Localizations += uint64(len(calendar.Localization))

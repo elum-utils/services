@@ -113,6 +113,7 @@ type ExportPackage struct {
 	Format    string           `json:"format"`
 	Service   string           `json:"service"`
 	CreatedAt time.Time        `json:"created_at"`
+	Items     []ExportItem     `json:"items,omitempty"`
 	Groups    []ExportGroup    `json:"groups"`
 	Sequences []ExportSequence `json:"sequences,omitempty"`
 }
@@ -130,6 +131,14 @@ type ExportGroup struct {
 type ExportText struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
+}
+
+type ExportItem struct {
+	ID           string                `json:"id"`
+	ItemType     *string               `json:"item_type,omitempty"`
+	Rarity       string                `json:"rarity,omitempty"`
+	Position     int32                 `json:"position,omitempty"`
+	Localization map[string]ExportText `json:"localization,omitempty"`
 }
 
 type ExportSequence struct {
@@ -230,6 +239,7 @@ type ImportPreview struct {
 }
 
 type ImportCounts struct {
+	Items              int `json:"items"`
 	Groups             int `json:"groups"`
 	Sequences          int `json:"sequences"`
 	Tasks              int `json:"tasks"`

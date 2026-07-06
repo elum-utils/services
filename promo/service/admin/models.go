@@ -58,6 +58,7 @@ type DailyStatsModel struct {
 
 type ExportRequest = repository.ExportRequest
 type ExportPackage = repository.ExportPackage
+type ExportItem = repository.ExportItem
 type ExportPromo = repository.ExportPromo
 type ExportText = repository.ExportText
 type ExportReward = repository.ExportReward
