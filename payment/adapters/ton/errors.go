@@ -5,6 +5,7 @@ import serviceerrors "github.com/elum-utils/services/errors"
 var (
 	ErrNetworkInvalid               = serviceerrors.New(serviceerrors.CodeInvalidFields, "ton network must be mainnet or testnet")
 	ErrWalletAddressRequired        = serviceerrors.New(serviceerrors.CodeInvalidFields, "ton wallet address is required")
+	ErrWalletAddressInvalid         = serviceerrors.New(serviceerrors.CodeInvalidFields, "ton wallet address is invalid")
 	ErrWalletNotConfigured          = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "ton wallet is not configured for workspace")
 	ErrDestinationRequired          = serviceerrors.New(serviceerrors.CodeInvalidFields, "ton destination is required")
 	ErrWorkspaceIDRequired          = serviceerrors.New(serviceerrors.CodeInvalidFields, "ton workspace id is required")

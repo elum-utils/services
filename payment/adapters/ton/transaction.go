@@ -77,8 +77,9 @@ func (a *TON) CreateTransaction(ctx context.Context, params CreateTransactionPar
 	}
 
 	destination := strings.TrimSpace(params.Destination)
-	if destination == "" {
-		return nil, ErrDestinationRequired
+	destination, err = normalizeTONAddress(destination, network, ErrDestinationRequired, ErrDestinationAddressInvalid)
+	if err != nil {
+		return nil, err
 	}
 
 	if assetCode == AssetTON {
@@ -97,13 +98,19 @@ func (a *TON) CreateTransaction(ctx context.Context, params CreateTransactionPar
 	}
 
 	sourceWallet := strings.TrimSpace(params.SourceWallet)
-	if sourceWallet == "" {
-		return nil, ErrSourceWalletRequired
+	sourceWallet, err = normalizeTONAddress(sourceWallet, network, ErrSourceWalletRequired, ErrWalletAddressInvalid)
+	if err != nil {
+		return nil, err
 	}
 
 	responseDestination := strings.TrimSpace(params.ResponseDestination)
 	if responseDestination == "" {
 		responseDestination = sourceWallet
+	} else {
+		responseDestination, err = normalizeTONAddress(responseDestination, network, ErrResponseAddressInvalid, ErrResponseAddressInvalid)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return transactionJetton(ctx, network, params.NetworkConfigURL, sourceWallet, destination, responseDestination, params.AmountMinor, params.Comment, asset)

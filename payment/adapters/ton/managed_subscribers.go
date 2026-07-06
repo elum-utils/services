@@ -161,6 +161,10 @@ func subscriberParamsFromWallet(row paymentsqlc.PaymentTonWallet) (SubscriberPar
 	if workspaceID == "" || walletAddress == "" {
 		return SubscriberParams{}, false, nil
 	}
+	walletAddress, err = NormalizeWalletAddress(walletAddress, network)
+	if err != nil {
+		return SubscriberParams{}, false, err
+	}
 	networkConfigURL := ""
 	if row.NetworkConfigUrl.Valid {
 		networkConfigURL = strings.TrimSpace(row.NetworkConfigUrl.String)

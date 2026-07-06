@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/go-sql-driver/mysql"
 )
 
@@ -32,6 +33,30 @@ func validateNetwork(network string) (string, error) {
 	default:
 		return "", ErrNetworkInvalid
 	}
+}
+
+func NormalizeNetwork(network string) (string, error) {
+	return validateNetwork(network)
+}
+
+func NormalizeWalletAddress(value string, network string) (string, error) {
+	return normalizeTONAddress(value, network, ErrWalletAddressRequired, ErrWalletAddressInvalid)
+}
+
+func normalizeTONAddress(value string, network string, requiredErr *serviceerrors.Error, invalidErr *serviceerrors.Error) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", requiredErr
+	}
+	network, err := validateNetwork(network)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := parseTONAddress(value)
+	if err != nil {
+		return "", serviceerrors.Wrap(serviceerrors.CodeInvalidFields, invalidErr.Message(), err)
+	}
+	return parsed.Testnet(network == NetworkTestnet).String(), nil
 }
 
 func nullInt64FromPtr(value *int64) sql.NullInt64 {

@@ -1,0 +1,230 @@
+{
+  "package": {
+    "format": "tasks.export.v1",
+    "service": "tasks",
+    "items": [
+      {
+        "id": "gift.bear",
+        "item_type": "quantity",
+        "rarity": "rare",
+        "position": 10,
+        "localization": {
+          "ru": {
+            "title": "Подарок мишка",
+            "description": "Подарок: мишка."
+          },
+          "en": {
+            "title": "Bear gift",
+            "description": "Gift: bear."
+          }
+        }
+      }
+    ],
+    "groups": [
+      {
+        "key": "complex",
+        "position": 20,
+        "is_active": true,
+        "localization": {
+          "ru": {
+            "title": "Комплексные задания",
+            "description": "Задания с несколькими условиями и общей наградой."
+          },
+          "en": {
+            "title": "Complex tasks",
+            "description": "Tasks with multiple conditions and a shared reward."
+          }
+        },
+        "tasks": [
+          {
+            "key": "complex.bear_gift",
+            "task_kind": "complex",
+            "action_key": "complex.bear_gift",
+            "action_kind": "composite",
+            "claim_mode": "manual",
+            "start_mode": "none",
+            "target_count": 4,
+            "reset": {
+              "unit": "never",
+              "every": 1
+            },
+            "position": 10,
+            "payload": {
+              "kind": "complex_reward",
+              "reward": "gift.bear"
+            },
+            "is_visible": true,
+            "is_active": true,
+            "localization": {
+              "ru": {
+                "title": "Получить подарок мишку",
+                "description": "Выполни все условия и забери подарок мишку."
+              },
+              "en": {
+                "title": "Get a bear gift",
+                "description": "Complete all conditions and claim the bear gift."
+              }
+            },
+            "rewards": [
+              {
+                "key": "gift.bear",
+                "type": "quantity",
+                "quantity": 1,
+                "scale": 0,
+                "position": 10
+              }
+            ],
+            "conditions": [
+              {
+                "task_key": "complex.bear_gift.subscribe_app_channel",
+                "required_status": "ready",
+                "position": 10,
+                "is_required": true
+              },
+              {
+                "task_key": "complex.bear_gift.complete_any_12_tasks",
+                "required_status": "ready",
+                "position": 20,
+                "is_required": true
+              },
+              {
+                "task_key": "complex.bear_gift.play_pvp",
+                "required_status": "ready",
+                "position": 30,
+                "is_required": true
+              },
+              {
+                "task_key": "complex.bear_gift.invite_5_friends",
+                "required_status": "ready",
+                "position": 40,
+                "is_required": true
+              }
+            ]
+          },
+          {
+            "key": "complex.bear_gift.subscribe_app_channel",
+            "task_kind": "channel_subscribe",
+            "action_key": "channel.subscribe.app",
+            "action_kind": "channel_subscribe",
+            "claim_mode": "manual",
+            "start_mode": "none",
+            "target_count": 1,
+            "reset": {
+              "unit": "never",
+              "every": 1
+            },
+            "position": 20,
+            "payload": {
+              "kind": "subscribe_channel",
+              "channel": "@MyChimpChannel"
+            },
+            "is_visible": false,
+            "is_active": true,
+            "localization": {
+              "ru": {
+                "title": "Подписаться на канал апки",
+                "description": "Подпишись на канал приложения."
+              },
+              "en": {
+                "title": "Subscribe to the app channel",
+                "description": "Subscribe to the app channel."
+              }
+            }
+          },
+          {
+            "key": "complex.bear_gift.complete_any_12_tasks",
+            "task_kind": "internal",
+            "action_key": "task.claimed",
+            "action_kind": "app_action",
+            "claim_mode": "manual",
+            "start_mode": "none",
+            "target_count": 12,
+            "reset": {
+              "unit": "never",
+              "every": 1
+            },
+            "position": 30,
+            "payload": {
+              "kind": "complete_any_tasks",
+              "required_count": 12
+            },
+            "is_visible": false,
+            "is_active": true,
+            "localization": {
+              "ru": {
+                "title": "Выполнить 12 любых заданий",
+                "description": "Выполни любые 12 заданий."
+              },
+              "en": {
+                "title": "Complete any 12 tasks",
+                "description": "Complete any 12 tasks."
+              }
+            }
+          },
+          {
+            "key": "complex.bear_gift.play_pvp",
+            "task_kind": "internal",
+            "action_key": "pvp.play",
+            "action_kind": "app_action",
+            "claim_mode": "manual",
+            "start_mode": "none",
+            "target_count": 1,
+            "reset": {
+              "unit": "never",
+              "every": 1
+            },
+            "position": 40,
+            "payload": {
+              "game": "pvp",
+              "result": "any"
+            },
+            "is_visible": false,
+            "is_active": true,
+            "localization": {
+              "ru": {
+                "title": "Поиграть в PvP",
+                "description": "Сыграй в PvP."
+              },
+              "en": {
+                "title": "Play PvP",
+                "description": "Play PvP."
+              }
+            }
+          },
+          {
+            "key": "complex.bear_gift.invite_5_friends",
+            "task_kind": "internal",
+            "action_key": "referral.invite",
+            "action_kind": "app_action",
+            "claim_mode": "manual",
+            "start_mode": "none",
+            "target_count": 5,
+            "reset": {
+              "unit": "never",
+              "every": 1
+            },
+            "position": 50,
+            "payload": {
+              "kind": "invite_friends",
+              "required_count": 5,
+              "source": "ref_link"
+            },
+            "is_visible": false,
+            "is_active": true,
+            "localization": {
+              "ru": {
+                "title": "Пригласить 5 друзей",
+                "description": "Пригласи 5 друзей по своей реферальной ссылке."
+              },
+              "en": {
+                "title": "Invite 5 friends",
+                "description": "Invite 5 friends using your referral link."
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "conflict_strategy": "update_existing"
+}

@@ -22,7 +22,7 @@ func (a *TON) CreatePayment(ctx context.Context, params CreatePaymentParams) (*C
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if asset.Chain.Valid && asset.Chain.String != "" && !strings.EqualFold(asset.Chain.String, "ton") {
 		return nil, ErrAssetChainMismatch
 	}
@@ -47,6 +47,10 @@ func (a *TON) CreatePayment(ctx context.Context, params CreatePaymentParams) (*C
 	walletAddress := strings.TrimSpace(wallet.WalletAddress)
 	if walletAddress == "" {
 		return nil, ErrWalletNotConfigured
+	}
+	walletAddress, err = NormalizeWalletAddress(walletAddress, network)
+	if err != nil {
+		return nil, err
 	}
 
 	order, err := a.repository.CreateOrder(ctx, repository.OrderCreateParams{

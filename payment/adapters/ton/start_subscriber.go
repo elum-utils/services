@@ -30,6 +30,10 @@ func (a *TON) StartSubscriber(ctx context.Context, params SubscriberParams) (*Su
 	if err != nil {
 		return nil, err
 	}
+	params.WalletAddress, err = NormalizeWalletAddress(params.WalletAddress, network)
+	if err != nil {
+		return nil, err
+	}
 	if params.NetworkConfigURL == "" {
 		params.NetworkConfigURL = defaultNetworkConfigURL(network)
 	}

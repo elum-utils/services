@@ -22,6 +22,10 @@ func (a *TON) ProcessTransfer(ctx context.Context, transfer IncomingTransfer) (*
 		return nil, err
 	}
 	transfer.Network = network
+	transfer.WalletAddress, err = NormalizeWalletAddress(transfer.WalletAddress, network)
+	if err != nil {
+		return nil, err
+	}
 
 	if transfer.TxHash != "" {
 		existing, err := a.repository.GetProviderTransactionByExternalID(ctx, paymentsqlc.GetProviderTransactionByExternalIDParams{
