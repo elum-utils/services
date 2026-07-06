@@ -114,6 +114,9 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
+	if err := r.ensureTaskDefinitionActionKind(ctx); err != nil {
+		return fmt.Errorf("tasks schema upgrade task_definition.action_kind failed: %w", err)
+	}
 	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
 		return fmt.Errorf("tasks schema upgrade task_reward.scale failed: %w", err)
 	}
@@ -140,6 +143,31 @@ func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
 	}
 	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_stats_daily", "revoked_after_claim_count", "BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER revoked_count"); err != nil {
 		return fmt.Errorf("tasks schema upgrade task_partner_stats_daily.revoked_after_claim_count failed: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ensureTaskDefinitionActionKind(ctx context.Context) error {
+	const definition = "ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external', 'composite') NOT NULL"
+
+	qctx, cancel := context.WithTimeout(ctx, bootstrapQueryTimeout)
+	defer cancel()
+
+	var columnType string
+	if err := r.db.DB().QueryRowContext(qctx, `
+SELECT COLUMN_TYPE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'task_definition'
+  AND COLUMN_NAME = 'action_kind'
+`).Scan(&columnType); err != nil {
+		return err
+	}
+
+	for _, value := range []string{"'app_action'", "'amount_action'", "'channel_subscribe'", "'channel_boost'", "'advertisement_view'", "'external'", "'composite'"} {
+		if !strings.Contains(columnType, value) {
+			return sqlwrap.ModifyColumn(ctx, r.db, bootstrapQueryTimeout, "task_definition", "action_kind", definition)
+		}
 	}
 	return nil
 }

@@ -47,6 +47,29 @@ WHERE TABLE_SCHEMA = DATABASE()
 	return err
 }
 
+func ModifyColumn(ctx context.Context, db *Client, timeout time.Duration, table, column, definition string) error {
+	if db == nil || db.db == nil {
+		return ErrNilDB
+	}
+	if !sqlIdentifierRe.MatchString(table) {
+		return fmt.Errorf("invalid table identifier %q", table)
+	}
+	if !sqlIdentifierRe.MatchString(column) {
+		return fmt.Errorf("invalid column identifier %q", column)
+	}
+
+	qctx, cancel := db.queryContext(ctx, timeout)
+	defer cancel()
+
+	_, err := db.db.ExecContext(qctx, fmt.Sprintf(
+		"ALTER TABLE `%s` MODIFY COLUMN `%s` %s",
+		table,
+		column,
+		definition,
+	))
+	return err
+}
+
 func EnsureIndex(ctx context.Context, db *Client, timeout time.Duration, table, index, definition string) error {
 	if db == nil || db.db == nil {
 		return ErrNilDB
