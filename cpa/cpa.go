@@ -76,7 +76,6 @@ func (c *CPA) Run(ctx context.Context) error {
 	errCh := make(chan error, len(registrations))
 	c.background.Add(len(registrations))
 	for _, registration := range registrations {
-		registration := registration
 		go func() {
 			defer c.background.Done()
 			errCh <- c.runCallback(registration.ctx, registration.handler, registration.options...)

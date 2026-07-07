@@ -50,6 +50,12 @@ type TaskRefParams struct {
 	Now      time.Time
 }
 
+type CheckParams struct {
+	TaskRefParams
+	Provider  string
+	Variables map[string]string
+}
+
 type CheckChannelSubscriptionParams struct {
 	TaskRefParams
 	Provider  string

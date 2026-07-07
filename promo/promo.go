@@ -75,7 +75,6 @@ func (p *Promo) Run(ctx context.Context) error {
 	errCh := make(chan error, len(registrations))
 	p.background.Add(len(registrations))
 	for _, registration := range registrations {
-		registration := registration
 		go func() {
 			defer p.background.Done()
 			errCh <- p.runCallback(registration.ctx, registration.handler, registration.options...)

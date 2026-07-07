@@ -294,6 +294,31 @@
 
 Нельзя класть в `payload`: токены, webhook secrets, приватные URL с ключами, внутренние payload для проверки.
 
+Для подписок и бустов токены должны лежать в приватном `integration.payload`, а не в публичном `payload`. Пользователю `integration.payload` не отдается в `task.list`; его читает только integration checker во время `task.check`.
+
+Пример приватного `integration.payload` для Telegram-подписки или Telegram-буста:
+
+```json
+{
+  "platform": "telegram",
+  "chat_id": "@MyChannel",
+  "token_strategy": "round_robin",
+  "tokens": ["<TG_BOT_TOKEN_1>", "<TG_BOT_TOKEN_2>"]
+}
+```
+
+Пример приватного `integration.payload` для VK-подписки:
+
+```json
+{
+  "platform": "vk",
+  "group_id": "<VK_GROUP_ID>",
+  "api_version": "5.199",
+  "token_strategy": "round_robin",
+  "tokens": ["<VK_ACCESS_TOKEN_1>", "<VK_ACCESS_TOKEN_2>"]
+}
+```
+
 ## Target и видимость
 
 Target применяется сервером до выдачи задания пользователю.

@@ -1,9 +1,9 @@
 package integration
 
 import (
-	"maps"
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
@@ -46,6 +46,28 @@ func (i *Integration) Close() error {
 		return nil
 	}
 	return i.repository.Close()
+}
+
+func (i *Integration) Check(ctx context.Context, params CheckParams) (Result, error) {
+	mergedCtx, cancel := i.withContext(ctx)
+	defer cancel()
+	now := params.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	task, found, err := i.repository.IntegrationCheckTask(mergedCtx, params.Identity.WorkspaceID, params.TaskRef)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		return Result{Status: StatusNotFound}, nil
+	}
+	checkParams, ok := i.checkParamsForTask(ctx, params, task.ActionKind)
+	if !ok {
+		publicTask := activeTask(task)
+		return Result{Status: StatusInvalidTask, Task: &publicTask}, nil
+	}
+	return i.checkLoadedAndRecord(mergedCtx, checkParams, task, now)
 }
 
 func (i *Integration) CheckChannelSubscription(ctx context.Context, params CheckChannelSubscriptionParams) (Result, error) {
@@ -119,6 +141,10 @@ func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordP
 	if !found {
 		return Result{Status: StatusNotFound}, nil
 	}
+	return i.checkLoadedAndRecord(mergedCtx, params, task, now)
+}
+
+func (i *Integration) checkLoadedAndRecord(ctx context.Context, params checkAndRecordParams, task repository.Task, now time.Time) (Result, error) {
 	publicTask := activeTask(task)
 	if task.ActionKind != params.expectedActionKind {
 		return Result{Status: StatusInvalidTask, Task: &publicTask}, nil
@@ -141,7 +167,7 @@ func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordP
 	if !check.Completed {
 		return Result{Status: StatusNotCompleted, Completed: false, Task: &publicTask, Check: check.Payload}, nil
 	}
-	ready, err := i.repository.MarkIntegrationTaskReady(mergedCtx, repository.MarkIntegrationTaskReadyParams{
+	ready, err := i.repository.MarkIntegrationTaskReady(ctx, repository.MarkIntegrationTaskReadyParams{
 		Identity: params.taskRef.Identity, Task: task,
 		Source: integrationSource(provider), ExternalEventKey: integrationEventKey(task, params.taskRef.Identity),
 		Payload: check.Payload, Now: now,
@@ -157,6 +183,55 @@ func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordP
 	}
 	readyTask := activeTask(ready.Task)
 	return Result{Status: status, Completed: true, Task: &readyTask, Check: check.Payload}, nil
+}
+
+func (i *Integration) checkParamsForTask(ctx context.Context, params CheckParams, actionKind string) (checkAndRecordParams, bool) {
+	switch actionKind {
+	case repository.ActionKindChannelSubscribe:
+		return checkAndRecordParams{
+			taskRef: params.TaskRefParams, provider: params.Provider,
+			variables: params.Variables, expectedActionKind: repository.ActionKindChannelSubscribe,
+			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(ctx, ChannelSubscriptionCheckParams{
+					Identity: params.Identity, Task: taskContext(task), Provider: provider,
+					Variables: params.Variables, OccurredAt: now,
+				})
+			},
+			checker: func(provider string) any {
+				return i.channelCheckers[provider]
+			},
+		}, true
+	case repository.ActionKindChannelBoost:
+		return checkAndRecordParams{
+			taskRef: params.TaskRefParams, provider: params.Provider,
+			variables: params.Variables, expectedActionKind: repository.ActionKindChannelBoost,
+			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ChannelBoostChecker).CheckChannelBoost(ctx, ChannelBoostCheckParams{
+					Identity: params.Identity, Task: taskContext(task), Provider: provider,
+					Variables: params.Variables, OccurredAt: now,
+				})
+			},
+			checker: func(provider string) any {
+				return i.channelBoostCheckers[provider]
+			},
+		}, true
+	case repository.ActionKindExternal:
+		return checkAndRecordParams{
+			taskRef: params.TaskRefParams, provider: params.Provider,
+			variables: params.Variables, expectedActionKind: repository.ActionKindExternal,
+			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ExternalTaskChecker).CheckExternalTask(ctx, ExternalTaskCheckParams{
+					Identity: params.Identity, Task: taskContext(task), Provider: provider,
+					Variables: params.Variables, OccurredAt: now,
+				})
+			},
+			checker: func(provider string) any {
+				return i.externalCheckers[provider]
+			},
+		}, true
+	default:
+		return checkAndRecordParams{}, false
+	}
 }
 
 func (i *Integration) ConfirmCompletion(ctx context.Context, params ConfirmCompletionParams) (ConfirmCompletionResult, error) {
