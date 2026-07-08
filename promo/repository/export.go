@@ -11,39 +11,79 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	promos, err := r.ListPromos(ctx, workspaceID, 100000, 0)
+	promoRows, err := r.q.ListExportPromos(ctx, workspaceID)
 	if err != nil {
 		return ExportPackage{}, err
 	}
-	out := ExportPackage{Format: ExportFormat, Service: "promo", CreatedAt: now.UTC(), Promos: make([]ExportPromo, 0, len(promos))}
+	localizationRows, err := r.q.ListExportLocalizations(ctx, workspaceID)
+	if err != nil {
+		return ExportPackage{}, err
+	}
+	rewardRows, err := r.q.ListExportRewards(ctx, workspaceID)
+	if err != nil {
+		return ExportPackage{}, err
+	}
+	out := ExportPackage{
+		Format:    ExportFormat,
+		Service:   "promo",
+		CreatedAt: now.UTC(),
+		Promos:    make([]ExportPromo, 0, len(promoRows)),
+	}
 	items := make(exportItemCollector)
-	for _, promo := range promos {
-		localizations, err := r.ListLocalizations(ctx, workspaceID, promo.ID)
-		if err != nil {
-			return ExportPackage{}, err
-		}
-		rewards, err := r.ListRewards(ctx, workspaceID, promo.ID)
-		if err != nil {
-			return ExportPackage{}, err
-		}
+
+	promoIndexByID := make(map[int64]int, len(promoRows))
+	for _, row := range promoRows {
+		promo := mapPromo(row)
 		item := ExportPromo{
-			Code: promo.Code, Payload: promo.Payload, Target: nullableJSON(promo.Target),
-			MaxActivations: promo.MaxActivations, IsActive: promo.IsActive,
-			StartAt: promo.StartAt, EndAt: promo.EndAt,
-			Localization: make(map[string]ExportText, len(localizations)),
-			Rewards:      make([]ExportReward, 0, len(rewards)),
+			Code:           promo.Code,
+			Payload:        promo.Payload,
+			Target:         nullableJSON(promo.Target),
+			MaxActivations: promo.MaxActivations,
+			IsActive:       promo.IsActive,
+			StartAt:        promo.StartAt,
+			EndAt:          promo.EndAt,
+			Localization:   make(map[string]ExportText),
+			Rewards:        make([]ExportReward, 0),
 		}
-		for _, localization := range localizations {
-			item.Localization[localization.Locale] = ExportText{Title: localization.Title, Description: localization.Description}
-		}
-		for _, reward := range rewards {
-			item.Rewards = append(item.Rewards, ExportReward{
-				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,
-			})
-			items.add(reward.Key)
-		}
+		promoIndexByID[row.ID] = len(out.Promos)
 		out.Promos = append(out.Promos, item)
 	}
+
+	for _, localization := range localizationRows {
+		index, ok := promoIndexByID[localization.PromoID]
+		if !ok {
+			continue
+		}
+		out.Promos[index].Localization[localization.Locale] = ExportText{
+			Title:       localization.Title,
+			Description: localization.Description,
+		}
+	}
+
+	for _, reward := range rewardRows {
+		index, ok := promoIndexByID[reward.PromoID]
+		if !ok {
+			continue
+		}
+		out.Promos[index].Rewards = append(out.Promos[index].Rewards, ExportReward{
+			Key:      reward.RewardKey,
+			Type:     string(reward.RewardType),
+			Quantity: reward.Quantity,
+			Scale:    uint16(reward.Scale),
+			Unit:     promoDurationUnitPtr(reward.DurationUnit),
+		})
+		items.add(reward.RewardKey)
+	}
+
+	for index := range out.Promos {
+		if len(out.Promos[index].Localization) == 0 {
+			out.Promos[index].Localization = nil
+		}
+		if len(out.Promos[index].Rewards) == 0 {
+			out.Promos[index].Rewards = nil
+		}
+	}
+
 	out.Items = items.list()
 	return out, nil
 }
@@ -75,7 +115,10 @@ func (c exportItemCollector) list() []ExportItem {
 	sort.Strings(ids)
 	items := make([]ExportItem, 0, len(ids))
 	for index, id := range ids {
-		items = append(items, ExportItem{ID: id, Position: int32((index + 1) * 10)})
+		items = append(items, ExportItem{
+			ID:       id,
+			Position: int32((index + 1) * 10),
+		})
 	}
 	return items
 }

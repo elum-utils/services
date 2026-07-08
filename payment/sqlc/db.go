@@ -180,6 +180,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.completeAssetRateUpdateStmt, err = db.PrepareContext(ctx, completeAssetRateUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query CompleteAssetRateUpdate: %w", err)
 	}
+	if q.completeFulfillmentFromOrderStmt, err = db.PrepareContext(ctx, completeFulfillmentFromOrder); err != nil {
+		return nil, fmt.Errorf("error preparing query CompleteFulfillmentFromOrder: %w", err)
+	}
 	if q.configureAssetRateAutoUpdateStmt, err = db.PrepareContext(ctx, configureAssetRateAutoUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query ConfigureAssetRateAutoUpdate: %w", err)
 	}
@@ -419,6 +422,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.markOrderPaidStmt, err = db.PrepareContext(ctx, markOrderPaid); err != nil {
 		return nil, fmt.Errorf("error preparing query MarkOrderPaid: %w", err)
+	}
+	if q.markOrderPaidAndIndexStmt, err = db.PrepareContext(ctx, markOrderPaidAndIndex); err != nil {
+		return nil, fmt.Errorf("error preparing query MarkOrderPaidAndIndex: %w", err)
 	}
 	if q.markOrderPendingPaymentStmt, err = db.PrepareContext(ctx, markOrderPendingPayment); err != nil {
 		return nil, fmt.Errorf("error preparing query MarkOrderPendingPayment: %w", err)
@@ -764,6 +770,11 @@ func (q *Queries) Close() error {
 	if q.completeAssetRateUpdateStmt != nil {
 		if cerr := q.completeAssetRateUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing completeAssetRateUpdateStmt: %w", cerr)
+		}
+	}
+	if q.completeFulfillmentFromOrderStmt != nil {
+		if cerr := q.completeFulfillmentFromOrderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing completeFulfillmentFromOrderStmt: %w", cerr)
 		}
 	}
 	if q.configureAssetRateAutoUpdateStmt != nil {
@@ -1166,6 +1177,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing markOrderPaidStmt: %w", cerr)
 		}
 	}
+	if q.markOrderPaidAndIndexStmt != nil {
+		if cerr := q.markOrderPaidAndIndexStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing markOrderPaidAndIndexStmt: %w", cerr)
+		}
+	}
 	if q.markOrderPendingPaymentStmt != nil {
 		if cerr := q.markOrderPendingPaymentStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing markOrderPendingPaymentStmt: %w", cerr)
@@ -1392,6 +1408,7 @@ type Queries struct {
 	adminUpsertProviderStmt                               *sql.Stmt
 	claimAssetRateUpdateStmt                              *sql.Stmt
 	completeAssetRateUpdateStmt                           *sql.Stmt
+	completeFulfillmentFromOrderStmt                      *sql.Stmt
 	configureAssetRateAutoUpdateStmt                      *sql.Stmt
 	countActivePaymentSubscriptionsAllStmt                *sql.Stmt
 	countActivePaymentSubscriptionsForProductStmt         *sql.Stmt
@@ -1472,6 +1489,7 @@ type Queries struct {
 	markFulfillmentRevokedForOrderStmt                    *sql.Stmt
 	markOrderFulfilledStmt                                *sql.Stmt
 	markOrderPaidStmt                                     *sql.Stmt
+	markOrderPaidAndIndexStmt                             *sql.Stmt
 	markOrderPendingPaymentStmt                           *sql.Stmt
 	markOrderRefundedStmt                                 *sql.Stmt
 	markPaidOrderIndexFulfilledStmt                       *sql.Stmt
@@ -1557,6 +1575,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpsertProviderStmt:                               q.adminUpsertProviderStmt,
 		claimAssetRateUpdateStmt:                              q.claimAssetRateUpdateStmt,
 		completeAssetRateUpdateStmt:                           q.completeAssetRateUpdateStmt,
+		completeFulfillmentFromOrderStmt:                      q.completeFulfillmentFromOrderStmt,
 		configureAssetRateAutoUpdateStmt:                      q.configureAssetRateAutoUpdateStmt,
 		countActivePaymentSubscriptionsAllStmt:                q.countActivePaymentSubscriptionsAllStmt,
 		countActivePaymentSubscriptionsForProductStmt:         q.countActivePaymentSubscriptionsForProductStmt,
@@ -1637,6 +1656,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		markFulfillmentRevokedForOrderStmt:                    q.markFulfillmentRevokedForOrderStmt,
 		markOrderFulfilledStmt:                                q.markOrderFulfilledStmt,
 		markOrderPaidStmt:                                     q.markOrderPaidStmt,
+		markOrderPaidAndIndexStmt:                             q.markOrderPaidAndIndexStmt,
 		markOrderPendingPaymentStmt:                           q.markOrderPendingPaymentStmt,
 		markOrderRefundedStmt:                                 q.markOrderRefundedStmt,
 		markPaidOrderIndexFulfilledStmt:                       q.markPaidOrderIndexFulfilledStmt,

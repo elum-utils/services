@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/elum-utils/services/control/repository"
@@ -11,8 +12,8 @@ import (
 	"github.com/elum-utils/services/control/service/internalapi"
 	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/elum-utils/services/internal/utils/contextutil"
-	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Control struct {
@@ -69,10 +70,7 @@ func open(ctx context.Context, params DatabaseParams) (*Control, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, ErrDatabaseConfigRequired
 	}
-	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
-		User: params.User, Password: params.Password, Database: params.Database,
-		Host: params.Host, Port: params.Port,
-	})
+	db, err := openPostgres(ctx, params)
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "control database connection failed", err)
 	}
@@ -89,6 +87,35 @@ func open(ctx context.Context, params DatabaseParams) (*Control, error) {
 	}
 	_ = bootstrap.Close()
 	return newControl(ctx, client, true, params.Options), nil
+}
+
+func openPostgres(ctx context.Context, params DatabaseParams) (*sql.DB, error) {
+	host := params.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := params.Port
+	if port == 0 {
+		port = 5432
+	}
+	dsn := fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		params.User,
+		params.Password,
+		host,
+		port,
+		params.Database,
+	)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(params.Options.MaxConnections)
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func newControl(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Control {

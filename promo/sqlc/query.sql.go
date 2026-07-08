@@ -10,29 +10,32 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
-const adminCreatePromo = `-- name: AdminCreatePromo :execlastid
+const adminCreatePromo = `-- name: AdminCreatePromo :one
 INSERT INTO promo_offer (
     workspace_id, code, code_normalized, payload, target, max_activations,
     is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id
 `
 
 type AdminCreatePromoParams struct {
-	WorkspaceID    string          `json:"workspace_id"`
-	Code           string          `json:"code"`
-	CodeNormalized string          `json:"code_normalized"`
-	Payload        json.RawMessage `json:"payload"`
-	Target         json.RawMessage `json:"target"`
-	MaxActivations uint64          `json:"max_activations"`
-	IsActive       bool            `json:"is_active"`
-	StartAt        sql.NullTime    `json:"start_at"`
-	EndAt          sql.NullTime    `json:"end_at"`
+	WorkspaceID    string                `json:"workspace_id"`
+	Code           string                `json:"code"`
+	CodeNormalized string                `json:"code_normalized"`
+	Payload        json.RawMessage       `json:"payload"`
+	Target         pqtype.NullRawMessage `json:"target"`
+	MaxActivations int64                 `json:"max_activations"`
+	IsActive       bool                  `json:"is_active"`
+	StartAt        sql.NullTime          `json:"start_at"`
+	EndAt          sql.NullTime          `json:"end_at"`
 }
 
 func (q *Queries) AdminCreatePromo(ctx context.Context, arg AdminCreatePromoParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminCreatePromoStmt, adminCreatePromo,
+	row := q.queryRow(ctx, q.adminCreatePromoStmt, adminCreatePromo,
 		arg.WorkspaceID,
 		arg.Code,
 		arg.CodeNormalized,
@@ -43,20 +46,19 @@ func (q *Queries) AdminCreatePromo(ctx context.Context, arg AdminCreatePromoPara
 		arg.StartAt,
 		arg.EndAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminDeleteLocalization = `-- name: AdminDeleteLocalization :execrows
 DELETE FROM promo_localization
-WHERE workspace_id = ? AND promo_id = ? AND locale = ?
+WHERE workspace_id = $1 AND promo_id = $2 AND locale = $3
 `
 
 type AdminDeleteLocalizationParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	Locale      string `json:"locale"`
 }
 
@@ -70,12 +72,12 @@ func (q *Queries) AdminDeleteLocalization(ctx context.Context, arg AdminDeleteLo
 
 const adminDeleteReward = `-- name: AdminDeleteReward :execrows
 DELETE FROM promo_reward
-WHERE workspace_id = ? AND promo_id = ? AND reward_key = ?
+WHERE workspace_id = $1 AND promo_id = $2 AND reward_key = $3
 `
 
 type AdminDeleteRewardParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	RewardKey   string `json:"reward_key"`
 }
 
@@ -90,13 +92,13 @@ func (q *Queries) AdminDeleteReward(ctx context.Context, arg AdminDeleteRewardPa
 const adminGetLocalization = `-- name: AdminGetLocalization :one
 SELECT workspace_id, promo_id, locale, title, description, created_at, updated_at
 FROM promo_localization
-WHERE workspace_id = ? AND promo_id = ? AND locale = ?
+WHERE workspace_id = $1 AND promo_id = $2 AND locale = $3
 LIMIT 1
 `
 
 type AdminGetLocalizationParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	Locale      string `json:"locale"`
 }
 
@@ -118,13 +120,13 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 const adminGetPromo = `-- name: AdminGetPromo :one
 SELECT id, workspace_id, code, code_normalized, payload, target, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM promo_offer
-WHERE workspace_id = ? AND id = ?
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1
 `
 
 type AdminGetPromoParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminGetPromo(ctx context.Context, arg AdminGetPromoParams) (PromoOffer, error) {
@@ -152,13 +154,13 @@ func (q *Queries) AdminGetPromo(ctx context.Context, arg AdminGetPromoParams) (P
 const adminGetReward = `-- name: AdminGetReward :one
 SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM promo_reward
-WHERE workspace_id = ? AND promo_id = ? AND reward_key = ?
+WHERE workspace_id = $1 AND promo_id = $2 AND reward_key = $3
 LIMIT 1
 `
 
 type AdminGetRewardParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	RewardKey   string `json:"reward_key"`
 }
 
@@ -186,22 +188,22 @@ SELECT
     max_activations,
     CASE
         WHEN max_activations = 0 THEN -1
-        ELSE CAST(max_activations - activation_count AS SIGNED)
-    END AS remaining_activations
+        ELSE max_activations - activation_count
+    END::bigint AS remaining_activations
 FROM promo_offer
-WHERE workspace_id = ? AND id = ?
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1
 `
 
 type AdminGetStatsParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 type AdminGetStatsRow struct {
-	ActivationCount      uint64 `json:"activation_count"`
-	MaxActivations       uint64 `json:"max_activations"`
-	RemainingActivations int64  `json:"remaining_activations"`
+	ActivationCount      int64 `json:"activation_count"`
+	MaxActivations       int64 `json:"max_activations"`
+	RemainingActivations int64 `json:"remaining_activations"`
 }
 
 func (q *Queries) AdminGetStats(ctx context.Context, arg AdminGetStatsParams) (AdminGetStatsRow, error) {
@@ -214,16 +216,16 @@ func (q *Queries) AdminGetStats(ctx context.Context, arg AdminGetStatsParams) (A
 const adminListDailyStats = `-- name: AdminListDailyStats :many
 SELECT workspace_id, promo_id, stats_date, redemption_count, unique_users, updated_at
 FROM promo_stats_daily
-WHERE workspace_id = ?
-  AND promo_id = ?
-  AND stats_date >= ?
-  AND stats_date <= ?
+WHERE workspace_id = $1
+  AND promo_id = $2
+  AND stats_date >= $3
+  AND stats_date <= $4
 ORDER BY stats_date
 `
 
 type AdminListDailyStatsParams struct {
 	WorkspaceID string    `json:"workspace_id"`
-	PromoID     uint64    `json:"promo_id"`
+	PromoID     int64     `json:"promo_id"`
 	StatsDate   time.Time `json:"stats_date"`
 	StatsDate_2 time.Time `json:"stats_date_2"`
 }
@@ -266,13 +268,13 @@ func (q *Queries) AdminListDailyStats(ctx context.Context, arg AdminListDailySta
 const adminListLocalizations = `-- name: AdminListLocalizations :many
 SELECT workspace_id, promo_id, locale, title, description, created_at, updated_at
 FROM promo_localization
-WHERE workspace_id = ? AND promo_id = ?
+WHERE workspace_id = $1 AND promo_id = $2
 ORDER BY locale
 `
 
 type AdminListLocalizationsParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 }
 
 func (q *Queries) AdminListLocalizations(ctx context.Context, arg AdminListLocalizationsParams) ([]PromoLocalization, error) {
@@ -309,9 +311,9 @@ func (q *Queries) AdminListLocalizations(ctx context.Context, arg AdminListLocal
 const adminListPromos = `-- name: AdminListPromos :many
 SELECT id, workspace_id, code, code_normalized, payload, target, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM promo_offer
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY created_at DESC, id DESC
-LIMIT ? OFFSET ?
+LIMIT $2 OFFSET $3
 `
 
 type AdminListPromosParams struct {
@@ -361,15 +363,15 @@ func (q *Queries) AdminListPromos(ctx context.Context, arg AdminListPromosParams
 const adminListRedemptions = `-- name: AdminListRedemptions :many
 SELECT id, workspace_id, promo_id, app_id, platform_id, platform_user_id, reward_snapshot, redeemed_at, created_at
 FROM promo_redemption
-WHERE workspace_id = ?
-  AND promo_id = ?
+WHERE workspace_id = $1
+  AND promo_id = $2
 ORDER BY redeemed_at DESC, id DESC
-LIMIT ? OFFSET ?
+LIMIT $3 OFFSET $4
 `
 
 type AdminListRedemptionsParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	Limit       int32  `json:"limit"`
 	Offset      int32  `json:"offset"`
 }
@@ -414,13 +416,13 @@ func (q *Queries) AdminListRedemptions(ctx context.Context, arg AdminListRedempt
 
 const adminSoftDeletePromo = `-- name: AdminSoftDeletePromo :execrows
 UPDATE promo_offer
-SET deleted_at = NOW(), is_active = FALSE
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+SET deleted_at = now(), is_active = FALSE, updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
 type AdminSoftDeletePromoParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminSoftDeletePromo(ctx context.Context, arg AdminSoftDeletePromoParams) (int64, error) {
@@ -433,28 +435,29 @@ func (q *Queries) AdminSoftDeletePromo(ctx context.Context, arg AdminSoftDeleteP
 
 const adminUpdatePromo = `-- name: AdminUpdatePromo :execrows
 UPDATE promo_offer
-SET code = ?,
-    code_normalized = ?,
-    payload = ?,
-    target = ?,
-    max_activations = ?,
-    is_active = ?,
-    start_at = ?,
-    end_at = ?
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+SET code = $1,
+    code_normalized = $2,
+    payload = $3,
+    target = $4,
+    max_activations = $5,
+    is_active = $6,
+    start_at = $7,
+    end_at = $8,
+    updated_at = now()
+WHERE workspace_id = $9 AND id = $10 AND deleted_at IS NULL
 `
 
 type AdminUpdatePromoParams struct {
-	Code           string          `json:"code"`
-	CodeNormalized string          `json:"code_normalized"`
-	Payload        json.RawMessage `json:"payload"`
-	Target         json.RawMessage `json:"target"`
-	MaxActivations uint64          `json:"max_activations"`
-	IsActive       bool            `json:"is_active"`
-	StartAt        sql.NullTime    `json:"start_at"`
-	EndAt          sql.NullTime    `json:"end_at"`
-	WorkspaceID    string          `json:"workspace_id"`
-	ID             uint64          `json:"id"`
+	Code           string                `json:"code"`
+	CodeNormalized string                `json:"code_normalized"`
+	Payload        json.RawMessage       `json:"payload"`
+	Target         pqtype.NullRawMessage `json:"target"`
+	MaxActivations int64                 `json:"max_activations"`
+	IsActive       bool                  `json:"is_active"`
+	StartAt        sql.NullTime          `json:"start_at"`
+	EndAt          sql.NullTime          `json:"end_at"`
+	WorkspaceID    string                `json:"workspace_id"`
+	ID             int64                 `json:"id"`
 }
 
 func (q *Queries) AdminUpdatePromo(ctx context.Context, arg AdminUpdatePromoParams) (int64, error) {
@@ -479,15 +482,16 @@ func (q *Queries) AdminUpdatePromo(ctx context.Context, arg AdminUpdatePromoPara
 const adminUpsertLocalization = `-- name: AdminUpsertLocalization :exec
 INSERT INTO promo_localization (
     workspace_id, promo_id, locale, title, description
-) VALUES (?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    title = VALUES(title),
-    description = VALUES(description)
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, promo_id, locale) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    updated_at = now()
 `
 
 type AdminUpsertLocalizationParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 	Locale      string `json:"locale"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -508,22 +512,23 @@ const adminUpsertReward = `-- name: AdminUpsertReward :exec
 INSERT INTO promo_reward (
     workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    reward_type = VALUES(reward_type),
-    quantity = VALUES(quantity),
-    scale = VALUES(scale),
-    duration_unit = VALUES(duration_unit)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (workspace_id, promo_id, reward_key) DO UPDATE SET
+    reward_type = EXCLUDED.reward_type,
+    quantity = EXCLUDED.quantity,
+    scale = EXCLUDED.scale,
+    duration_unit = EXCLUDED.duration_unit,
+    updated_at = now()
 `
 
 type AdminUpsertRewardParams struct {
-	WorkspaceID  string                      `json:"workspace_id"`
-	PromoID      uint64                      `json:"promo_id"`
-	RewardKey    string                      `json:"reward_key"`
-	RewardType   PromoRewardRewardType       `json:"reward_type"`
-	Quantity     int64                       `json:"quantity"`
-	Scale        uint16                      `json:"scale"`
-	DurationUnit NullPromoRewardDurationUnit `json:"duration_unit"`
+	WorkspaceID  string                `json:"workspace_id"`
+	PromoID      int64                 `json:"promo_id"`
+	RewardKey    string                `json:"reward_key"`
+	RewardType   PromoRewardType       `json:"reward_type"`
+	Quantity     int64                 `json:"quantity"`
+	Scale        int16                 `json:"scale"`
+	DurationUnit NullPromoDurationUnit `json:"duration_unit"`
 }
 
 func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardParams) error {
@@ -539,16 +544,69 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 	return err
 }
 
-const createRedemption = `-- name: CreateRedemption :execlastid
-INSERT INTO promo_redemption (
-    workspace_id, promo_id, app_id, platform_id, platform_user_id,
-    reward_snapshot
-) VALUES (?, ?, ?, ?, ?, ?)
+const createRedemption = `-- name: CreateRedemption :one
+WITH inserted AS (
+    INSERT INTO promo_redemption (
+        workspace_id, promo_id, app_id, platform_id, platform_user_id,
+        reward_snapshot
+    ) VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id, workspace_id, promo_id, app_id, platform_id, platform_user_id, reward_snapshot
+),
+updated_offer AS (
+    UPDATE promo_offer o
+    SET activation_count = activation_count + 1,
+        updated_at = now()
+    FROM inserted i
+    WHERE o.workspace_id = i.workspace_id
+      AND o.id = i.promo_id
+    RETURNING o.code
+),
+created_event AS (
+    INSERT INTO promo_redemption_event (
+        workspace_id, promo_id, redemption_id
+    )
+    SELECT workspace_id, promo_id, id
+    FROM inserted
+    RETURNING redemption_id
+),
+created_callback AS (
+    INSERT INTO promo_clb_event (
+        source_service,
+        event_type,
+        event_key,
+        idempotency_key,
+        payload,
+        payload_content_type,
+        next_attempt_at
+    )
+    SELECT
+        'promo',
+        'promo.applied',
+        'promo.applied:' || i.id::text,
+        'promo.applied:' || i.id::text,
+        jsonb_build_object(
+            'redemption_id', i.id,
+            'workspace_id', i.workspace_id,
+            'promo_id', i.promo_id,
+            'code', u.code,
+            'app_id', i.app_id,
+            'platform_id', i.platform_id,
+            'platform_user_id', i.platform_user_id,
+            'rewards', i.reward_snapshot
+        )::text::bytea,
+        'application/json',
+        now()
+    FROM inserted i
+    CROSS JOIN updated_offer u
+    RETURNING id
+)
+SELECT id
+FROM inserted
 `
 
 type CreateRedemptionParams struct {
 	WorkspaceID    string          `json:"workspace_id"`
-	PromoID        uint64          `json:"promo_id"`
+	PromoID        int64           `json:"promo_id"`
 	AppID          int64           `json:"app_id"`
 	PlatformID     int64           `json:"platform_id"`
 	PlatformUserID string          `json:"platform_user_id"`
@@ -556,7 +614,7 @@ type CreateRedemptionParams struct {
 }
 
 func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionParams) (int64, error) {
-	result, err := q.exec(ctx, q.createRedemptionStmt, createRedemption,
+	row := q.queryRow(ctx, q.createRedemptionStmt, createRedemption,
 		arg.WorkspaceID,
 		arg.PromoID,
 		arg.AppID,
@@ -564,10 +622,9 @@ func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionPara
 		arg.PlatformUserID,
 		arg.RewardSnapshot,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getApplyBundleForUpdate = `-- name: GetApplyBundleForUpdate :many
@@ -603,20 +660,20 @@ FROM promo_offer o
 LEFT JOIN promo_localization l
   ON l.workspace_id = o.workspace_id
  AND l.promo_id = o.id
- AND l.locale = ?
+ AND l.locale = $1
 LEFT JOIN promo_redemption a
   ON a.workspace_id = o.workspace_id
  AND a.promo_id = o.id
- AND a.app_id = ?
- AND a.platform_id = ?
- AND a.platform_user_id = ?
+ AND a.app_id = $2
+ AND a.platform_id = $3
+ AND a.platform_user_id = $4
 LEFT JOIN promo_reward r
   ON r.workspace_id = o.workspace_id
  AND r.promo_id = o.id
-WHERE o.workspace_id = ?
-  AND o.code_normalized = ?
+WHERE o.workspace_id = $5
+  AND o.code_normalized = $6
 ORDER BY r.id
-FOR UPDATE
+FOR UPDATE OF o
 `
 
 type GetApplyBundleForUpdateParams struct {
@@ -629,33 +686,33 @@ type GetApplyBundleForUpdateParams struct {
 }
 
 type GetApplyBundleForUpdateRow struct {
-	ID                       uint64                      `json:"id"`
-	WorkspaceID              string                      `json:"workspace_id"`
-	Code                     string                      `json:"code"`
-	Payload                  json.RawMessage             `json:"payload"`
-	Target                   json.RawMessage             `json:"target"`
-	MaxActivations           uint64                      `json:"max_activations"`
-	ActivationCount          uint64                      `json:"activation_count"`
-	IsActive                 bool                        `json:"is_active"`
-	StartAt                  sql.NullTime                `json:"start_at"`
-	EndAt                    sql.NullTime                `json:"end_at"`
-	DeletedAt                sql.NullTime                `json:"deleted_at"`
-	CreatedAt                time.Time                   `json:"created_at"`
-	UpdatedAt                time.Time                   `json:"updated_at"`
-	LocalizationLocale       sql.NullString              `json:"localization_locale"`
-	LocalizationTitle        sql.NullString              `json:"localization_title"`
-	LocalizationDescription  sql.NullString              `json:"localization_description"`
-	RedemptionID             sql.NullInt64               `json:"redemption_id"`
-	RedemptionAppID          sql.NullInt64               `json:"redemption_app_id"`
-	RedemptionPlatformID     sql.NullInt64               `json:"redemption_platform_id"`
-	RedemptionPlatformUserID sql.NullString              `json:"redemption_platform_user_id"`
-	RedemptionRedeemedAt     sql.NullTime                `json:"redemption_redeemed_at"`
-	RewardID                 sql.NullInt64               `json:"reward_id"`
-	RewardKey                sql.NullString              `json:"reward_key"`
-	RewardType               NullPromoRewardRewardType   `json:"reward_type"`
-	RewardQuantity           sql.NullInt64               `json:"reward_quantity"`
-	RewardScale              sql.NullInt16               `json:"reward_scale"`
-	DurationUnit             NullPromoRewardDurationUnit `json:"duration_unit"`
+	ID                       int64                 `json:"id"`
+	WorkspaceID              string                `json:"workspace_id"`
+	Code                     string                `json:"code"`
+	Payload                  json.RawMessage       `json:"payload"`
+	Target                   pqtype.NullRawMessage `json:"target"`
+	MaxActivations           int64                 `json:"max_activations"`
+	ActivationCount          int64                 `json:"activation_count"`
+	IsActive                 bool                  `json:"is_active"`
+	StartAt                  sql.NullTime          `json:"start_at"`
+	EndAt                    sql.NullTime          `json:"end_at"`
+	DeletedAt                sql.NullTime          `json:"deleted_at"`
+	CreatedAt                time.Time             `json:"created_at"`
+	UpdatedAt                time.Time             `json:"updated_at"`
+	LocalizationLocale       sql.NullString        `json:"localization_locale"`
+	LocalizationTitle        sql.NullString        `json:"localization_title"`
+	LocalizationDescription  sql.NullString        `json:"localization_description"`
+	RedemptionID             sql.NullInt64         `json:"redemption_id"`
+	RedemptionAppID          sql.NullInt64         `json:"redemption_app_id"`
+	RedemptionPlatformID     sql.NullInt64         `json:"redemption_platform_id"`
+	RedemptionPlatformUserID sql.NullString        `json:"redemption_platform_user_id"`
+	RedemptionRedeemedAt     sql.NullTime          `json:"redemption_redeemed_at"`
+	RewardID                 sql.NullInt64         `json:"reward_id"`
+	RewardKey                sql.NullString        `json:"reward_key"`
+	RewardType               NullPromoRewardType   `json:"reward_type"`
+	RewardQuantity           sql.NullInt64         `json:"reward_quantity"`
+	RewardScale              sql.NullInt16         `json:"reward_scale"`
+	DurationUnit             NullPromoDurationUnit `json:"duration_unit"`
 }
 
 func (q *Queries) GetApplyBundleForUpdate(ctx context.Context, arg GetApplyBundleForUpdateParams) ([]GetApplyBundleForUpdateRow, error) {
@@ -719,17 +776,17 @@ func (q *Queries) GetApplyBundleForUpdate(ctx context.Context, arg GetApplyBundl
 const getRedemption = `-- name: GetRedemption :one
 SELECT id, workspace_id, promo_id, app_id, platform_id, platform_user_id, reward_snapshot, redeemed_at, created_at
 FROM promo_redemption
-WHERE workspace_id = ?
-  AND promo_id = ?
-  AND app_id = ?
-  AND platform_id = ?
-  AND platform_user_id = ?
+WHERE workspace_id = $1
+  AND promo_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
 LIMIT 1
 `
 
 type GetRedemptionParams struct {
 	WorkspaceID    string `json:"workspace_id"`
-	PromoID        uint64 `json:"promo_id"`
+	PromoID        int64  `json:"promo_id"`
 	AppID          int64  `json:"app_id"`
 	PlatformID     int64  `json:"platform_id"`
 	PlatformUserID string `json:"platform_user_id"`
@@ -758,16 +815,140 @@ func (q *Queries) GetRedemption(ctx context.Context, arg GetRedemptionParams) (P
 	return i, err
 }
 
+const listExportLocalizations = `-- name: ListExportLocalizations :many
+SELECT workspace_id, promo_id, locale, title, description, created_at, updated_at
+FROM promo_localization
+WHERE workspace_id = $1
+ORDER BY promo_id, locale
+`
+
+func (q *Queries) ListExportLocalizations(ctx context.Context, workspaceID string) ([]PromoLocalization, error) {
+	rows, err := q.query(ctx, q.listExportLocalizationsStmt, listExportLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PromoLocalization
+	for rows.Next() {
+		var i PromoLocalization
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.PromoID,
+			&i.Locale,
+			&i.Title,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportPromos = `-- name: ListExportPromos :many
+SELECT id, workspace_id, code, code_normalized, payload, target, max_activations, activation_count, is_active, start_at, end_at, deleted_at, created_at, updated_at
+FROM promo_offer
+WHERE workspace_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListExportPromos(ctx context.Context, workspaceID string) ([]PromoOffer, error) {
+	rows, err := q.query(ctx, q.listExportPromosStmt, listExportPromos, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PromoOffer
+	for rows.Next() {
+		var i PromoOffer
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Code,
+			&i.CodeNormalized,
+			&i.Payload,
+			&i.Target,
+			&i.MaxActivations,
+			&i.ActivationCount,
+			&i.IsActive,
+			&i.StartAt,
+			&i.EndAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportRewards = `-- name: ListExportRewards :many
+SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
+FROM promo_reward
+WHERE workspace_id = $1
+ORDER BY promo_id, id
+`
+
+func (q *Queries) ListExportRewards(ctx context.Context, workspaceID string) ([]PromoReward, error) {
+	rows, err := q.query(ctx, q.listExportRewardsStmt, listExportRewards, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PromoReward
+	for rows.Next() {
+		var i PromoReward
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.PromoID,
+			&i.RewardKey,
+			&i.RewardType,
+			&i.Quantity,
+			&i.Scale,
+			&i.DurationUnit,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRewards = `-- name: ListRewards :many
 SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM promo_reward
-WHERE workspace_id = ? AND promo_id = ?
+WHERE workspace_id = $1 AND promo_id = $2
 ORDER BY id
 `
 
 type ListRewardsParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	PromoID     uint64 `json:"promo_id"`
+	PromoID     int64  `json:"promo_id"`
 }
 
 func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]PromoReward, error) {
@@ -811,20 +992,16 @@ INSERT INTO promo_stats_daily (
 SELECT
     e.workspace_id,
     e.promo_id,
-    DATE(e.occurred_at),
+    e.occurred_at::date,
     COUNT(*),
-    COUNT(DISTINCT CONCAT_WS(':', r.app_id, r.platform_id, r.platform_user_id))
+    COUNT(*)
 FROM promo_redemption_event e
-JOIN promo_redemption r
-  ON r.workspace_id = e.workspace_id
- AND r.promo_id = e.promo_id
- AND r.id = e.redemption_id
-WHERE e.occurred_at >= ? AND e.occurred_at < ?
-GROUP BY e.workspace_id, e.promo_id, DATE(e.occurred_at)
-ON DUPLICATE KEY UPDATE
-    redemption_count = VALUES(redemption_count),
-    unique_users = VALUES(unique_users),
-    updated_at = NOW()
+WHERE e.occurred_at >= $1 AND e.occurred_at < $2
+GROUP BY e.workspace_id, e.promo_id, e.occurred_at::date
+ON CONFLICT (workspace_id, promo_id, stats_date) DO UPDATE SET
+    redemption_count = EXCLUDED.redemption_count,
+    unique_users = EXCLUDED.unique_users,
+    updated_at = now()
 `
 
 type RefreshDailyStatsParams struct {

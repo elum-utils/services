@@ -78,7 +78,7 @@ func (a *TON) ResolveJettonAsset(ctx context.Context, network string, masterAddr
 func jettonAssetFromRow(asset paymentsqlc.PaymentAsset) JettonAsset {
 	return JettonAsset{
 		Code:            asset.Code,
-		Decimals:        asset.Scale,
+		Decimals:        uint16(asset.Scale),
 		ContractAddress: asset.ContractAddress.String,
 	}
 }

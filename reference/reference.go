@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	serviceerrors "github.com/elum-utils/services/errors"
 	"github.com/elum-utils/services/internal/utils/contextutil"
-	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/elum-utils/services/reference/repository"
 	"github.com/elum-utils/services/reference/service/admin"
 	"github.com/elum-utils/services/reference/service/user"
@@ -71,13 +73,13 @@ func (r *Reference) Run(ctx context.Context) error {
 }
 
 func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
-	if params.User == "" || params.Database == "" {
+	if params.User == "" {
 		return nil, ErrDatabaseConfigRequired
 	}
-	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
-		User: params.User, Password: params.Password, Database: params.Database,
-		Host: params.Host, Port: params.Port,
-	})
+	if params.Database == "" {
+		return nil, ErrDatabaseConfigRequired
+	}
+	db, err := openPostgres(ctx, params)
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "reference database connection failed", err)
 	}
@@ -101,6 +103,27 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference bootstrap shutdown failed", err)
 	}
 	return newReference(ctx, client, true, params.Options), nil
+}
+
+func openPostgres(ctx context.Context, params DatabaseParams) (*sql.DB, error) {
+	host := params.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := params.Port
+	if port == 0 {
+		port = 5432
+	}
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, params.User, params.Password, params.Database)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func (r *Reference) adopt(running *Reference) {

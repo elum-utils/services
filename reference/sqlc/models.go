@@ -6,63 +6,19 @@ package sqlc
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
-type ReferenceItemItemType string
-
-const (
-	ReferenceItemItemTypeQuantity ReferenceItemItemType = "quantity"
-	ReferenceItemItemTypeDuration ReferenceItemItemType = "duration"
-)
-
-func (e *ReferenceItemItemType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ReferenceItemItemType(s)
-	case string:
-		*e = ReferenceItemItemType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ReferenceItemItemType: %T", src)
-	}
-	return nil
-}
-
-type NullReferenceItemItemType struct {
-	ReferenceItemItemType ReferenceItemItemType `json:"reference_item_item_type"`
-	Valid                 bool                  `json:"valid"` // Valid is true if ReferenceItemItemType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullReferenceItemItemType) Scan(value interface{}) error {
-	if value == nil {
-		ns.ReferenceItemItemType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ReferenceItemItemType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullReferenceItemItemType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ReferenceItemItemType), nil
-}
-
 type ReferenceItem struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
-	DeletedAt   sql.NullTime          `json:"deleted_at"`
-	CreatedAt   time.Time             `json:"created_at"`
-	UpdatedAt   time.Time             `json:"updated_at"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type ReferenceLocalization struct {

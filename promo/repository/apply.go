@@ -15,8 +15,11 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 	result := ApplyResult{Status: StatusNotFound}
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
 		rows, err := txRepo.q.GetApplyBundleForUpdate(ctx, promosqlc.GetApplyBundleForUpdateParams{
-			Locale: locale, AppID: identity.AppID, PlatformID: identity.PlatformID,
-			PlatformUserID: identity.PlatformUserID, WorkspaceID: identity.WorkspaceID,
+			Locale:         locale,
+			AppID:          identity.AppID,
+			PlatformID:     identity.PlatformID,
+			PlatformUserID: identity.PlatformUserID,
+			WorkspaceID:    identity.WorkspaceID,
 			CodeNormalized: normalizeCode(code),
 		})
 		if err != nil {
@@ -61,17 +64,24 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 				return err
 			}
 			id, err := txRepo.q.CreateRedemption(ctx, promosqlc.CreateRedemptionParams{
-				WorkspaceID: identity.WorkspaceID, PromoID: result.Promo.ID,
-				AppID: identity.AppID, PlatformID: identity.PlatformID,
-				PlatformUserID: identity.PlatformUserID, RewardSnapshot: rewardSnapshot,
+				WorkspaceID:    identity.WorkspaceID,
+				PromoID:        int64(result.Promo.ID),
+				AppID:          identity.AppID,
+				PlatformID:     identity.PlatformID,
+				PlatformUserID: identity.PlatformUserID,
+				RewardSnapshot: rewardSnapshot,
 			})
 			if err != nil {
 				return err
 			}
 			redemption := Redemption{
-				ID: uint64(id), WorkspaceID: identity.WorkspaceID, PromoID: result.Promo.ID,
-				AppID: identity.AppID, PlatformID: identity.PlatformID,
-				PlatformUserID: identity.PlatformUserID, RedeemedAt: now,
+				ID:             uint64(id),
+				WorkspaceID:    identity.WorkspaceID,
+				PromoID:        result.Promo.ID,
+				AppID:          identity.AppID,
+				PlatformID:     identity.PlatformID,
+				PlatformUserID: identity.PlatformUserID,
+				RedeemedAt:     now,
 			}
 			result.Redemption = &redemption
 			result.Status = StatusSuccess
@@ -87,25 +97,38 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 	result := ApplyResult{
 		Status: StatusNotFound,
 		Promo: Promo{
-			ID: first.ID, WorkspaceID: first.WorkspaceID, Code: first.Code, Payload: first.Payload, Target: first.Target,
-			MaxActivations: first.MaxActivations, ActivationCount: first.ActivationCount,
-			IsActive: first.IsActive, StartAt: sqlwrap.NullTimePtr(first.StartAt),
-			EndAt: sqlwrap.NullTimePtr(first.EndAt), DeletedAt: sqlwrap.NullTimePtr(first.DeletedAt),
-			CreatedAt: first.CreatedAt, UpdatedAt: first.UpdatedAt,
+			ID:              uint64(first.ID),
+			WorkspaceID:     first.WorkspaceID,
+			Code:            first.Code,
+			Payload:         first.Payload,
+			Target:          nullRawMessage(first.Target),
+			MaxActivations:  uint64(first.MaxActivations),
+			ActivationCount: uint64(first.ActivationCount),
+			IsActive:        first.IsActive,
+			StartAt:         sqlwrap.NullTimePtr(first.StartAt),
+			EndAt:           sqlwrap.NullTimePtr(first.EndAt),
+			DeletedAt:       sqlwrap.NullTimePtr(first.DeletedAt),
+			CreatedAt:       first.CreatedAt,
+			UpdatedAt:       first.UpdatedAt,
 		},
 		Rewards: make([]Reward, 0, len(rows)),
 	}
 	if first.LocalizationLocale.Valid {
 		result.Localization = &Localization{
-			WorkspaceID: first.WorkspaceID, PromoID: first.ID,
-			Locale: first.LocalizationLocale.String, Title: first.LocalizationTitle.String,
+			WorkspaceID: first.WorkspaceID,
+			PromoID:     uint64(first.ID),
+			Locale:      first.LocalizationLocale.String,
+			Title:       first.LocalizationTitle.String,
 			Description: first.LocalizationDescription.String,
 		}
 	}
 	if first.RedemptionID.Valid {
 		result.Redemption = &Redemption{
-			ID: uint64(first.RedemptionID.Int64), WorkspaceID: first.WorkspaceID, PromoID: first.ID,
-			AppID: first.RedemptionAppID.Int64, PlatformID: first.RedemptionPlatformID.Int64,
+			ID:             uint64(first.RedemptionID.Int64),
+			WorkspaceID:    first.WorkspaceID,
+			PromoID:        uint64(first.ID),
+			AppID:          first.RedemptionAppID.Int64,
+			PlatformID:     first.RedemptionPlatformID.Int64,
 			PlatformUserID: first.RedemptionPlatformUserID.String,
 			RedeemedAt:     first.RedemptionRedeemedAt.Time,
 		}
@@ -114,7 +137,7 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 		if row.RewardID.Valid {
 			result.Rewards = append(result.Rewards, Reward{
 				Key:      row.RewardKey.String,
-				Type:     string(row.RewardType.PromoRewardRewardType),
+				Type:     string(row.RewardType.PromoRewardType),
 				Quantity: row.RewardQuantity.Int64,
 				Scale:    uint16FromNull(row.RewardScale),
 				Unit:     promoDurationUnitPtr(row.DurationUnit),
@@ -133,8 +156,12 @@ func uint16FromNull(value sql.NullInt16) uint16 {
 
 func mapRedemption(row promosqlc.PromoRedemption) Redemption {
 	return Redemption{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, PromoID: row.PromoID,
-		AppID: row.AppID, PlatformID: row.PlatformID, PlatformUserID: row.PlatformUserID,
-		RedeemedAt: row.RedeemedAt,
+		ID:             uint64(row.ID),
+		WorkspaceID:    row.WorkspaceID,
+		PromoID:        uint64(row.PromoID),
+		AppID:          row.AppID,
+		PlatformID:     row.PlatformID,
+		PlatformUserID: row.PlatformUserID,
+		RedeemedAt:     row.RedeemedAt,
 	}
 }

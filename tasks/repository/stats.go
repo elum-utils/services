@@ -90,15 +90,15 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID string) (Stats, e
 
 func (r *Repository) GetSingleTaskStats(ctx context.Context, workspaceID string, taskID uint64) (SingleTaskStats, error) {
 	row, err := r.q.AdminGetSingleTaskStats(ctx, tasksqlc.AdminGetSingleTaskStatsParams{
-		WorkspaceID: workspaceID, TaskID: taskID,
-		WorkspaceID_2: workspaceID, TaskID_2: taskID,
-		WorkspaceID_3: workspaceID, ID: taskID,
+		WorkspaceID: workspaceID, TaskID: int64(taskID),
+		WorkspaceID_2: workspaceID, TaskID_2: int64(taskID),
+		WorkspaceID_3: workspaceID, ID: int64(taskID),
 	})
 	if err != nil {
 		return SingleTaskStats{}, err
 	}
 	return SingleTaskStats{
-		TaskID: row.TaskID, ProgressTotal: uint64(row.ProgressTotal),
+		TaskID: uint64(row.TaskID), ProgressTotal: uint64(row.ProgressTotal),
 		OpenProgress: uint64(row.OpenProgress), ReadyProgress: uint64(row.ReadyProgress),
 		ClaimedProgress: uint64(row.ClaimedProgress), ProgressCreated: uint64(row.ProgressCreated),
 		ProgressAmount: uint64(row.ProgressAmount), ReadyCount: uint64(row.ReadyCount),
@@ -115,10 +115,10 @@ func (r *Repository) ListDailyStats(
 	from, until time.Time,
 ) ([]DailyStats, error) {
 	rows, err := r.q.AdminListTaskDailyStats(ctx, tasksqlc.AdminListTaskDailyStatsParams{
-		WorkspaceID: workspaceID, TaskID: taskID,
+		WorkspaceID: workspaceID, TaskID: int64(taskID),
 		StatsDate: from, StatsDate_2: until,
-		WorkspaceID_2: workspaceID, TaskID_2: taskID,
-		WorkspaceID_3: workspaceID, TaskID_3: taskID,
+		WorkspaceID_2: workspaceID, TaskID_2: int64(taskID),
+		WorkspaceID_3: workspaceID, TaskID_3: int64(taskID),
 		Column9: from, Column10: until,
 	})
 	if err != nil {
@@ -127,11 +127,11 @@ func (r *Repository) ListDailyStats(
 	result := make([]DailyStats, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, DailyStats{
-			Date: row.StatsDate, TaskID: row.TaskID,
-			ProgressCreated: row.ProgressCreated, ProgressAmount: row.ProgressAmount,
-			ReadyCount: row.ReadyCount, ClaimedCount: row.ClaimedCount,
-			ManualClaimedCount: row.ManualClaimedCount, AutoClaimedCount: row.AutoClaimedCount,
-			UniqueParticipants: row.UniqueParticipants, UniqueClaimers: row.UniqueClaimers,
+			Date: row.StatsDate, TaskID: uint64(row.TaskID),
+			ProgressCreated: uint64(row.ProgressCreated), ProgressAmount: uint64(row.ProgressAmount),
+			ReadyCount: uint64(row.ReadyCount), ClaimedCount: uint64(row.ClaimedCount),
+			ManualClaimedCount: uint64(row.ManualClaimedCount), AutoClaimedCount: uint64(row.AutoClaimedCount),
+			UniqueParticipants: uint64(row.UniqueParticipants), UniqueClaimers: uint64(row.UniqueClaimers),
 		})
 	}
 	return result, nil
@@ -153,12 +153,12 @@ func (r *Repository) ListDailyOverview(
 	result := make([]DailyOverview, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, DailyOverview{
-			Date: row.StatsDate, TasksTotal: row.TasksTotal,
-			ActiveTasks: row.ActiveTasks, VisibleTasks: row.VisibleTasks,
-			ProgressCreated: row.ProgressCreated, ProgressAmount: row.ProgressAmount,
-			ReadyCount: row.ReadyCount, ClaimedCount: row.ClaimedCount,
-			ManualClaimedCount: row.ManualClaimedCount, AutoClaimedCount: row.AutoClaimedCount,
-			UniqueParticipants: row.UniqueParticipants, UniqueClaimers: row.UniqueClaimers,
+			Date: row.StatsDate, TasksTotal: uint64(row.TasksTotal),
+			ActiveTasks: uint64(row.ActiveTasks), VisibleTasks: uint64(row.VisibleTasks),
+			ProgressCreated: uint64(row.ProgressCreated), ProgressAmount: uint64(row.ProgressAmount),
+			ReadyCount: uint64(row.ReadyCount), ClaimedCount: uint64(row.ClaimedCount),
+			ManualClaimedCount: uint64(row.ManualClaimedCount), AutoClaimedCount: uint64(row.AutoClaimedCount),
+			UniqueParticipants: uint64(row.UniqueParticipants), UniqueClaimers: uint64(row.UniqueClaimers),
 		})
 	}
 	return result, nil

@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	json "github.com/goccy/go-json"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
+	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
 
 func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordResult, error) {
@@ -56,17 +58,63 @@ func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordRes
 			PlatformUserID: params.Identity.PlatformUserID, OperationID: params.OperationID,
 			Granted: result.Granted, Status: result.Status,
 			Position: nullableUint32(result.Position), RewardsSnapshot: rawRewards,
-			CurrentPosition: result.Progress.CurrentPosition, ClaimCount: result.Progress.ClaimCount,
+			CurrentPosition: int32(result.Progress.CurrentPosition), ClaimCount: int64(result.Progress.ClaimCount),
 			LastClaimPosition: nullableUint32(result.Progress.LastClaimPosition),
 			LastClaimAt:       nullableTime(result.Progress.LastClaimAt),
 			NextClaimAt:       nullableTime(result.Progress.NextClaimAt),
-			IsCompleted:       result.Progress.IsCompleted, ResetCount: result.Progress.ResetCount,
+			IsCompleted:       result.Progress.IsCompleted, ResetCount: int64(result.Progress.ResetCount),
 			WasReset: result.Progress.LastWasReset, OccurredAt: now,
 		})
 		if err != nil {
 			return err
 		}
 		result.OperationRowID = uint64(id)
+		if result.Granted {
+			if err := txRepo.q.UpsertProgress(ctx, calendarsqlc.UpsertProgressParams{
+				WorkspaceID:       params.Identity.WorkspaceID,
+				CalendarID:        calendar.ID,
+				AppID:             params.Identity.AppID,
+				PlatformID:        params.Identity.PlatformID,
+				PlatformUserID:    params.Identity.PlatformUserID,
+				CurrentPosition:   int32(result.Progress.CurrentPosition),
+				ClaimCount:        int64(result.Progress.ClaimCount),
+				LastClaimPosition: nullableUint32(result.Progress.LastClaimPosition),
+				LastClaimAt:       nullableTime(result.Progress.LastClaimAt),
+				NextClaimAt:       nullableTime(result.Progress.NextClaimAt),
+				IsCompleted:       result.Progress.IsCompleted,
+				ResetCount:        int64(result.Progress.ResetCount),
+				LastWasReset:      result.Progress.LastWasReset,
+			}); err != nil {
+				return err
+			}
+			payload, err := json.Marshal(rewardGrantedCallbackPayload{
+				OperationRowID: result.OperationRowID,
+				OperationID:    result.OperationID,
+				WorkspaceID:    params.Identity.WorkspaceID,
+				CalendarID:     calendar.ID,
+				AppID:          params.Identity.AppID,
+				PlatformID:     params.Identity.PlatformID,
+				PlatformUserID: params.Identity.PlatformUserID,
+				Position:       uint32Value(result.Position),
+				Rewards:        result.Rewards,
+				OccurredAt:     result.OccurredAt,
+			})
+			if err != nil {
+				return err
+			}
+			eventKey := fmt.Sprintf("calendar.reward_granted:%d", result.OperationRowID)
+			if _, err := txRepo.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
+				SourceService:      "calendar",
+				EventType:          "calendar.reward_granted",
+				EventKey:           eventKey,
+				IdempotencyKey:     eventKey,
+				Payload:            payload,
+				PayloadContentType: callbackutil.JSONContentType,
+				NextAttemptAt:      now,
+			}); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	return result, err
@@ -76,10 +124,13 @@ func mapRecordBundle(rows []calendarsqlc.GetRecordBundleForUpdateRow) (Calendar,
 	row := rows[0]
 	calendar := Calendar{
 		ID: row.ID, WorkspaceID: row.WorkspaceID, Type: row.Type,
-		Mode: string(row.Mode), IntervalType: string(row.IntervalType),
-		IntervalUnit: string(row.IntervalUnit), IntervalCount: row.IntervalCount,
-		ResetAfterIntervals: row.ResetAfterIntervals, EndBehavior: string(row.EndBehavior),
-		Timezone: row.Timezone, HideFutureRewards: row.HideFutureRewards,
+		Mode:                row.Mode,
+		IntervalType:        row.IntervalType,
+		IntervalUnit:        row.IntervalUnit,
+		IntervalCount:       uint32(row.IntervalCount),
+		ResetAfterIntervals: uint32(row.ResetAfterIntervals),
+		EndBehavior:         row.EndBehavior,
+		Timezone:            row.Timezone, HideFutureRewards: row.HideFutureRewards,
 		IsActive: row.IsActive, StartAt: sqlNullTimePtr(row.StartAt),
 		EndAt: sqlNullTimePtr(row.EndAt), DeletedAt: sqlNullTimePtr(row.DeletedAt),
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
@@ -131,6 +182,26 @@ func mapRecordBundle(rows []calendarsqlc.GetRecordBundleForUpdateRow) (Calendar,
 		OccurredAt: row.OperationOccurredAt.Time,
 	}
 	return calendar, progress, repeated, nil
+}
+
+type rewardGrantedCallbackPayload struct {
+	OperationRowID uint64    `json:"operation_row_id"`
+	OperationID    string    `json:"operation_id"`
+	WorkspaceID    string    `json:"workspace_id"`
+	CalendarID     string    `json:"calendar_id"`
+	AppID          int64     `json:"app_id"`
+	PlatformID     int64     `json:"platform_id"`
+	PlatformUserID string    `json:"platform_user_id"`
+	Position       uint32    `json:"position"`
+	Rewards        []Reward  `json:"rewards"`
+	OccurredAt     time.Time `json:"occurred_at"`
+}
+
+func uint32Value(value *uint32) uint32 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func calculateRecord(calendar Calendar, progress Progress, operationID string, now time.Time) (RecordResult, error) {

@@ -290,6 +290,9 @@ func (r *PaymentRepository) getCheckoutProduct(ctx context.Context, params Produ
 	if err != nil {
 		return Product{}, err
 	}
+	if !productTargetMatches(product.Target, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID) {
+		return Product{}, sql.ErrNoRows
+	}
 	product.Items = nil
 	if err := r.attachProductLimitLocks(ctx, &product, params.PlatformID, params.PlatformUserID); err != nil {
 		return Product{}, err
@@ -419,18 +422,18 @@ func (r *PaymentRepository) ListProductPriceOptions(ctx context.Context, workspa
 			continue
 		}
 		options = append(options, ProductPriceOption{
-			PriceID:             row.PriceID,
+			PriceID:             uint64(row.PriceID),
 			ProductID:           row.ProductID,
 			AssetCode:           row.AssetCode,
 			AssetTitle:          row.AssetTitle,
 			AssetKind:           string(row.AssetKind),
-			Scale:               row.Scale,
+			Scale:               uint16(row.Scale),
 			Chain:               row.Chain,
 			Network:             row.Network,
 			ContractAddress:     row.ContractAddress,
-			ListAmountMinor:     row.ListAmountMinor,
-			DiscountAmountMinor: row.DiscountAmountMinor,
-			PayableAmountMinor:  row.ListAmountMinor - row.DiscountAmountMinor,
+			ListAmountMinor:     uint64(row.ListAmountMinor),
+			DiscountAmountMinor: uint64(row.DiscountAmountMinor),
+			PayableAmountMinor:  uint64(row.ListAmountMinor - row.DiscountAmountMinor),
 			ProviderCodes:       splitProviderCodes(row.ProviderCodes),
 		})
 	}
@@ -460,7 +463,7 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 		LinkURL:              selected.LinkUrl,
 		SizeLabel:            selected.SizeLabel,
 		GroupCode:            selected.GroupCode,
-		Target:               selected.Target,
+		Target:               nullRawMessage(selected.Target),
 		Title:                selected.ProductTitle,
 		Description:          selected.ProductDescription,
 		ImageURL:             selected.ImageUrl,
@@ -468,11 +471,11 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 		TrialDurationSeconds: selected.TrialDurationSeconds,
 		QuantityMode:         string(selected.QuantityMode),
 		Price: ProductPrice{
-			ID:                  selected.PriceID,
+			ID:                  uint64(selected.PriceID),
 			AssetCode:           selected.AssetCode,
-			ListAmountMinor:     selected.ListAmountMinor,
-			DiscountAmountMinor: selected.DiscountAmountMinor,
-			PayableAmountMinor:  selected.ListAmountMinor - selected.DiscountAmountMinor,
+			ListAmountMinor:     uint64(selected.ListAmountMinor),
+			DiscountAmountMinor: uint64(selected.DiscountAmountMinor),
+			PayableAmountMinor:  uint64(selected.ListAmountMinor - selected.DiscountAmountMinor),
 		},
 		Limit: ProductLimit{
 			Global: ProductLimitRule{
@@ -496,7 +499,7 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
-			Scale:        row.ItemScale,
+			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,
@@ -552,11 +555,11 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 		TrialDurationSeconds: selected.TrialDurationSeconds,
 		QuantityMode:         string(selected.QuantityMode),
 		Price: ProductPrice{
-			ID:                  selected.PriceID,
+			ID:                  uint64(selected.PriceID),
 			AssetCode:           selected.AssetCode,
-			ListAmountMinor:     selected.ListAmountMinor,
-			DiscountAmountMinor: selected.DiscountAmountMinor,
-			PayableAmountMinor:  selected.ListAmountMinor - selected.DiscountAmountMinor,
+			ListAmountMinor:     uint64(selected.ListAmountMinor),
+			DiscountAmountMinor: uint64(selected.DiscountAmountMinor),
+			PayableAmountMinor:  uint64(selected.ListAmountMinor - selected.DiscountAmountMinor),
 		},
 		Limit: ProductLimit{
 			Global: ProductLimitRule{
@@ -580,7 +583,7 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
-			Scale:        row.ItemScale,
+			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: listProductsDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,
@@ -644,7 +647,7 @@ func (r *PaymentRepository) attachProductsLimitLocks(
 
 	counts := make(map[string]uint64, len(rows))
 	for _, row := range rows {
-		counts[productLimitCounterKey(row.ProductID, string(row.CounterScope), row.PlatformUserID, row.WindowStart, row.WindowEnd)] = row.PaidCount
+		counts[productLimitCounterKey(row.ProductID, string(row.CounterScope), row.PlatformUserID, row.WindowStart, row.WindowEnd)] = uint64(row.PaidCount)
 	}
 
 	for index := range products {
@@ -724,7 +727,7 @@ func mapProductPreviewCatalogRows(rows []sqlc.ListProductPreviewCatalogCacheRows
 		product.Items = append(product.Items, ProductItem{
 			ID:           row.ItemID,
 			Quantity:     row.ItemQuantity,
-			Scale:        row.ItemScale,
+			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
 			Type:         row.ItemType,
@@ -822,11 +825,11 @@ func isPurchaseKeyUsable(key sqlc.PaymentPurchaseKey, now time.Time) bool {
 	return key.UsedCount < key.MaxUses
 }
 
-func splitProviderCodes(value sql.NullString) []string {
-	if !value.Valid || value.String == "" {
+func splitProviderCodes(value []byte) []string {
+	if len(value) == 0 {
 		return nil
 	}
-	return strings.Split(value.String, ",")
+	return strings.Split(string(value), ",")
 }
 
 type productLimitQuery struct {
@@ -881,7 +884,7 @@ func (r *PaymentRepository) getProductLimitLock(ctx context.Context, query produ
 	}
 	amount := normalizeLimitAmount(query.amount)
 	limit := uint64(query.limit)
-	if amount <= limit && total <= limit-amount {
+	if amount <= limit && uint64(total) <= limit-amount {
 		return sql.NullTime{}, nil
 	}
 

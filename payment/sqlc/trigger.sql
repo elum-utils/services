@@ -1,319 +1,240 @@
-DROP TRIGGER IF EXISTS payment_order_create_purchase_stats;
+
+DROP TRIGGER IF EXISTS payment_order_create_purchase_stats ON payment_order;
+DROP TRIGGER IF EXISTS payment_refund_create_stats ON payment_refund;
+DROP TRIGGER IF EXISTS payment_refund_update_stats ON payment_refund;
+DROP TRIGGER IF EXISTS payment_order_create_daily_stats ON payment_order;
+DROP TRIGGER IF EXISTS payment_order_update_daily_stats ON payment_order;
+DROP TRIGGER IF EXISTS payment_order_event_update_daily_overview ON payment_stats_order_event;
+DROP TRIGGER IF EXISTS payment_stats_event_update_daily_overview ON payment_stats_event;
+DROP TRIGGER IF EXISTS payment_stats_event_create_daily_buyer ON payment_stats_event;
+DROP TRIGGER IF EXISTS payment_daily_buyer_update_overview ON payment_stats_daily_buyer;
+
+CREATE OR REPLACE FUNCTION payment_order_purchase_stats_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.status = 'fulfilled' AND OLD.status <> 'fulfilled' THEN
+        INSERT INTO payment_stats_event (
+            event_type, source_id, workspace_id, product_id,
+            app_id, platform_id, platform_user_id, quantity,
+            asset_code, amount_minor, occurred_at
+        ) VALUES (
+            'purchase', NEW.id, NEW.workspace_id, NEW.product_id,
+            NEW.app_id,
+            COALESCE(NEW.payer_platform_id, NEW.platform_id),
+            COALESCE(NEW.payer_platform_user_id, NEW.platform_user_id),
+            NEW.quantity,
+            NEW.asset_code,
+            NEW.payable_amount_minor,
+            COALESCE(NEW.fulfilled_at, now())
+        ) ON CONFLICT (event_type, source_id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER payment_order_create_purchase_stats
 AFTER UPDATE ON payment_order
 FOR EACH ROW
-INSERT IGNORE INTO payment_stats_event (
-    event_type, source_id, workspace_id, product_id,
-    app_id, platform_id, platform_user_id, quantity,
-    asset_code, amount_minor, occurred_at
-)
-SELECT
-    'purchase', NEW.id, NEW.workspace_id, NEW.product_id,
-    NEW.app_id,
-    COALESCE(NEW.payer_platform_id, NEW.platform_id),
-    COALESCE(NEW.payer_platform_user_id, NEW.platform_user_id),
-    NEW.quantity,
-    NEW.asset_code, NEW.payable_amount_minor, COALESCE(NEW.fulfilled_at, NOW())
-WHERE NEW.status = 'fulfilled'
-  AND OLD.status <> 'fulfilled';
+EXECUTE FUNCTION payment_order_purchase_stats_fn();
 
-DROP TRIGGER IF EXISTS payment_refund_create_stats;
+CREATE OR REPLACE FUNCTION payment_refund_stats_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.status = 'succeeded' AND (TG_OP = 'INSERT' OR OLD.status <> 'succeeded') THEN
+        INSERT INTO payment_stats_event (
+            event_type, source_id, workspace_id, product_id,
+            app_id, platform_id, platform_user_id, quantity,
+            asset_code, amount_minor, occurred_at
+        )
+        SELECT
+            'refund', NEW.id, o.workspace_id, o.product_id,
+            o.app_id,
+            COALESCE(o.payer_platform_id, o.platform_id),
+            COALESCE(o.payer_platform_user_id, o.platform_user_id),
+            0,
+            NEW.asset_code,
+            NEW.amount_minor,
+            CASE WHEN TG_OP = 'INSERT' THEN NEW.created_at ELSE NEW.updated_at END
+        FROM payment_order o
+        WHERE o.id = NEW.order_id
+        ON CONFLICT (event_type, source_id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER payment_refund_create_stats
 AFTER INSERT ON payment_refund
 FOR EACH ROW
-INSERT IGNORE INTO payment_stats_event (
-    event_type, source_id, workspace_id, product_id,
-    app_id, platform_id, platform_user_id, quantity,
-    asset_code, amount_minor, occurred_at
-)
-SELECT
-    'refund', NEW.id, o.workspace_id, o.product_id,
-    o.app_id,
-    COALESCE(o.payer_platform_id, o.platform_id),
-    COALESCE(o.payer_platform_user_id, o.platform_user_id),
-    0,
-    NEW.asset_code, NEW.amount_minor, NEW.created_at
-FROM payment_order o
-WHERE o.id = NEW.order_id
-  AND NEW.status = 'succeeded';
+EXECUTE FUNCTION payment_refund_stats_fn();
 
-DROP TRIGGER IF EXISTS payment_refund_update_stats;
 CREATE TRIGGER payment_refund_update_stats
 AFTER UPDATE ON payment_refund
 FOR EACH ROW
-INSERT IGNORE INTO payment_stats_event (
-    event_type, source_id, workspace_id, product_id,
-    app_id, platform_id, platform_user_id, quantity,
-    asset_code, amount_minor, occurred_at
-)
-SELECT
-    'refund', NEW.id, o.workspace_id, o.product_id,
-    o.app_id,
-    COALESCE(o.payer_platform_id, o.platform_id),
-    COALESCE(o.payer_platform_user_id, o.platform_user_id),
-    0,
-    NEW.asset_code, NEW.amount_minor, NEW.updated_at
-FROM payment_order o
-WHERE o.id = NEW.order_id
-  AND NEW.status = 'succeeded'
-  AND OLD.status <> 'succeeded';
+EXECUTE FUNCTION payment_refund_stats_fn();
 
-DROP TRIGGER IF EXISTS payment_order_create_daily_stats;
+CREATE OR REPLACE FUNCTION payment_order_daily_stats_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO payment_stats_order_event (
+            order_id, workspace_id, product_id, event_type, order_status, occurred_at
+        ) VALUES (
+            NEW.id, NEW.workspace_id, NEW.product_id, 'created', (NEW.status::text)::payment_stats_order_event_order_status, NEW.created_at
+        ) ON CONFLICT (order_id, event_type, order_status) DO NOTHING;
+
+        INSERT INTO payment_stats_order_event (
+            order_id, workspace_id, product_id, event_type, order_status, occurred_at
+        ) VALUES (
+            NEW.id, NEW.workspace_id, NEW.product_id, 'status', (NEW.status::text)::payment_stats_order_event_order_status, NEW.created_at
+        ) ON CONFLICT (order_id, event_type, order_status) DO NOTHING;
+    ELSIF NEW.status <> OLD.status THEN
+        INSERT INTO payment_stats_order_event (
+            order_id, workspace_id, product_id, event_type, order_status, occurred_at
+        ) VALUES (
+            NEW.id, NEW.workspace_id, NEW.product_id, 'status', (NEW.status::text)::payment_stats_order_event_order_status, NEW.updated_at
+        ) ON CONFLICT (order_id, event_type, order_status) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER payment_order_create_daily_stats
 AFTER INSERT ON payment_order
 FOR EACH ROW
-INSERT IGNORE INTO payment_stats_order_event (
-    order_id, workspace_id, product_id,
-    event_type, order_status, occurred_at
-)
-SELECT
-    NEW.id, NEW.workspace_id, NEW.product_id,
-    'created', NEW.status, NEW.created_at
-UNION ALL
-SELECT
-    NEW.id, NEW.workspace_id, NEW.product_id,
-    'status', NEW.status, NEW.created_at;
+EXECUTE FUNCTION payment_order_daily_stats_fn();
 
-DROP TRIGGER IF EXISTS payment_order_update_daily_stats;
 CREATE TRIGGER payment_order_update_daily_stats
 AFTER UPDATE ON payment_order
 FOR EACH ROW
-INSERT IGNORE INTO payment_stats_order_event (
-    order_id, workspace_id, product_id,
-    event_type, order_status, occurred_at
-)
-SELECT
-    NEW.id, NEW.workspace_id, NEW.product_id,
-    'status', NEW.status, NEW.updated_at
-WHERE NEW.status <> OLD.status;
+EXECUTE FUNCTION payment_order_daily_stats_fn();
 
-DROP TRIGGER IF EXISTS payment_order_event_update_daily_overview;
+CREATE OR REPLACE FUNCTION payment_order_event_daily_overview_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO payment_stats_daily_overview (
+        workspace_id,
+        stats_date,
+        orders_created,
+        draft_orders,
+        pending_payment_orders,
+        paid_orders,
+        fulfilled_orders,
+        canceled_orders,
+        expired_orders,
+        refunded_orders,
+        chargebacked_orders,
+        failed_orders
+    ) VALUES (
+        NEW.workspace_id,
+        DATE(NEW.occurred_at),
+        CASE WHEN NEW.event_type = 'created' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'draft' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'pending_payment' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'paid' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'fulfilled' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'canceled' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'expired' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'refunded' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'chargebacked' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'status' AND NEW.order_status = 'failed' THEN 1 ELSE 0 END
+    ) ON CONFLICT (workspace_id, stats_date) DO UPDATE SET
+        orders_created = payment_stats_daily_overview.orders_created + EXCLUDED.orders_created,
+        draft_orders = payment_stats_daily_overview.draft_orders + EXCLUDED.draft_orders,
+        pending_payment_orders = payment_stats_daily_overview.pending_payment_orders + EXCLUDED.pending_payment_orders,
+        paid_orders = payment_stats_daily_overview.paid_orders + EXCLUDED.paid_orders,
+        fulfilled_orders = payment_stats_daily_overview.fulfilled_orders + EXCLUDED.fulfilled_orders,
+        canceled_orders = payment_stats_daily_overview.canceled_orders + EXCLUDED.canceled_orders,
+        expired_orders = payment_stats_daily_overview.expired_orders + EXCLUDED.expired_orders,
+        refunded_orders = payment_stats_daily_overview.refunded_orders + EXCLUDED.refunded_orders,
+        chargebacked_orders = payment_stats_daily_overview.chargebacked_orders + EXCLUDED.chargebacked_orders,
+        failed_orders = payment_stats_daily_overview.failed_orders + EXCLUDED.failed_orders,
+        updated_at = now();
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER payment_order_event_update_daily_overview
 AFTER INSERT ON payment_stats_order_event
 FOR EACH ROW
-INSERT INTO payment_stats_daily_overview (
-    workspace_id,
-    stats_date,
-    orders_created,
-    draft_orders,
-    pending_payment_orders,
-    paid_orders,
-    fulfilled_orders,
-    canceled_orders,
-    expired_orders,
-    refunded_orders,
-    chargebacked_orders,
-    failed_orders
-)
-VALUES (
-    NEW.workspace_id,
-    DATE(NEW.occurred_at),
-    NEW.event_type = 'created',
-    NEW.event_type = 'status' AND NEW.order_status = 'draft',
-    NEW.event_type = 'status' AND NEW.order_status = 'pending_payment',
-    NEW.event_type = 'status' AND NEW.order_status = 'paid',
-    NEW.event_type = 'status' AND NEW.order_status = 'fulfilled',
-    NEW.event_type = 'status' AND NEW.order_status = 'canceled',
-    NEW.event_type = 'status' AND NEW.order_status = 'expired',
-    NEW.event_type = 'status' AND NEW.order_status = 'refunded',
-    NEW.event_type = 'status' AND NEW.order_status = 'chargebacked',
-    NEW.event_type = 'status' AND NEW.order_status = 'failed'
-)
-ON DUPLICATE KEY UPDATE
-    orders_created = orders_created + VALUES(orders_created),
-    draft_orders = draft_orders + VALUES(draft_orders),
-    pending_payment_orders = pending_payment_orders + VALUES(pending_payment_orders),
-    paid_orders = paid_orders + VALUES(paid_orders),
-    fulfilled_orders = fulfilled_orders + VALUES(fulfilled_orders),
-    canceled_orders = canceled_orders + VALUES(canceled_orders),
-    expired_orders = expired_orders + VALUES(expired_orders),
-    refunded_orders = refunded_orders + VALUES(refunded_orders),
-    chargebacked_orders = chargebacked_orders + VALUES(chargebacked_orders),
-    failed_orders = failed_orders + VALUES(failed_orders),
-    updated_at = NOW();
+EXECUTE FUNCTION payment_order_event_daily_overview_fn();
 
-DROP TRIGGER IF EXISTS payment_stats_event_update_daily_overview;
+CREATE OR REPLACE FUNCTION payment_stats_event_daily_overview_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO payment_stats_daily_overview (
+        workspace_id,
+        stats_date,
+        purchase_count,
+        purchase_quantity,
+        refund_count
+    ) VALUES (
+        NEW.workspace_id,
+        DATE(NEW.occurred_at),
+        CASE WHEN NEW.event_type = 'purchase' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.event_type = 'purchase' THEN NEW.quantity ELSE 0 END,
+        CASE WHEN NEW.event_type = 'refund' THEN 1 ELSE 0 END
+    ) ON CONFLICT (workspace_id, stats_date) DO UPDATE SET
+        purchase_count = payment_stats_daily_overview.purchase_count + EXCLUDED.purchase_count,
+        purchase_quantity = payment_stats_daily_overview.purchase_quantity + EXCLUDED.purchase_quantity,
+        refund_count = payment_stats_daily_overview.refund_count + EXCLUDED.refund_count,
+        updated_at = now();
+
+    IF NEW.event_type = 'purchase' THEN
+        INSERT INTO payment_stats_daily_buyer (
+            workspace_id,
+            stats_date,
+            app_id,
+            platform_id,
+            platform_user_id
+        ) VALUES (
+            NEW.workspace_id,
+            DATE(NEW.occurred_at),
+            NEW.app_id,
+            NEW.platform_id,
+            NEW.platform_user_id
+        ) ON CONFLICT (workspace_id, stats_date, app_id, platform_id, platform_user_id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER payment_stats_event_update_daily_overview
 AFTER INSERT ON payment_stats_event
 FOR EACH ROW
-INSERT INTO payment_stats_daily_overview (
-    workspace_id,
-    stats_date,
-    purchase_count,
-    purchase_quantity,
-    refund_count
-)
-VALUES (
-    NEW.workspace_id,
-    DATE(NEW.occurred_at),
-    NEW.event_type = 'purchase',
-    IF(NEW.event_type = 'purchase', NEW.quantity, 0),
-    NEW.event_type = 'refund'
-)
-ON DUPLICATE KEY UPDATE
-    purchase_count = purchase_count + VALUES(purchase_count),
-    purchase_quantity = purchase_quantity + VALUES(purchase_quantity),
-    refund_count = refund_count + VALUES(refund_count),
-    updated_at = NOW();
+EXECUTE FUNCTION payment_stats_event_daily_overview_fn();
 
-DROP TRIGGER IF EXISTS payment_stats_event_create_daily_buyer;
-CREATE TRIGGER payment_stats_event_create_daily_buyer
-AFTER INSERT ON payment_stats_event
-FOR EACH ROW
-INSERT IGNORE INTO payment_stats_daily_buyer (
-    workspace_id,
-    stats_date,
-    app_id,
-    platform_id,
-    platform_user_id
-)
-SELECT
-    NEW.workspace_id,
-    DATE(NEW.occurred_at),
-    NEW.app_id,
-    NEW.platform_id,
-    NEW.platform_user_id
-WHERE NEW.event_type = 'purchase';
+CREATE OR REPLACE FUNCTION payment_daily_buyer_update_overview_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO payment_stats_daily_overview (
+        workspace_id,
+        stats_date,
+        unique_buyers
+    ) VALUES (
+        NEW.workspace_id,
+        NEW.stats_date,
+        1
+    ) ON CONFLICT (workspace_id, stats_date) DO UPDATE SET
+        unique_buyers = payment_stats_daily_overview.unique_buyers + 1,
+        updated_at = now();
+    RETURN NEW;
+END;
+$$;
 
-DROP TRIGGER IF EXISTS payment_daily_buyer_update_overview;
 CREATE TRIGGER payment_daily_buyer_update_overview
 AFTER INSERT ON payment_stats_daily_buyer
 FOR EACH ROW
-INSERT INTO payment_stats_daily_overview (
-    workspace_id,
-    stats_date,
-    unique_buyers
-)
-VALUES (
-    NEW.workspace_id,
-    NEW.stats_date,
-    1
-)
-ON DUPLICATE KEY UPDATE
-    unique_buyers = unique_buyers + 1,
-    updated_at = NOW();
-
-DROP TRIGGER IF EXISTS payment_product_create_daily_overview;
-DROP TRIGGER IF EXISTS payment_product_update_daily_overview;
-DROP TRIGGER IF EXISTS payment_product_delete_daily_overview;
-
-INSERT IGNORE INTO payment_stats_event (
-    event_type, source_id, workspace_id, product_id,
-    app_id, platform_id, platform_user_id, quantity,
-    asset_code, amount_minor, occurred_at
-)
-SELECT
-    'purchase', o.id, o.workspace_id, o.product_id,
-    o.app_id,
-    COALESCE(o.payer_platform_id, o.platform_id),
-    COALESCE(o.payer_platform_user_id, o.platform_user_id),
-    o.quantity,
-    o.asset_code, o.payable_amount_minor,
-    COALESCE(f.fulfilled_at, o.fulfilled_at, f.created_at)
-FROM payment_order o
-JOIN payment_fulfillment f ON f.order_id = o.id
-WHERE f.status IN ('succeeded', 'revoked');
-
-INSERT IGNORE INTO payment_stats_event (
-    event_type, source_id, workspace_id, product_id,
-    app_id, platform_id, platform_user_id, quantity,
-    asset_code, amount_minor, occurred_at
-)
-SELECT
-    'refund', r.id, o.workspace_id, o.product_id,
-    o.app_id,
-    COALESCE(o.payer_platform_id, o.platform_id),
-    COALESCE(o.payer_platform_user_id, o.platform_user_id),
-    0,
-    r.asset_code, r.amount_minor, r.updated_at
-FROM payment_refund r
-JOIN payment_order o ON o.id = r.order_id
-WHERE r.status = 'succeeded';
-
-INSERT IGNORE INTO payment_stats_order_event (
-    order_id, workspace_id, product_id,
-    event_type, order_status, occurred_at
-)
-SELECT
-    o.id, o.workspace_id, o.product_id,
-    'created', o.status, o.created_at
-FROM payment_order o
-UNION ALL
-SELECT
-    o.id, o.workspace_id, o.product_id,
-    'status', o.status, o.updated_at
-FROM payment_order o;
-
-INSERT IGNORE INTO payment_stats_daily_buyer (
-    workspace_id,
-    stats_date,
-    app_id,
-    platform_id,
-    platform_user_id
-)
-SELECT
-    workspace_id,
-    DATE(occurred_at),
-    app_id,
-    platform_id,
-    platform_user_id
-FROM payment_stats_event
-WHERE event_type = 'purchase';
-
-INSERT INTO payment_stats_daily_overview (
-    workspace_id,
-    stats_date,
-    purchase_count,
-    purchase_quantity,
-    unique_buyers,
-    refund_count
-)
-SELECT
-    workspace_id,
-    DATE(occurred_at),
-    SUM(event_type = 'purchase'),
-    SUM(IF(event_type = 'purchase', quantity, 0)),
-    COUNT(DISTINCT IF(
-        event_type = 'purchase',
-        CONCAT_WS(':', app_id, platform_id, platform_user_id),
-        NULL
-    )),
-    SUM(event_type = 'refund')
-FROM payment_stats_event
-GROUP BY workspace_id, DATE(occurred_at)
-ON DUPLICATE KEY UPDATE
-    purchase_count = VALUES(purchase_count),
-    purchase_quantity = VALUES(purchase_quantity),
-    unique_buyers = VALUES(unique_buyers),
-    refund_count = VALUES(refund_count),
-    updated_at = NOW();
-
-INSERT INTO payment_stats_daily_overview (
-    workspace_id,
-    stats_date,
-    products_total,
-    active_products,
-    visible_products
-)
-SELECT
-    workspace_id,
-    CURRENT_DATE,
-    COUNT(*),
-    SUM(
-        is_closed = FALSE
-        AND available_from <= NOW()
-        AND available_until > NOW()
-    ),
-    SUM(
-        is_visible = TRUE
-        AND is_closed = FALSE
-        AND available_from <= NOW()
-        AND available_until > NOW()
-    )
-FROM payment_product
-GROUP BY workspace_id
-ON DUPLICATE KEY UPDATE
-    products_total = VALUES(products_total),
-    active_products = VALUES(active_products),
-    visible_products = VALUES(visible_products),
-    updated_at = NOW();
+EXECUTE FUNCTION payment_daily_buyer_update_overview_fn();

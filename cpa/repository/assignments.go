@@ -12,7 +12,7 @@ import (
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
-	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
 )
@@ -79,7 +79,6 @@ func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, st
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
 		Column3:     status,
-		Status:      cpasqlc.CpaAssignmentStatus(status),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -99,7 +98,6 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
 		Column3:     status,
-		Status:      cpasqlc.CpaCodeStatus(status),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -109,7 +107,7 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 	result := make([]Code, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, Code{
-			ID:          row.ID,
+			ID:          uint64(row.ID),
 			WorkspaceID: row.WorkspaceID,
 			CPAID:       row.CpaID,
 			Code:        row.Code,
@@ -129,7 +127,6 @@ func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaI
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
 		Column3:     eventType,
-		EventType:   cpasqlc.CpaAssignmentEventEventType(eventType),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -139,10 +136,10 @@ func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaI
 	result := make([]AssignmentEvent, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, AssignmentEvent{
-			ID:           row.ID,
+			ID:           uint64(row.ID),
 			WorkspaceID:  row.WorkspaceID,
 			CPAID:        row.CpaID,
-			AssignmentID: row.AssignmentID,
+			AssignmentID: uint64(row.AssignmentID),
 			EventType:    string(row.EventType),
 			OccurredAt:   row.OccurredAt,
 		})
@@ -199,13 +196,13 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 				return sql.NullInt64{Int64: int64(v), Valid: true}
 			}),
 			Code:     code,
-			CodeMode: cpasqlc.CpaAssignmentCodeMode(offer.CodeMode),
+			CodeMode: offer.CodeMode,
 		})
 		if err != nil {
 			return err
 		}
 		if codeID != nil {
-			affected, err := txRepo.q.MarkCodeIssued(ctx, *codeID)
+			affected, err := txRepo.q.MarkCodeIssued(ctx, int64(*codeID))
 			if err != nil {
 				return err
 			}
@@ -215,7 +212,7 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 		}
 		row, err := txRepo.q.GetAssignmentByID(ctx, cpasqlc.GetAssignmentByIDParams{
 			WorkspaceID: scope.WorkspaceID,
-			ID:          uint64(id),
+			ID:          id,
 		})
 		if err != nil {
 			return err
@@ -234,8 +231,23 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 	if err := requireScope(scope.WorkspaceID, scope.CPAID); err != nil {
 		return CompleteResult{}, err
 	}
+	existing, err := r.q.GetAssignment(ctx, assignmentParams(scope))
+	if err == nil && existing.Status == cpasqlc.CpaAssignmentStatusCompleted {
+		rewards, err := r.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
+		if err != nil {
+			return CompleteResult{}, err
+		}
+		return CompleteResult{
+			Assignment:  mapAssignment(existing),
+			Rewards:     rewards,
+			AlreadyDone: true,
+		}, nil
+	}
+	if err != nil && !isNoRows(err) {
+		return CompleteResult{}, err
+	}
 	var result CompleteResult
-	err := r.WithTx(ctx, func(txRepo *Repository) error {
+	err = r.WithTx(ctx, func(txRepo *Repository) error {
 		row, err := txRepo.q.GetAssignmentForUpdate(ctx, assignmentForUpdateParams(scope))
 		if err != nil {
 			return err
@@ -251,7 +263,7 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 		}
 		affected, err := txRepo.q.CompleteAssignment(ctx, cpasqlc.CompleteAssignmentParams{
 			WorkspaceID: scope.WorkspaceID,
-			ID:          result.Assignment.ID,
+			ID:          int64(result.Assignment.ID),
 		})
 		if err != nil {
 			return err
@@ -260,7 +272,7 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 			return errors.New("cpa: assignment completion conflict")
 		}
 		if result.Assignment.CodeID != nil {
-			if _, err := txRepo.q.MarkCodeCompleted(ctx, *result.Assignment.CodeID); err != nil {
+			if _, err := txRepo.q.MarkCodeCompleted(ctx, int64(*result.Assignment.CodeID)); err != nil {
 				return err
 			}
 		}
@@ -346,7 +358,7 @@ func (r *Repository) DeleteCompletedCodes(ctx context.Context, workspaceID, cpaI
 }
 
 func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (string, *uint64, error) {
-	if offer.CodeMode == cpasqlc.CpaOfferCodeModeSharedCode {
+	if offer.CodeMode == cpasqlc.CpaCodeModeSharedCode {
 		if !offer.SharedCode.Valid || offer.SharedCode.String == "" {
 			return "", nil, errors.New("cpa: shared code is empty")
 		}
@@ -355,7 +367,7 @@ func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (
 	if !offer.CodeSource.Valid {
 		return "", nil, ErrInvalidCodeConfig
 	}
-	if offer.CodeSource.CpaOfferCodeSource == cpasqlc.CpaOfferCodeSourcePool {
+	if offer.CodeSource.CpaCodeSource == cpasqlc.CpaCodeSourcePool {
 		row, err := r.q.GetAvailableCodeForUpdate(ctx, cpasqlc.GetAvailableCodeForUpdateParams{
 			WorkspaceID: offer.WorkspaceID,
 			CpaID:       offer.ID,
@@ -366,7 +378,7 @@ func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (
 		if err != nil {
 			return "", nil, err
 		}
-		id := row.ID
+		id := uint64(row.ID)
 		return row.Code, &id, nil
 	}
 	if !offer.GeneratedLength.Valid || !offer.GeneratedAlphabet.Valid {
@@ -386,8 +398,7 @@ func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (
 			value := uint64(id)
 			return code, &value, nil
 		}
-		var mysqlErr *mysql.MySQLError
-		if !errors.As(err, &mysqlErr) || mysqlErr.Number != 1062 {
+		if !isUniqueViolation(err) {
 			return "", nil, err
 		}
 	}
@@ -398,8 +409,8 @@ func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rew
 	_, err := r.q.CreateAssignmentEvent(ctx, cpasqlc.CreateAssignmentEventParams{
 		WorkspaceID:  assignment.WorkspaceID,
 		CpaID:        assignment.CPAID,
-		AssignmentID: assignment.ID,
-		EventType:    cpasqlc.CpaAssignmentEventEventType(eventType),
+		AssignmentID: int64(assignment.ID),
+		EventType:    cpasqlc.CpaAssignmentEventType(eventType),
 	})
 	if err != nil {
 		return err
@@ -483,7 +494,7 @@ func mapAssignment(row cpasqlc.CpaAssignment) Assignment {
 		codeID = &value
 	}
 	return Assignment{
-		ID:             row.ID,
+		ID:             uint64(row.ID),
 		WorkspaceID:    row.WorkspaceID,
 		CPAID:          row.CpaID,
 		AppID:          row.AppID,
@@ -496,6 +507,11 @@ func mapAssignment(row cpasqlc.CpaAssignment) Assignment {
 		IssuedAt:       row.IssuedAt,
 		CompletedAt:    sqlwrap.NullTimePtr(row.CompletedAt),
 	}
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func randomCode(length int, alphabet string) (string, error) {

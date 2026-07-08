@@ -106,7 +106,7 @@ func (r *PaymentRepository) ClaimDueAssetRateUpdates(
 		}
 		affected, err := r.q.ClaimAssetRateUpdate(ctx, paymentsqlc.ClaimAssetRateUpdateParams{
 			LeaseOwner:         sql.NullString{String: workerID, Valid: true},
-			DATEADD:            int64(lease / time.Second),
+			Column2:            int32(lease / time.Second),
 			AssetCode:          row.AssetCode,
 			ReferenceAssetCode: row.ReferenceAssetCode,
 		})

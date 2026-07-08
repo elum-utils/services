@@ -12,7 +12,11 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 	if err := validateExportPackage(pkg); err != nil {
 		return ImportPreview{}, err
 	}
-	preview := ImportPreview{Format: pkg.Format, Service: pkg.Service, Counts: countPackage(pkg)}
+	preview := ImportPreview{
+		Format:  pkg.Format,
+		Service: pkg.Service,
+		Counts:  countPackage(pkg),
+	}
 	existing, err := r.importExistingPromoCodes(ctx, workspaceID)
 	if err != nil {
 		return ImportPreview{}, err
@@ -20,7 +24,10 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 	for _, promo := range pkg.Promos {
 		key := normalizeCode(promo.Code)
 		if existing[key] {
-			preview.Conflicts = append(preview.Conflicts, ImportConflict{Type: "promo", Key: promo.Code})
+			preview.Conflicts = append(preview.Conflicts, ImportConflict{
+				Type: "promo",
+				Key:  promo.Code,
+			})
 		}
 	}
 	return preview, nil
@@ -76,17 +83,24 @@ func (r *Repository) importPromosBulk(ctx context.Context, workspaceID string, p
 			continue
 		}
 		rows = append(rows, []any{
-			workspaceID, promo.Code, normalizeCode(promo.Code), defaultJSON(promo.Payload, "{}"),
-			defaultJSON(promo.Target, "null"), promo.MaxActivations, promo.IsActive,
-			nullTime(promo.StartAt), nullTime(promo.EndAt),
+			workspaceID,
+			promo.Code,
+			normalizeCode(promo.Code),
+			defaultJSON(promo.Payload, "{}"),
+			defaultJSON(promo.Target, "null"),
+			promo.MaxActivations,
+			promo.IsActive,
+			nullTime(promo.StartAt),
+			nullTime(promo.EndAt),
 		})
 		result.Imported.Promos++
 	}
 	return r.execImportBulk(ctx, "promo_offer",
 		[]string{"workspace_id", "code", "code_normalized", "payload", "target", "max_activations", "is_active", "start_at", "end_at"},
 		rows,
-		"code = VALUES(code), payload = VALUES(payload), target = VALUES(target), max_activations = VALUES(max_activations), "+
-			"is_active = VALUES(is_active), start_at = VALUES(start_at), end_at = VALUES(end_at), deleted_at = NULL, updated_at = NOW()",
+		"(workspace_id, code_normalized)",
+		"code = EXCLUDED.code, payload = EXCLUDED.payload, target = EXCLUDED.target, max_activations = EXCLUDED.max_activations, "+
+			"is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at, deleted_at = NULL, updated_at = now()",
 	)
 }
 
@@ -120,14 +134,21 @@ func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID st
 		}
 		id := ids[normalizeCode(promo.Code)]
 		for locale, text := range promo.Localization {
-			rows = append(rows, []any{workspaceID, id, locale, text.Title, text.Description})
+			rows = append(rows, []any{
+				workspaceID,
+				id,
+				locale,
+				text.Title,
+				text.Description,
+			})
 			result.Imported.Localizations++
 		}
 	}
 	return r.execImportBulk(ctx, "promo_localization",
 		[]string{"workspace_id", "promo_id", "locale", "title", "description"},
 		rows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+		"(workspace_id, promo_id, locale)",
+		"title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
 	)
 }
 
@@ -140,8 +161,13 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 		id := ids[normalizeCode(promo.Code)]
 		for _, reward := range promo.Rewards {
 			rows = append(rows, []any{
-				workspaceID, id, reward.Key, defaultString(reward.Type, "quantity"),
-				reward.Quantity, reward.Scale, nullString(reward.Unit),
+				workspaceID,
+				id,
+				reward.Key,
+				defaultString(reward.Type, "quantity"),
+				reward.Quantity,
+				reward.Scale,
+				nullString(reward.Unit),
 			})
 			result.Imported.Rewards++
 		}
@@ -149,20 +175,21 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 	return r.execImportBulk(ctx, "promo_reward",
 		[]string{"workspace_id", "promo_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit"},
 		rows,
-		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), duration_unit = VALUES(duration_unit), updated_at = NOW()",
+		"(workspace_id, promo_id, reward_key)",
+		"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, duration_unit = EXCLUDED.duration_unit, updated_at = now()",
 	)
 }
 
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
+func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
+	query, args := compileImportBulkUpsert(table, columns, rows, conflictTarget, duplicateUpdate)
 	_, err := r.executor.ExecContext(ctx, query, args...)
 	return err
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
+func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
 	builder.WriteString(table)
@@ -179,13 +206,16 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, dupli
 			if columnIndex > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteByte('?')
+			builder.WriteByte('$')
+			builder.WriteString(fmt.Sprint(len(args) + columnIndex + 1))
 		}
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
-	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+	if conflictTarget != "" && duplicateUpdate != "" {
+		builder.WriteString(" ON CONFLICT ")
+		builder.WriteString(conflictTarget)
+		builder.WriteString(" DO UPDATE SET ")
 		builder.WriteString(duplicateUpdate)
 	}
 	return builder.String(), args

@@ -92,7 +92,7 @@ func (a *TON) CreatePayment(ctx context.Context, params CreatePaymentParams) (*C
 		AssetCode:      attempt.AssetCode,
 		AmountMinor:    attempt.AmountMinor,
 		Comment:        comment,
-		Decimals:       asset.Scale,
+		Decimals:       uint16(asset.Scale),
 		ProviderStatus: attempt.Status,
 	}, nil
 }

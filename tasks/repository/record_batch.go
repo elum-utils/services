@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -54,24 +55,41 @@ func compileProgressBulkUpsert(identity Identity, items []recordProgressUpsert) 
 		if index > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		builder.WriteByte('(')
+		for columnIndex := 0; columnIndex < columns; columnIndex++ {
+			if columnIndex > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteByte('$')
+			builder.WriteString(fmt.Sprint(len(args) + columnIndex + 1))
+		}
+		builder.WriteByte(')')
 		args = append(args,
 			identity.WorkspaceID,
-			item.taskID,
+			int64(item.taskID),
 			identity.AppID,
 			identity.PlatformID,
 			identity.PlatformUserID,
 			item.periodStartAt,
 			item.periodEndAt,
-			item.progress,
+			int64(item.progress),
 			item.status,
 			nullTime(item.readyAt),
 		)
 	}
-	builder.WriteString(" ON DUPLICATE KEY UPDATE ")
-	builder.WriteString("period_end_at = VALUES(period_end_at), ")
-	builder.WriteString("progress = VALUES(progress), ")
-	builder.WriteString("status = VALUES(status), ")
-	builder.WriteString("ready_at = VALUES(ready_at)")
+	builder.WriteString(" ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET ")
+	builder.WriteString("period_end_at = EXCLUDED.period_end_at, ")
+	builder.WriteString("progress = LEAST(task_progress.progress + EXCLUDED.progress, ")
+	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id)), ")
+	builder.WriteString("status = CASE ")
+	builder.WriteString("WHEN task_progress.status IN ('ready', 'claimed') THEN task_progress.status ")
+	builder.WriteString("WHEN task_progress.progress + EXCLUDED.progress >= ")
+	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN 'ready' ")
+	builder.WriteString("ELSE EXCLUDED.status END, ")
+	builder.WriteString("ready_at = CASE ")
+	builder.WriteString("WHEN task_progress.ready_at IS NOT NULL THEN task_progress.ready_at ")
+	builder.WriteString("WHEN task_progress.progress + EXCLUDED.progress >= ")
+	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN COALESCE(EXCLUDED.ready_at, now()) ")
+	builder.WriteString("ELSE EXCLUDED.ready_at END")
 	return builder.String(), args
 }

@@ -9,8 +9,11 @@ import (
 
 func (r *Repository) GetRedemption(ctx context.Context, identity Identity, promoID uint64) (*Redemption, error) {
 	row, err := r.q.GetRedemption(ctx, promosqlc.GetRedemptionParams{
-		WorkspaceID: identity.WorkspaceID, PromoID: promoID, AppID: identity.AppID,
-		PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
+		WorkspaceID:    identity.WorkspaceID,
+		PromoID:        int64(promoID),
+		AppID:          identity.AppID,
+		PlatformID:     identity.PlatformID,
+		PlatformUserID: identity.PlatformUserID,
 	})
 	if isNoRows(err) {
 		return nil, nil
@@ -25,7 +28,10 @@ func (r *Repository) GetRedemption(ctx context.Context, identity Identity, promo
 func (r *Repository) ListRedemptions(ctx context.Context, workspaceID string, promoID uint64, limit, offset int32) ([]Redemption, error) {
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListRedemptions(ctx, promosqlc.AdminListRedemptionsParams{
-		WorkspaceID: workspaceID, PromoID: promoID, Limit: limit, Offset: offset,
+		WorkspaceID: workspaceID,
+		PromoID:     int64(promoID),
+		Limit:       limit,
+		Offset:      offset,
 	})
 	if err != nil {
 		return nil, err
@@ -38,19 +44,26 @@ func (r *Repository) ListRedemptions(ctx context.Context, workspaceID string, pr
 }
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID string, promoID uint64) (Stats, error) {
-	row, err := r.q.AdminGetStats(ctx, promosqlc.AdminGetStatsParams{WorkspaceID: workspaceID, ID: promoID})
+	row, err := r.q.AdminGetStats(ctx, promosqlc.AdminGetStatsParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(promoID),
+	})
 	if err != nil {
 		return Stats{}, err
 	}
 	return Stats{
-		ActivationCount: row.ActivationCount, MaxActivations: row.MaxActivations,
+		ActivationCount:      uint64(row.ActivationCount),
+		MaxActivations:       uint64(row.MaxActivations),
 		RemainingActivations: remainingActivations(row.RemainingActivations),
 	}, nil
 }
 
 func (r *Repository) ListDailyStats(ctx context.Context, workspaceID string, promoID uint64, from, until time.Time) ([]DailyStats, error) {
 	rows, err := r.q.AdminListDailyStats(ctx, promosqlc.AdminListDailyStatsParams{
-		WorkspaceID: workspaceID, PromoID: promoID, StatsDate: from, StatsDate_2: until,
+		WorkspaceID: workspaceID,
+		PromoID:     int64(promoID),
+		StatsDate:   from,
+		StatsDate_2: until,
 	})
 	if err != nil {
 		return nil, err
@@ -58,14 +71,19 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID string, pro
 	result := make([]DailyStats, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, DailyStats{
-			Date: row.StatsDate, RedemptionCount: row.RedemptionCount, UniqueUsers: row.UniqueUsers,
+			Date:            row.StatsDate,
+			RedemptionCount: uint64(row.RedemptionCount),
+			UniqueUsers:     uint64(row.UniqueUsers),
 		})
 	}
 	return result, nil
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
-	return r.q.RefreshDailyStats(ctx, promosqlc.RefreshDailyStatsParams{OccurredAt: from, OccurredAt_2: until})
+	return r.q.RefreshDailyStats(ctx, promosqlc.RefreshDailyStatsParams{
+		OccurredAt:   from,
+		OccurredAt_2: until,
+	})
 }
 
 func remainingActivations(value int64) *uint64 {

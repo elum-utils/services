@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	utils "github.com/elum-utils/services/internal/utils"
-	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func rubMajorFromMinor(amountMinor uint64) float64 {
@@ -73,9 +73,6 @@ func nilIfEmpty(value string) *string {
 }
 
 func isDuplicateEntry(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	if errors.As(err, &mysqlErr) {
-		return mysqlErr.Number == 1062
-	}
-	return false
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

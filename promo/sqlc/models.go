@@ -10,100 +10,123 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
-type PromoRewardDurationUnit string
+type PromoDurationUnit string
 
 const (
-	PromoRewardDurationUnitSecond PromoRewardDurationUnit = "second"
-	PromoRewardDurationUnitMinute PromoRewardDurationUnit = "minute"
-	PromoRewardDurationUnitHour   PromoRewardDurationUnit = "hour"
-	PromoRewardDurationUnitDay    PromoRewardDurationUnit = "day"
-	PromoRewardDurationUnitWeek   PromoRewardDurationUnit = "week"
-	PromoRewardDurationUnitMonth  PromoRewardDurationUnit = "month"
-	PromoRewardDurationUnitYear   PromoRewardDurationUnit = "year"
+	PromoDurationUnitSecond PromoDurationUnit = "second"
+	PromoDurationUnitMinute PromoDurationUnit = "minute"
+	PromoDurationUnitHour   PromoDurationUnit = "hour"
+	PromoDurationUnitDay    PromoDurationUnit = "day"
+	PromoDurationUnitWeek   PromoDurationUnit = "week"
+	PromoDurationUnitMonth  PromoDurationUnit = "month"
+	PromoDurationUnitYear   PromoDurationUnit = "year"
 )
 
-func (e *PromoRewardDurationUnit) Scan(src interface{}) error {
+func (e *PromoDurationUnit) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = PromoRewardDurationUnit(s)
+		*e = PromoDurationUnit(s)
 	case string:
-		*e = PromoRewardDurationUnit(s)
+		*e = PromoDurationUnit(s)
 	default:
-		return fmt.Errorf("unsupported scan type for PromoRewardDurationUnit: %T", src)
+		return fmt.Errorf("unsupported scan type for PromoDurationUnit: %T", src)
 	}
 	return nil
 }
 
-type NullPromoRewardDurationUnit struct {
-	PromoRewardDurationUnit PromoRewardDurationUnit `json:"promo_reward_duration_unit"`
-	Valid                   bool                    `json:"valid"` // Valid is true if PromoRewardDurationUnit is not NULL
+type NullPromoDurationUnit struct {
+	PromoDurationUnit PromoDurationUnit `json:"promo_duration_unit"`
+	Valid             bool              `json:"valid"` // Valid is true if PromoDurationUnit is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPromoRewardDurationUnit) Scan(value interface{}) error {
+func (ns *NullPromoDurationUnit) Scan(value interface{}) error {
 	if value == nil {
-		ns.PromoRewardDurationUnit, ns.Valid = "", false
+		ns.PromoDurationUnit, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.PromoRewardDurationUnit.Scan(value)
+	return ns.PromoDurationUnit.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullPromoRewardDurationUnit) Value() (driver.Value, error) {
+func (ns NullPromoDurationUnit) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.PromoRewardDurationUnit), nil
+	return string(ns.PromoDurationUnit), nil
 }
 
-type PromoRewardRewardType string
+type PromoRewardType string
 
 const (
-	PromoRewardRewardTypeQuantity PromoRewardRewardType = "quantity"
-	PromoRewardRewardTypeDuration PromoRewardRewardType = "duration"
+	PromoRewardTypeQuantity PromoRewardType = "quantity"
+	PromoRewardTypeDuration PromoRewardType = "duration"
 )
 
-func (e *PromoRewardRewardType) Scan(src interface{}) error {
+func (e *PromoRewardType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = PromoRewardRewardType(s)
+		*e = PromoRewardType(s)
 	case string:
-		*e = PromoRewardRewardType(s)
+		*e = PromoRewardType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for PromoRewardRewardType: %T", src)
+		return fmt.Errorf("unsupported scan type for PromoRewardType: %T", src)
 	}
 	return nil
 }
 
-type NullPromoRewardRewardType struct {
-	PromoRewardRewardType PromoRewardRewardType `json:"promo_reward_reward_type"`
-	Valid                 bool                  `json:"valid"` // Valid is true if PromoRewardRewardType is not NULL
+type NullPromoRewardType struct {
+	PromoRewardType PromoRewardType `json:"promo_reward_type"`
+	Valid           bool            `json:"valid"` // Valid is true if PromoRewardType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPromoRewardRewardType) Scan(value interface{}) error {
+func (ns *NullPromoRewardType) Scan(value interface{}) error {
 	if value == nil {
-		ns.PromoRewardRewardType, ns.Valid = "", false
+		ns.PromoRewardType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.PromoRewardRewardType.Scan(value)
+	return ns.PromoRewardType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullPromoRewardRewardType) Value() (driver.Value, error) {
+func (ns NullPromoRewardType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.PromoRewardRewardType), nil
+	return string(ns.PromoRewardType), nil
+}
+
+type PromoClbEvent struct {
+	ID                 int64          `json:"id"`
+	SourceService      string         `json:"source_service"`
+	EventType          string         `json:"event_type"`
+	EventKey           string         `json:"event_key"`
+	IdempotencyKey     string         `json:"idempotency_key"`
+	Payload            []byte         `json:"payload"`
+	PayloadContentType string         `json:"payload_content_type"`
+	Status             string         `json:"status"`
+	AttemptCount       int32          `json:"attempt_count"`
+	NextAttemptAt      time.Time      `json:"next_attempt_at"`
+	LockedBy           sql.NullString `json:"locked_by"`
+	LockedUntil        sql.NullTime   `json:"locked_until"`
+	DeliveredAt        sql.NullTime   `json:"delivered_at"`
+	RejectedAt         sql.NullTime   `json:"rejected_at"`
+	LastError          sql.NullString `json:"last_error"`
+	RejectReason       sql.NullString `json:"reject_reason"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
 type PromoLocalization struct {
 	WorkspaceID string    `json:"workspace_id"`
-	PromoID     uint64    `json:"promo_id"`
+	PromoID     int64     `json:"promo_id"`
 	Locale      string    `json:"locale"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
@@ -112,26 +135,26 @@ type PromoLocalization struct {
 }
 
 type PromoOffer struct {
-	ID              uint64          `json:"id"`
-	WorkspaceID     string          `json:"workspace_id"`
-	Code            string          `json:"code"`
-	CodeNormalized  string          `json:"code_normalized"`
-	Payload         json.RawMessage `json:"payload"`
-	Target          json.RawMessage `json:"target"`
-	MaxActivations  uint64          `json:"max_activations"`
-	ActivationCount uint64          `json:"activation_count"`
-	IsActive        bool            `json:"is_active"`
-	StartAt         sql.NullTime    `json:"start_at"`
-	EndAt           sql.NullTime    `json:"end_at"`
-	DeletedAt       sql.NullTime    `json:"deleted_at"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ID              int64                 `json:"id"`
+	WorkspaceID     string                `json:"workspace_id"`
+	Code            string                `json:"code"`
+	CodeNormalized  string                `json:"code_normalized"`
+	Payload         json.RawMessage       `json:"payload"`
+	Target          pqtype.NullRawMessage `json:"target"`
+	MaxActivations  int64                 `json:"max_activations"`
+	ActivationCount int64                 `json:"activation_count"`
+	IsActive        bool                  `json:"is_active"`
+	StartAt         sql.NullTime          `json:"start_at"`
+	EndAt           sql.NullTime          `json:"end_at"`
+	DeletedAt       sql.NullTime          `json:"deleted_at"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
 }
 
 type PromoRedemption struct {
-	ID             uint64          `json:"id"`
+	ID             int64           `json:"id"`
 	WorkspaceID    string          `json:"workspace_id"`
-	PromoID        uint64          `json:"promo_id"`
+	PromoID        int64           `json:"promo_id"`
 	AppID          int64           `json:"app_id"`
 	PlatformID     int64           `json:"platform_id"`
 	PlatformUserID string          `json:"platform_user_id"`
@@ -141,32 +164,32 @@ type PromoRedemption struct {
 }
 
 type PromoRedemptionEvent struct {
-	ID           uint64    `json:"id"`
+	ID           int64     `json:"id"`
 	WorkspaceID  string    `json:"workspace_id"`
-	PromoID      uint64    `json:"promo_id"`
-	RedemptionID uint64    `json:"redemption_id"`
+	PromoID      int64     `json:"promo_id"`
+	RedemptionID int64     `json:"redemption_id"`
 	OccurredAt   time.Time `json:"occurred_at"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 type PromoReward struct {
-	ID           uint64                      `json:"id"`
-	WorkspaceID  string                      `json:"workspace_id"`
-	PromoID      uint64                      `json:"promo_id"`
-	RewardKey    string                      `json:"reward_key"`
-	RewardType   PromoRewardRewardType       `json:"reward_type"`
-	Quantity     int64                       `json:"quantity"`
-	Scale        uint16                      `json:"scale"`
-	DurationUnit NullPromoRewardDurationUnit `json:"duration_unit"`
-	CreatedAt    time.Time                   `json:"created_at"`
-	UpdatedAt    time.Time                   `json:"updated_at"`
+	ID           int64                 `json:"id"`
+	WorkspaceID  string                `json:"workspace_id"`
+	PromoID      int64                 `json:"promo_id"`
+	RewardKey    string                `json:"reward_key"`
+	RewardType   PromoRewardType       `json:"reward_type"`
+	Quantity     int64                 `json:"quantity"`
+	Scale        int16                 `json:"scale"`
+	DurationUnit NullPromoDurationUnit `json:"duration_unit"`
+	CreatedAt    time.Time             `json:"created_at"`
+	UpdatedAt    time.Time             `json:"updated_at"`
 }
 
 type PromoStatsDaily struct {
 	WorkspaceID     string    `json:"workspace_id"`
-	PromoID         uint64    `json:"promo_id"`
+	PromoID         int64     `json:"promo_id"`
 	StatsDate       time.Time `json:"stats_date"`
-	RedemptionCount uint64    `json:"redemption_count"`
-	UniqueUsers     uint64    `json:"unique_users"`
+	RedemptionCount int64     `json:"redemption_count"`
+	UniqueUsers     int64     `json:"unique_users"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

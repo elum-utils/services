@@ -30,8 +30,8 @@ func (r *Repository) AuthenticateIdentity(ctx context.Context, value IdentityInp
 	}
 	account, err := r.q.FindAccountByIdentity(ctx, controlsqlc.FindAccountByIdentityParams{Provider: value.Provider, ProviderSubject: value.Subject})
 	if err == nil {
-		result := Account{ID: account.ID, DisplayName: account.DisplayName, Status: string(account.Status), CreatedAt: account.CreatedAt, UpdatedAt: account.UpdatedAt}
-		if result.Status != string(controlsqlc.ControlAccountStatusActive) {
+		result := Account{ID: account.ID, DisplayName: account.DisplayName, Status: account.Status, CreatedAt: account.CreatedAt, UpdatedAt: account.UpdatedAt}
+		if result.Status != "active" {
 			return Account{}, false, ErrForbidden
 		}
 		return result, false, nil
@@ -43,7 +43,7 @@ func (r *Repository) AuthenticateIdentity(ctx context.Context, value IdentityInp
 	if err != nil {
 		return Account{}, false, err
 	}
-	if err := r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: created.ID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: value.Payload}); err != nil {
+	if err := r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: created.ID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: rawMessageParam(value.Payload)}); err != nil {
 		return Account{}, false, err
 	}
 	return created, true, nil
@@ -56,7 +56,7 @@ func (r *Repository) BindIdentity(ctx context.Context, accountID string, value I
 	if _, err := r.GetAccount(ctx, accountID); err != nil {
 		return err
 	}
-	return r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: accountID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: value.Payload})
+	return r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: accountID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: rawMessageParam(value.Payload)})
 }
 
 func (r *Repository) ListIdentities(ctx context.Context, accountID string) ([]Identity, error) {
@@ -66,7 +66,7 @@ func (r *Repository) ListIdentities(ctx context.Context, accountID string) ([]Id
 	}
 	result := make([]Identity, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Identity{AccountID: row.AccountID, Provider: row.Provider, ProviderSubject: row.ProviderSubject, Payload: row.Payload, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(result, Identity{AccountID: row.AccountID, Provider: row.Provider, ProviderSubject: row.ProviderSubject, Payload: nullRawMessage(row.Payload), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
 	}
 	return result, nil
 }
@@ -136,7 +136,7 @@ func (r *Repository) ValidateSession(ctx context.Context, rawToken, ip string) (
 	if err != nil {
 		return Session{}, err
 	}
-	if account.Status != string(controlsqlc.ControlAccountStatusActive) {
+	if account.Status != "active" {
 		return Session{}, ErrForbidden
 	}
 	_, _ = r.q.TouchSession(ctx, row.ID)

@@ -9,22 +9,23 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const adminCreateItem = `-- name: AdminCreateItem :exec
 INSERT INTO reference_item (
-    workspace_id, ` + "`" + `key` + "`" + `, item_type, payload, is_active
-) VALUES (?, ?, ?, ?, ?)
+    workspace_id, key, item_type, payload, is_active
+) VALUES ($1, $2, $3, $4, $5)
 `
 
 type AdminCreateItemParams struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
 }
 
 func (q *Queries) AdminCreateItem(ctx context.Context, arg AdminCreateItemParams) error {
@@ -40,18 +41,18 @@ func (q *Queries) AdminCreateItem(ctx context.Context, arg AdminCreateItemParams
 
 const adminDangerousChangeType = `-- name: AdminDangerousChangeType :execrows
 UPDATE reference_item
-SET item_type = ?
-WHERE workspace_id = ?
-  AND ` + "`" + `key` + "`" + ` = ?
-  AND item_type = ?
+SET item_type = $1
+WHERE workspace_id = $2
+  AND key = $3
+  AND item_type = $4
   AND deleted_at IS NULL
 `
 
 type AdminDangerousChangeTypeParams struct {
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType_2  ReferenceItemItemType `json:"item_type_2"`
+	ItemType    string `json:"item_type"`
+	WorkspaceID string `json:"workspace_id"`
+	Key         string `json:"key"`
+	ItemType_2  string `json:"item_type_2"`
 }
 
 func (q *Queries) AdminDangerousChangeType(ctx context.Context, arg AdminDangerousChangeTypeParams) (int64, error) {
@@ -69,9 +70,9 @@ func (q *Queries) AdminDangerousChangeType(ctx context.Context, arg AdminDangero
 
 const adminDeleteLocalization = `-- name: AdminDeleteLocalization :execrows
 DELETE FROM reference_localization
-WHERE workspace_id = ?
-  AND item_key = ?
-  AND locale = ?
+WHERE workspace_id = $1
+  AND item_key = $2
+  AND locale = $3
 `
 
 type AdminDeleteLocalizationParams struct {
@@ -91,8 +92,8 @@ func (q *Queries) AdminDeleteLocalization(ctx context.Context, arg AdminDeleteLo
 const adminGetItemBundle = `-- name: AdminGetItemBundle :many
 SELECT
     i.workspace_id,
-    i.` + "`" + `key` + "`" + `,
-    i.item_type,
+    i.key,
+    i.item_type::text AS item_type,
     i.payload,
     i.is_active,
     i.deleted_at,
@@ -104,9 +105,9 @@ SELECT
 FROM reference_item i
 LEFT JOIN reference_localization l
   ON l.workspace_id = i.workspace_id
- AND l.item_key = i.` + "`" + `key` + "`" + `
-WHERE i.workspace_id = ?
-  AND i.` + "`" + `key` + "`" + ` = ?
+ AND l.item_key = i.key
+WHERE i.workspace_id = $1
+  AND i.key = $2
 ORDER BY l.locale
 `
 
@@ -116,17 +117,17 @@ type AdminGetItemBundleParams struct {
 }
 
 type AdminGetItemBundleRow struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
-	DeletedAt   sql.NullTime          `json:"deleted_at"`
-	CreatedAt   time.Time             `json:"created_at"`
-	UpdatedAt   time.Time             `json:"updated_at"`
-	Locale      sql.NullString        `json:"locale"`
-	Title       sql.NullString        `json:"title"`
-	Description sql.NullString        `json:"description"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Locale      sql.NullString  `json:"locale"`
+	Title       sql.NullString  `json:"title"`
+	Description sql.NullString  `json:"description"`
 }
 
 func (q *Queries) AdminGetItemBundle(ctx context.Context, arg AdminGetItemBundleParams) ([]AdminGetItemBundleRow, error) {
@@ -168,9 +169,9 @@ const adminGetLocalization = `-- name: AdminGetLocalization :one
 SELECT
     workspace_id, item_key, locale, title, description, created_at, updated_at
 FROM reference_localization
-WHERE workspace_id = ?
-  AND item_key = ?
-  AND locale = ?
+WHERE workspace_id = $1
+  AND item_key = $2
+  AND locale = $3
 LIMIT 1
 `
 
@@ -197,14 +198,14 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 
 const adminGetStats = `-- name: AdminGetStats :one
 SELECT
-    COUNT(*) AS items_total,
-    CAST(COALESCE(SUM(deleted_at IS NULL), 0) AS UNSIGNED) AS items_not_deleted,
-    CAST(COALESCE(SUM(deleted_at IS NULL AND is_active = TRUE), 0) AS UNSIGNED) AS active_items,
-    CAST(COALESCE(SUM(deleted_at IS NOT NULL), 0) AS UNSIGNED) AS deleted_items,
-    CAST(COALESCE(SUM(deleted_at IS NULL AND item_type = 'quantity'), 0) AS UNSIGNED) AS quantity_items,
-    CAST(COALESCE(SUM(deleted_at IS NULL AND item_type = 'duration'), 0) AS UNSIGNED) AS duration_items
+    COUNT(*)::bigint AS items_total,
+    COUNT(*) FILTER (WHERE deleted_at IS NULL)::bigint AS items_not_deleted,
+    COUNT(*) FILTER (WHERE deleted_at IS NULL AND is_active = TRUE)::bigint AS active_items,
+    COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::bigint AS deleted_items,
+    COUNT(*) FILTER (WHERE deleted_at IS NULL AND item_type = 'quantity')::bigint AS quantity_items,
+    COUNT(*) FILTER (WHERE deleted_at IS NULL AND item_type = 'duration')::bigint AS duration_items
 FROM reference_item
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 `
 
 type AdminGetStatsRow struct {
@@ -233,31 +234,42 @@ func (q *Queries) AdminGetStats(ctx context.Context, workspaceID string) (AdminG
 const adminListItems = `-- name: AdminListItems :many
 SELECT
     workspace_id,
-    ` + "`" + `key` + "`" + `,
-    item_type,
+    key,
+    item_type::text AS item_type,
     payload,
     is_active,
     deleted_at,
     created_at,
     updated_at
 FROM reference_item
-WHERE workspace_id = ?
-  AND (? = '' OR item_type = ?)
-  AND (? = FALSE OR deleted_at IS NULL)
-ORDER BY ` + "`" + `key` + "`" + `
-LIMIT ? OFFSET ?
+WHERE workspace_id = $1
+  AND ($2 = '' OR item_type = $3)
+  AND ($4 = FALSE OR deleted_at IS NULL)
+ORDER BY key
+LIMIT $5 OFFSET $6
 `
 
 type AdminListItemsParams struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Column2     interface{}           `json:"column_2"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Column4     interface{}           `json:"column_4"`
-	Limit       int32                 `json:"limit"`
-	Offset      int32                 `json:"offset"`
+	WorkspaceID string      `json:"workspace_id"`
+	Column2     interface{} `json:"column_2"`
+	ItemType    string      `json:"item_type"`
+	Column4     interface{} `json:"column_4"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
 }
 
-func (q *Queries) AdminListItems(ctx context.Context, arg AdminListItemsParams) ([]ReferenceItem, error) {
+type AdminListItemsRow struct {
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+func (q *Queries) AdminListItems(ctx context.Context, arg AdminListItemsParams) ([]AdminListItemsRow, error) {
 	rows, err := q.query(ctx, q.adminListItemsStmt, adminListItems,
 		arg.WorkspaceID,
 		arg.Column2,
@@ -270,9 +282,9 @@ func (q *Queries) AdminListItems(ctx context.Context, arg AdminListItemsParams) 
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ReferenceItem
+	var items []AdminListItemsRow
 	for rows.Next() {
-		var i ReferenceItem
+		var i AdminListItemsRow
 		if err := rows.Scan(
 			&i.WorkspaceID,
 			&i.Key,
@@ -300,8 +312,8 @@ const adminListLocalizations = `-- name: AdminListLocalizations :many
 SELECT
     workspace_id, item_key, locale, title, description, created_at, updated_at
 FROM reference_localization
-WHERE workspace_id = ?
-  AND item_key = ?
+WHERE workspace_id = $1
+  AND item_key = $2
 ORDER BY locale
 `
 
@@ -343,10 +355,11 @@ func (q *Queries) AdminListLocalizations(ctx context.Context, arg AdminListLocal
 
 const adminRestoreItem = `-- name: AdminRestoreItem :execrows
 UPDATE reference_item
-SET is_active = ?,
-    deleted_at = NULL
-WHERE workspace_id = ?
-  AND ` + "`" + `key` + "`" + ` = ?
+SET is_active = $1,
+    deleted_at = NULL,
+    updated_at = now()
+WHERE workspace_id = $2
+  AND key = $3
   AND deleted_at IS NOT NULL
 `
 
@@ -367,9 +380,10 @@ func (q *Queries) AdminRestoreItem(ctx context.Context, arg AdminRestoreItemPara
 const adminSoftDeleteItem = `-- name: AdminSoftDeleteItem :execrows
 UPDATE reference_item
 SET is_active = FALSE,
-    deleted_at = NOW()
-WHERE workspace_id = ?
-  AND ` + "`" + `key` + "`" + ` = ?
+    deleted_at = now(),
+    updated_at = now()
+WHERE workspace_id = $1
+  AND key = $2
   AND deleted_at IS NULL
 `
 
@@ -388,10 +402,11 @@ func (q *Queries) AdminSoftDeleteItem(ctx context.Context, arg AdminSoftDeleteIt
 
 const adminUpdateItem = `-- name: AdminUpdateItem :execrows
 UPDATE reference_item
-SET payload = ?,
-    is_active = ?
-WHERE workspace_id = ?
-  AND ` + "`" + `key` + "`" + ` = ?
+SET payload = $1,
+    is_active = $2,
+    updated_at = now()
+WHERE workspace_id = $3
+  AND key = $4
   AND deleted_at IS NULL
 `
 
@@ -418,10 +433,11 @@ func (q *Queries) AdminUpdateItem(ctx context.Context, arg AdminUpdateItemParams
 const adminUpsertLocalization = `-- name: AdminUpsertLocalization :exec
 INSERT INTO reference_localization (
     workspace_id, item_key, locale, title, description
-) VALUES (?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    title = VALUES(title),
-    description = VALUES(description)
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, item_key, locale) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    updated_at = now()
 `
 
 type AdminUpsertLocalizationParams struct {
@@ -446,8 +462,8 @@ func (q *Queries) AdminUpsertLocalization(ctx context.Context, arg AdminUpsertLo
 const getItemBundle = `-- name: GetItemBundle :many
 SELECT
     i.workspace_id,
-    i.` + "`" + `key` + "`" + `,
-    i.item_type,
+    i.key,
+    i.item_type::text AS item_type,
     i.payload,
     i.is_active,
     i.deleted_at,
@@ -459,10 +475,10 @@ SELECT
 FROM reference_item i
 LEFT JOIN reference_localization l
   ON l.workspace_id = i.workspace_id
- AND l.item_key = i.` + "`" + `key` + "`" + `
- AND l.locale = ?
-WHERE i.workspace_id = ?
-  AND i.` + "`" + `key` + "`" + ` = ?
+ AND l.item_key = i.key
+ AND l.locale = $1
+WHERE i.workspace_id = $2
+  AND i.key = $3
   AND i.deleted_at IS NULL
   AND i.is_active = TRUE
 LIMIT 1
@@ -475,17 +491,17 @@ type GetItemBundleParams struct {
 }
 
 type GetItemBundleRow struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
-	DeletedAt   sql.NullTime          `json:"deleted_at"`
-	CreatedAt   time.Time             `json:"created_at"`
-	UpdatedAt   time.Time             `json:"updated_at"`
-	Locale      sql.NullString        `json:"locale"`
-	Title       sql.NullString        `json:"title"`
-	Description sql.NullString        `json:"description"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Locale      sql.NullString  `json:"locale"`
+	Title       sql.NullString  `json:"title"`
+	Description sql.NullString  `json:"description"`
 }
 
 func (q *Queries) GetItemBundle(ctx context.Context, arg GetItemBundleParams) ([]GetItemBundleRow, error) {
@@ -523,11 +539,149 @@ func (q *Queries) GetItemBundle(ctx context.Context, arg GetItemBundleParams) ([
 	return items, nil
 }
 
+const listExportItems = `-- name: ListExportItems :many
+SELECT
+    workspace_id,
+    key,
+    item_type::text AS item_type,
+    payload,
+    is_active,
+    deleted_at,
+    created_at,
+    updated_at
+FROM reference_item
+WHERE workspace_id = $1
+  AND ($2 = FALSE OR deleted_at IS NULL)
+ORDER BY key
+`
+
+type ListExportItemsParams struct {
+	WorkspaceID string      `json:"workspace_id"`
+	Column2     interface{} `json:"column_2"`
+}
+
+type ListExportItemsRow struct {
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+func (q *Queries) ListExportItems(ctx context.Context, arg ListExportItemsParams) ([]ListExportItemsRow, error) {
+	rows, err := q.query(ctx, q.listExportItemsStmt, listExportItems, arg.WorkspaceID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExportItemsRow
+	for rows.Next() {
+		var i ListExportItemsRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Key,
+			&i.ItemType,
+			&i.Payload,
+			&i.IsActive,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportLocalizations = `-- name: ListExportLocalizations :many
+SELECT
+    workspace_id,
+    item_key,
+    locale,
+    title,
+    description,
+    created_at,
+    updated_at
+FROM reference_localization
+WHERE workspace_id = $1
+ORDER BY item_key, locale
+`
+
+func (q *Queries) ListExportLocalizations(ctx context.Context, workspaceID string) ([]ReferenceLocalization, error) {
+	rows, err := q.query(ctx, q.listExportLocalizationsStmt, listExportLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReferenceLocalization
+	for rows.Next() {
+		var i ReferenceLocalization
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ItemKey,
+			&i.Locale,
+			&i.Title,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportItemKeys = `-- name: ListImportItemKeys :many
+SELECT key
+FROM reference_item
+WHERE workspace_id = $1
+`
+
+func (q *Queries) ListImportItemKeys(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.query(ctx, q.listImportItemKeysStmt, listImportItemKeys, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		items = append(items, key)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listItemBundles = `-- name: ListItemBundles :many
 SELECT
     i.workspace_id,
-    i.` + "`" + `key` + "`" + `,
-    i.item_type,
+    i.key,
+    i.item_type::text AS item_type,
     i.payload,
     i.is_active,
     i.deleted_at,
@@ -539,13 +693,13 @@ SELECT
 FROM reference_item i
 LEFT JOIN reference_localization l
   ON l.workspace_id = i.workspace_id
- AND l.item_key = i.` + "`" + `key` + "`" + `
- AND l.locale = ?
-WHERE i.workspace_id = ?
+ AND l.item_key = i.key
+ AND l.locale = $1
+WHERE i.workspace_id = $2
   AND i.deleted_at IS NULL
   AND i.is_active = TRUE
-ORDER BY i.` + "`" + `key` + "`" + `
-LIMIT ? OFFSET ?
+ORDER BY i.key
+LIMIT $3 OFFSET $4
 `
 
 type ListItemBundlesParams struct {
@@ -556,17 +710,17 @@ type ListItemBundlesParams struct {
 }
 
 type ListItemBundlesRow struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
-	DeletedAt   sql.NullTime          `json:"deleted_at"`
-	CreatedAt   time.Time             `json:"created_at"`
-	UpdatedAt   time.Time             `json:"updated_at"`
-	Locale      sql.NullString        `json:"locale"`
-	Title       sql.NullString        `json:"title"`
-	Description sql.NullString        `json:"description"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Locale      sql.NullString  `json:"locale"`
+	Title       sql.NullString  `json:"title"`
+	Description sql.NullString  `json:"description"`
 }
 
 func (q *Queries) ListItemBundles(ctx context.Context, arg ListItemBundlesParams) ([]ListItemBundlesRow, error) {
@@ -612,8 +766,8 @@ func (q *Queries) ListItemBundles(ctx context.Context, arg ListItemBundlesParams
 const resolveItemBundles = `-- name: ResolveItemBundles :many
 SELECT
     i.workspace_id,
-    i.` + "`" + `key` + "`" + `,
-    i.item_type,
+    i.key,
+    i.item_type::text AS item_type,
     i.payload,
     i.is_active,
     i.deleted_at,
@@ -623,51 +777,40 @@ SELECT
     l.title,
     l.description
 FROM reference_item i
+JOIN unnest($3::text[]) WITH ORDINALITY AS requested(key, position)
+  ON requested.key = i.key
 LEFT JOIN reference_localization l
   ON l.workspace_id = i.workspace_id
- AND l.item_key = i.` + "`" + `key` + "`" + `
- AND l.locale = ?
-WHERE i.workspace_id = ?
-  AND i.` + "`" + `key` + "`" + ` IN (/*SLICE:keys*/?)
+ AND l.item_key = i.key
+ AND l.locale = $1
+WHERE i.workspace_id = $2
   AND i.deleted_at IS NULL
   AND i.is_active = TRUE
-ORDER BY i.` + "`" + `key` + "`" + `
+ORDER BY requested.position
 `
 
 type ResolveItemBundlesParams struct {
 	Locale      string   `json:"locale"`
 	WorkspaceID string   `json:"workspace_id"`
-	Keys        []string `json:"keys"`
+	Column3     []string `json:"column_3"`
 }
 
 type ResolveItemBundlesRow struct {
-	WorkspaceID string                `json:"workspace_id"`
-	Key         string                `json:"key"`
-	ItemType    ReferenceItemItemType `json:"item_type"`
-	Payload     json.RawMessage       `json:"payload"`
-	IsActive    bool                  `json:"is_active"`
-	DeletedAt   sql.NullTime          `json:"deleted_at"`
-	CreatedAt   time.Time             `json:"created_at"`
-	UpdatedAt   time.Time             `json:"updated_at"`
-	Locale      sql.NullString        `json:"locale"`
-	Title       sql.NullString        `json:"title"`
-	Description sql.NullString        `json:"description"`
+	WorkspaceID string          `json:"workspace_id"`
+	Key         string          `json:"key"`
+	ItemType    string          `json:"item_type"`
+	Payload     json.RawMessage `json:"payload"`
+	IsActive    bool            `json:"is_active"`
+	DeletedAt   sql.NullTime    `json:"deleted_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Locale      sql.NullString  `json:"locale"`
+	Title       sql.NullString  `json:"title"`
+	Description sql.NullString  `json:"description"`
 }
 
 func (q *Queries) ResolveItemBundles(ctx context.Context, arg ResolveItemBundlesParams) ([]ResolveItemBundlesRow, error) {
-	query := resolveItemBundles
-	var queryParams []interface{}
-	queryParams = append(queryParams, arg.Locale)
-	queryParams = append(queryParams, arg.WorkspaceID)
-	if len(arg.Keys) > 0 {
-		for _, v := range arg.Keys {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:keys*/?", strings.Repeat(",?", len(arg.Keys))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:keys*/?", "NULL", 1)
-	}
-	rows, err := q.query(ctx, nil, query, queryParams...)
+	rows, err := q.query(ctx, q.resolveItemBundlesStmt, resolveItemBundles, arg.Locale, arg.WorkspaceID, pq.Array(arg.Column3))
 	if err != nil {
 		return nil, err
 	}

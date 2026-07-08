@@ -32,22 +32,22 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE (? = '' OR source_service = ?)
-  AND (? = '' OR event_type = ?)
-  AND (? = '' OR CAST(status AS CHAR) = ?)
+WHERE ($1 = '' OR source_service = $2)
+  AND ($3 = '' OR event_type = $4)
+  AND ($5 = '' OR status = $6)
 ORDER BY created_at DESC, id DESC
-LIMIT ? OFFSET ?
+LIMIT $7 OFFSET $8
 `
 
 type AdminListEventsParams struct {
-	Column1       interface{}    `json:"column_1"`
-	SourceService string         `json:"source_service"`
-	Column3       interface{}    `json:"column_3"`
-	EventType     string         `json:"event_type"`
-	Column5       interface{}    `json:"column_5"`
-	Status        ClbEventStatus `json:"status"`
-	Limit         int32          `json:"limit"`
-	Offset        int32          `json:"offset"`
+	Column1       interface{} `json:"column_1"`
+	SourceService string      `json:"source_service"`
+	Column3       interface{} `json:"column_3"`
+	EventType     string      `json:"event_type"`
+	Column5       interface{} `json:"column_5"`
+	Status        string      `json:"status"`
+	Limit         int32       `json:"limit"`
+	Offset        int32       `json:"offset"`
 }
 
 func (q *Queries) AdminListEvents(ctx context.Context, arg AdminListEventsParams) ([]ClbEvent, error) {
@@ -109,11 +109,11 @@ SET status = 'ok',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $1
   AND status IN ('pending', 'processing')
 `
 
-func (q *Queries) AdminMarkEventOK(ctx context.Context, id uint64) (int64, error) {
+func (q *Queries) AdminMarkEventOK(ctx context.Context, id int64) (int64, error) {
 	result, err := q.exec(ctx, q.adminMarkEventOKStmt, adminMarkEventOK, id)
 	if err != nil {
 		return 0, err
@@ -125,17 +125,17 @@ const adminMarkEventReject = `-- name: AdminMarkEventReject :execrows
 UPDATE clb_event
 SET status = 'reject',
     rejected_at = NOW(),
-    reject_reason = ?,
+    reject_reason = $1,
     locked_by = NULL,
     locked_until = NULL,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $2
   AND status IN ('pending', 'processing')
 `
 
 type AdminMarkEventRejectParams struct {
 	RejectReason sql.NullString `json:"reject_reason"`
-	ID           uint64         `json:"id"`
+	ID           int64          `json:"id"`
 }
 
 func (q *Queries) AdminMarkEventReject(ctx context.Context, arg AdminMarkEventRejectParams) (int64, error) {
@@ -174,11 +174,11 @@ SET status = 'pending',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $1
   AND status IN ('pending', 'processing')
 `
 
-func (q *Queries) AdminRetryEventNow(ctx context.Context, id uint64) (int64, error) {
+func (q *Queries) AdminRetryEventNow(ctx context.Context, id int64) (int64, error) {
 	result, err := q.exec(ctx, q.adminRetryEventNowStmt, adminRetryEventNow, id)
 	if err != nil {
 		return 0, err
@@ -186,7 +186,7 @@ func (q *Queries) AdminRetryEventNow(ctx context.Context, id uint64) (int64, err
 	return result.RowsAffected()
 }
 
-const createEvent = `-- name: CreateEvent :execlastid
+const createEvent = `-- name: CreateEvent :one
 INSERT INTO clb_event (
     source_service,
     event_type,
@@ -196,9 +196,10 @@ INSERT INTO clb_event (
     payload_content_type,
     next_attempt_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    id = LAST_INSERT_ID(id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (idempotency_key) DO UPDATE SET
+    idempotency_key = EXCLUDED.idempotency_key
+RETURNING id
 `
 
 type CreateEventParams struct {
@@ -212,7 +213,7 @@ type CreateEventParams struct {
 }
 
 func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (int64, error) {
-	result, err := q.exec(ctx, q.createEventStmt, createEvent,
+	row := q.queryRow(ctx, q.createEventStmt, createEvent,
 		arg.SourceService,
 		arg.EventType,
 		arg.EventKey,
@@ -221,10 +222,9 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (int64
 		arg.PayloadContentType,
 		arg.NextAttemptAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getEvent = `-- name: GetEvent :one
@@ -248,11 +248,11 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE id = ?
+WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetEvent(ctx context.Context, id uint64) (ClbEvent, error) {
+func (q *Queries) GetEvent(ctx context.Context, id int64) (ClbEvent, error) {
 	row := q.queryRow(ctx, q.getEventStmt, getEvent, id)
 	var i ClbEvent
 	err := row.Scan(
@@ -299,12 +299,12 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE (? = '' OR source_service = ?)
+WHERE ($1 = '' OR source_service = $2)
   AND status IN ('pending', 'processing')
   AND next_attempt_at <= NOW()
   AND (locked_until IS NULL OR locked_until <= NOW())
 ORDER BY next_attempt_at, id
-LIMIT ?
+LIMIT $3
 FOR UPDATE SKIP LOCKED
 `
 
@@ -360,20 +360,20 @@ const markEventFailed = `-- name: MarkEventFailed :execrows
 UPDATE clb_event
 SET status = 'pending',
     attempt_count = attempt_count + 1,
-    next_attempt_at = ?,
+    next_attempt_at = $1,
     locked_by = NULL,
     locked_until = NULL,
-    last_error = ?,
+    last_error = $2,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $3
   AND status = 'processing'
-  AND locked_by = ?
+  AND locked_by = $4
 `
 
 type MarkEventFailedParams struct {
 	NextAttemptAt time.Time      `json:"next_attempt_at"`
 	LastError     sql.NullString `json:"last_error"`
-	ID            uint64         `json:"id"`
+	ID            int64          `json:"id"`
 	LockedBy      sql.NullString `json:"locked_by"`
 }
 
@@ -398,13 +398,13 @@ SET status = 'ok',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $1
   AND status = 'processing'
-  AND locked_by = ?
+  AND locked_by = $2
 `
 
 type MarkEventOKParams struct {
-	ID       uint64         `json:"id"`
+	ID       int64          `json:"id"`
 	LockedBy sql.NullString `json:"locked_by"`
 }
 
@@ -419,10 +419,10 @@ func (q *Queries) MarkEventOK(ctx context.Context, arg MarkEventOKParams) (int64
 const markEventProcessing = `-- name: MarkEventProcessing :execrows
 UPDATE clb_event
 SET status = 'processing',
-    locked_by = ?,
-    locked_until = ?,
+    locked_by = $1,
+    locked_until = $2,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $3
   AND status IN ('pending', 'processing')
   AND (locked_until IS NULL OR locked_until <= NOW())
 `
@@ -430,7 +430,7 @@ WHERE id = ?
 type MarkEventProcessingParams struct {
 	LockedBy    sql.NullString `json:"locked_by"`
 	LockedUntil sql.NullTime   `json:"locked_until"`
-	ID          uint64         `json:"id"`
+	ID          int64          `json:"id"`
 }
 
 func (q *Queries) MarkEventProcessing(ctx context.Context, arg MarkEventProcessingParams) (int64, error) {
@@ -445,18 +445,18 @@ const markEventReject = `-- name: MarkEventReject :execrows
 UPDATE clb_event
 SET status = 'reject',
     rejected_at = NOW(),
-    reject_reason = ?,
+    reject_reason = $1,
     locked_by = NULL,
     locked_until = NULL,
     updated_at = NOW()
-WHERE id = ?
+WHERE id = $2
   AND status = 'processing'
-  AND locked_by = ?
+  AND locked_by = $3
 `
 
 type MarkEventRejectParams struct {
 	RejectReason sql.NullString `json:"reject_reason"`
-	ID           uint64         `json:"id"`
+	ID           int64          `json:"id"`
 	LockedBy     sql.NullString `json:"locked_by"`
 }
 

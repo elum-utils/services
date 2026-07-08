@@ -114,8 +114,9 @@ func (r *PaymentRepository) importGroupsBulk(ctx context.Context, workspaceID st
 	return r.execImportBulk(ctx, "payment_product_group",
 		[]string{"workspace_id", "code", "title_key", "description_key", "position", "is_active"},
 		rows,
-		"title_key = VALUES(title_key), description_key = VALUES(description_key), position = VALUES(position), "+
-			"is_active = VALUES(is_active), updated_at = NOW()",
+		"(workspace_id, code)",
+		"title_key = EXCLUDED.title_key, description_key = EXCLUDED.description_key, position = EXCLUDED.position, "+
+			"is_active = EXCLUDED.is_active, updated_at = now()",
 	)
 }
 
@@ -135,8 +136,9 @@ func (r *PaymentRepository) importItemsBulk(ctx context.Context, workspaceID str
 	return r.execImportBulk(ctx, "payment_item",
 		[]string{"workspace_id", "id", "item_type", "title_key", "description_key", "rarity", "position"},
 		rows,
-		"item_type = VALUES(item_type), title_key = VALUES(title_key), description_key = VALUES(description_key), "+
-			"rarity = VALUES(rarity), position = VALUES(position), updated_at = NOW()",
+		"(workspace_id, id)",
+		"item_type = EXCLUDED.item_type, title_key = EXCLUDED.title_key, description_key = EXCLUDED.description_key, "+
+			"rarity = EXCLUDED.rarity, position = EXCLUDED.position, updated_at = now()",
 	)
 }
 
@@ -179,7 +181,8 @@ func (r *PaymentRepository) importLocalizationsBulk(ctx context.Context, workspa
 	return r.execImportBulk(ctx, "payment_localization",
 		[]string{"workspace_id", "locale", "localization_key", "value"},
 		rows,
-		"value = VALUES(value), updated_at = NOW()",
+		"(workspace_id, locale, localization_key)",
+		"value = EXCLUDED.value, updated_at = now()",
 	)
 }
 
@@ -212,14 +215,15 @@ func (r *PaymentRepository) importProductsBulk(ctx context.Context, workspaceID 
 			"user_interval", "user_interval_count", "available_from", "available_until", "is_visible", "is_closed",
 		},
 		rows,
-		"group_code = VALUES(group_code), title_key = VALUES(title_key), description_key = VALUES(description_key), "+
-			"target = VALUES(target), image_url = VALUES(image_url), link_url = VALUES(link_url), size_label = VALUES(size_label), "+
-			"period_seconds = VALUES(period_seconds), trial_duration_seconds = VALUES(trial_duration_seconds), "+
-			"quantity_mode = VALUES(quantity_mode), position = VALUES(position), global_limit = VALUES(global_limit), "+
-			"global_interval = VALUES(global_interval), global_interval_count = VALUES(global_interval_count), "+
-			"user_limit = VALUES(user_limit), user_interval = VALUES(user_interval), user_interval_count = VALUES(user_interval_count), "+
-			"available_from = VALUES(available_from), available_until = VALUES(available_until), "+
-			"is_visible = VALUES(is_visible), is_closed = VALUES(is_closed), updated_at = NOW()",
+		"(workspace_id, id)",
+		"group_code = EXCLUDED.group_code, title_key = EXCLUDED.title_key, description_key = EXCLUDED.description_key, "+
+			"target = EXCLUDED.target, image_url = EXCLUDED.image_url, link_url = EXCLUDED.link_url, size_label = EXCLUDED.size_label, "+
+			"period_seconds = EXCLUDED.period_seconds, trial_duration_seconds = EXCLUDED.trial_duration_seconds, "+
+			"quantity_mode = EXCLUDED.quantity_mode, position = EXCLUDED.position, global_limit = EXCLUDED.global_limit, "+
+			"global_interval = EXCLUDED.global_interval, global_interval_count = EXCLUDED.global_interval_count, "+
+			"user_limit = EXCLUDED.user_limit, user_interval = EXCLUDED.user_interval, user_interval_count = EXCLUDED.user_interval_count, "+
+			"available_from = EXCLUDED.available_from, available_until = EXCLUDED.available_until, "+
+			"is_visible = EXCLUDED.is_visible, is_closed = EXCLUDED.is_closed, updated_at = now()",
 	)
 }
 
@@ -240,8 +244,9 @@ func (r *PaymentRepository) importProductItemsBulk(ctx context.Context, workspac
 	return r.execImportBulk(ctx, "payment_product_item",
 		[]string{"workspace_id", "product_id", "item_id", "reward_type", "quantity", "scale", "duration_unit"},
 		rows,
-		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
-			"duration_unit = VALUES(duration_unit), updated_at = NOW()",
+		"(workspace_id, product_id, item_id)",
+		"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
+			"duration_unit = EXCLUDED.duration_unit, updated_at = now()",
 	)
 }
 
@@ -268,24 +273,25 @@ func (r *PaymentRepository) importPricesBulk(ctx context.Context, workspaceID st
 			"reference_discount_amount_minor", "coefficient", "is_promotion", "starts_at", "ends_at",
 		},
 		rows,
-		"list_amount_minor = VALUES(list_amount_minor), discount_amount_minor = VALUES(discount_amount_minor), "+
-			"pricing_mode = VALUES(pricing_mode), reference_asset_code = VALUES(reference_asset_code), "+
-			"reference_list_amount_minor = VALUES(reference_list_amount_minor), "+
-			"reference_discount_amount_minor = VALUES(reference_discount_amount_minor), coefficient = VALUES(coefficient), "+
-			"updated_at = NOW()",
+		"(workspace_id, product_id, asset_code, is_promotion, starts_at, ends_at)",
+		"list_amount_minor = EXCLUDED.list_amount_minor, discount_amount_minor = EXCLUDED.discount_amount_minor, "+
+			"pricing_mode = EXCLUDED.pricing_mode, reference_asset_code = EXCLUDED.reference_asset_code, "+
+			"reference_list_amount_minor = EXCLUDED.reference_list_amount_minor, "+
+			"reference_discount_amount_minor = EXCLUDED.reference_discount_amount_minor, coefficient = EXCLUDED.coefficient, "+
+			"updated_at = now()",
 	)
 }
 
-func (r *PaymentRepository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
+func (r *PaymentRepository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
+	query, args := compileImportBulkUpsert(table, columns, rows, conflictTarget, duplicateUpdate)
 	_, err := r.executor.ExecContext(ctx, query, args...)
 	return err
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
+func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
 	builder.WriteString(table)
@@ -302,13 +308,15 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, dupli
 			if columnIndex > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteByte('?')
+			fmt.Fprintf(&builder, "$%d", len(args)+columnIndex+1)
 		}
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
 	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+		builder.WriteString(" ON CONFLICT ")
+		builder.WriteString(conflictTarget)
+		builder.WriteString(" DO UPDATE SET ")
 		builder.WriteString(duplicateUpdate)
 	}
 	return builder.String(), args
@@ -356,7 +364,7 @@ type importExisting struct {
 
 func (r *PaymentRepository) importExistingKeys(ctx context.Context, workspaceID string) (importExisting, error) {
 	existing := importExisting{groups: make(map[string]bool), products: make(map[string]bool), items: make(map[string]bool)}
-	groupRows, err := r.executor.QueryContext(ctx, `SELECT code FROM payment_product_group WHERE workspace_id = ?`, workspaceID)
+	groupRows, err := r.executor.QueryContext(ctx, `SELECT code FROM payment_product_group WHERE workspace_id = $1`, workspaceID)
 	if err != nil {
 		return existing, err
 	}
@@ -371,7 +379,7 @@ func (r *PaymentRepository) importExistingKeys(ctx context.Context, workspaceID 
 	if err := groupRows.Close(); err != nil {
 		return existing, err
 	}
-	productRows, err := r.executor.QueryContext(ctx, `SELECT id FROM payment_product WHERE workspace_id = ?`, workspaceID)
+	productRows, err := r.executor.QueryContext(ctx, `SELECT id FROM payment_product WHERE workspace_id = $1`, workspaceID)
 	if err != nil {
 		return existing, err
 	}
@@ -386,7 +394,7 @@ func (r *PaymentRepository) importExistingKeys(ctx context.Context, workspaceID 
 	if err := productRows.Close(); err != nil {
 		return existing, err
 	}
-	itemRows, err := r.executor.QueryContext(ctx, `SELECT id FROM payment_item WHERE workspace_id = ?`, workspaceID)
+	itemRows, err := r.executor.QueryContext(ctx, `SELECT id FROM payment_item WHERE workspace_id = $1`, workspaceID)
 	if err != nil {
 		return existing, err
 	}

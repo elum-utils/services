@@ -124,19 +124,19 @@ func (r *PaymentRepository) resolveProductPriceAmounts(
 		return resolvedProductPrice{}, err
 	}
 
-	list, err := convertReferenceAmount(
-		*input.ReferenceListAmountMinor,
-		rate.TargetScale,
-		rate.ReferencePerAssetMinor,
+		list, err := convertReferenceAmount(
+			*input.ReferenceListAmountMinor,
+			uint16(rate.TargetScale),
+			uint64(rate.ReferencePerAssetMinor),
 		coefficient,
 	)
 	if err != nil {
 		return resolvedProductPrice{}, err
 	}
-	discount, err := convertReferenceAmount(
-		*input.ReferenceDiscountAmountMinor,
-		rate.TargetScale,
-		rate.ReferencePerAssetMinor,
+		discount, err := convertReferenceAmount(
+			*input.ReferenceDiscountAmountMinor,
+			uint16(rate.TargetScale),
+			uint64(rate.ReferencePerAssetMinor),
 		coefficient,
 	)
 	if err != nil {
@@ -169,8 +169,8 @@ func (r *PaymentRepository) createDynamicProductPrice(
 		WorkspaceID:                  workspaceID,
 		ProductID:                    params.ProductID,
 		AssetCode:                    params.AssetCode,
-		ListAmountMinor:              amounts.list,
-		DiscountAmountMinor:          amounts.discount,
+		ListAmountMinor:              int64(amounts.list),
+		DiscountAmountMinor:          int64(amounts.discount),
 		ReferenceAssetCode:           sql.NullString{String: amounts.referenceAsset, Valid: true},
 		ReferenceListAmountMinor:     sql.NullInt64{Int64: int64(amounts.referenceList), Valid: true},
 		ReferenceDiscountAmountMinor: sql.NullInt64{Int64: int64(amounts.referenceDiscount), Valid: true},
@@ -190,11 +190,11 @@ func (r *PaymentRepository) updateDynamicProductPrice(
 	endsAt time.Time,
 ) (int64, error) {
 	return r.q.UpdateDynamicProductPrice(ctx, paymentsqlc.UpdateDynamicProductPriceParams{
-		ID:                           params.ID,
+		ID:                           int64(params.ID),
 		WorkspaceID:                  workspaceID,
 		AssetCode:                    params.AssetCode,
-		ListAmountMinor:              amounts.list,
-		DiscountAmountMinor:          amounts.discount,
+		ListAmountMinor:              int64(amounts.list),
+		DiscountAmountMinor:          int64(amounts.discount),
 		ReferenceAssetCode:           sql.NullString{String: amounts.referenceAsset, Valid: true},
 		ReferenceListAmountMinor:     sql.NullInt64{Int64: int64(amounts.referenceList), Valid: true},
 		ReferenceDiscountAmountMinor: sql.NullInt64{Int64: int64(amounts.referenceDiscount), Valid: true},
@@ -227,7 +227,7 @@ func (r *PaymentRepository) UpdateAssetRate(
 		if err := tx.q.UpsertAssetRate(ctx, paymentsqlc.UpsertAssetRateParams{
 			AssetCode:              params.AssetCode,
 			ReferenceAssetCode:     params.ReferenceAssetCode,
-			ReferencePerAssetMinor: params.ReferencePerAssetMinor,
+			ReferencePerAssetMinor: int64(params.ReferencePerAssetMinor),
 			Source:                 params.Source,
 			ObservedAt:             params.ObservedAt,
 		}); err != nil {
@@ -260,8 +260,8 @@ func (r *PaymentRepository) UpdateAssetRate(
 			}
 			list, err := convertReferenceAmount(
 				uint64(price.ReferenceListAmountMinor.Int64),
-				rate.TargetScale,
-				rate.ReferencePerAssetMinor,
+				uint16(rate.TargetScale),
+				uint64(rate.ReferencePerAssetMinor),
 				price.Coefficient.String,
 			)
 			if err != nil {
@@ -269,16 +269,16 @@ func (r *PaymentRepository) UpdateAssetRate(
 			}
 			discount, err := convertReferenceAmount(
 				uint64(price.ReferenceDiscountAmountMinor.Int64),
-				rate.TargetScale,
-				rate.ReferencePerAssetMinor,
+				uint16(rate.TargetScale),
+				uint64(rate.ReferencePerAssetMinor),
 				price.Coefficient.String,
 			)
 			if err != nil {
 				return err
 			}
 			rows, err := tx.q.UpdateDynamicPriceAmounts(ctx, paymentsqlc.UpdateDynamicPriceAmountsParams{
-				ListAmountMinor:     list,
-				DiscountAmountMinor: discount,
+				ListAmountMinor:     int64(list),
+				DiscountAmountMinor: int64(discount),
 				WorkspaceID:         price.WorkspaceID,
 				ID:                  price.ID,
 			})

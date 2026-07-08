@@ -12,10 +12,13 @@ import (
 func mapDefinition(row calendarsqlc.CalendarDefinition) Calendar {
 	return Calendar{
 		ID: row.ID, WorkspaceID: row.WorkspaceID, Type: row.Type,
-		Mode: string(row.Mode), IntervalType: string(row.IntervalType),
-		IntervalUnit: string(row.IntervalUnit), IntervalCount: row.IntervalCount,
-		ResetAfterIntervals: row.ResetAfterIntervals, EndBehavior: string(row.EndBehavior),
-		Timezone: row.Timezone, HideFutureRewards: row.HideFutureRewards,
+		Mode:                row.Mode,
+		IntervalType:        row.IntervalType,
+		IntervalUnit:        row.IntervalUnit,
+		IntervalCount:       uint32(row.IntervalCount),
+		ResetAfterIntervals: uint32(row.ResetAfterIntervals),
+		EndBehavior:         row.EndBehavior,
+		Timezone:            row.Timezone, HideFutureRewards: row.HideFutureRewards,
 		IsActive: row.IsActive, StartAt: sqlwrap.NullTimePtr(row.StartAt),
 		EndAt: sqlwrap.NullTimePtr(row.EndAt), DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
@@ -24,8 +27,8 @@ func mapDefinition(row calendarsqlc.CalendarDefinition) Calendar {
 
 func appendStep(steps []Step, stepID sql.NullInt64, position sql.NullInt32,
 	rewardID sql.NullInt64, rewardKey sql.NullString,
-	rewardType calendarsqlc.NullCalendarRewardRewardType, rewardCount sql.NullInt64,
-	rewardScale sql.NullInt16, rewardUnit calendarsqlc.NullCalendarRewardDurationUnit,
+	rewardType sql.NullString, rewardCount sql.NullInt64,
+	rewardScale sql.NullInt16, rewardUnit sql.NullString,
 ) []Step {
 	if !stepID.Valid {
 		return steps
@@ -38,7 +41,7 @@ func appendStep(steps []Step, stepID sql.NullInt64, position sql.NullInt32,
 	if rewardID.Valid {
 		index := len(steps) - 1
 		steps[index].Rewards = append(steps[index].Rewards, Reward{
-			Key: rewardKey.String, Type: string(rewardType.CalendarRewardRewardType),
+			Key: rewardKey.String, Type: rewardType.String,
 			Quantity: rewardCount.Int64, Scale: uint16FromNull(rewardScale),
 			Unit: calendarDurationUnitPtr(rewardUnit),
 		})
@@ -53,12 +56,11 @@ func uint16FromNull(value sql.NullInt16) uint16 {
 	return uint16(value.Int16)
 }
 
-func calendarDurationUnitPtr(value calendarsqlc.NullCalendarRewardDurationUnit) *string {
+func calendarDurationUnitPtr(value sql.NullString) *string {
 	if !value.Valid {
 		return nil
 	}
-	unit := string(value.CalendarRewardDurationUnit)
-	return &unit
+	return &value.String
 }
 
 func calendarStringValue(value *string) string {

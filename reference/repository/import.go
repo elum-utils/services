@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -62,87 +61,115 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 }
 
 func (r *Repository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
-	if err := r.importItemsBulk(ctx, workspaceID, pkg.Items, strategy, preview, result); err != nil {
+	conflicts := importConflictSet(preview)
+	if err := r.importItemsBulk(ctx, workspaceID, pkg.Items, strategy, conflicts, result); err != nil {
 		return err
 	}
-	return r.importLocalizationsBulk(ctx, workspaceID, pkg.Items, strategy, preview, result)
+	return r.importLocalizationsBulk(ctx, workspaceID, pkg.Items, strategy, conflicts, result)
 }
 
-func (r *Repository) importItemsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, preview ImportPreview, result *ImportResult) error {
-	rows := make([][]any, 0, len(items))
+func (r *Repository) importItemsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, conflicts map[string]struct{}, result *ImportResult) error {
+	keys := make([]string, 0, len(items))
+	types := make([]string, 0, len(items))
+	payloads := make([]string, 0, len(items))
+	active := make([]bool, 0, len(items))
+	deletedAt := make([]sql.NullTime, 0, len(items))
 	for _, item := range items {
-		if previewHasConflict(preview, "item", item.Key) && strategy == ImportConflictSkip {
+		if hasImportConflict(conflicts, "item", item.Key) && strategy == ImportConflictSkip {
 			result.Skipped.Items++
 			continue
 		}
-		rows = append(rows, []any{
-			workspaceID, item.Key, defaultString(item.Type, ItemTypeQuantity),
-			defaultJSON(item.Payload, "{}"), item.IsActive, nullableDeletedAt(item.Deleted),
-		})
+		keys = append(keys, item.Key)
+		types = append(types, defaultString(item.Type, ItemTypeQuantity))
+		payloads = append(payloads, defaultJSON(item.Payload, "{}"))
+		active = append(active, item.IsActive)
+		deletedAt = append(deletedAt, nullableDeletedAt(item.Deleted))
 		result.Imported.Items++
 	}
-	return r.execImportBulk(ctx, "reference_item",
-		[]string{"workspace_id", "`key`", "item_type", "payload", "is_active", "deleted_at"},
-		rows,
-		"item_type = VALUES(item_type), payload = VALUES(payload), is_active = VALUES(is_active), "+
-			"deleted_at = VALUES(deleted_at), updated_at = NOW()",
-	)
-}
-
-func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, preview ImportPreview, result *ImportResult) error {
-	rows := make([][]any, 0)
-	for _, item := range items {
-		if previewHasConflict(preview, "item", item.Key) && strategy == ImportConflictSkip {
-			continue
-		}
-		for locale, text := range item.Localization {
-			rows = append(rows, []any{workspaceID, item.Key, locale, text.Title, text.Description})
-			result.Imported.Localizations++
-		}
-	}
-	return r.execImportBulk(ctx, "reference_localization",
-		[]string{"workspace_id", "item_key", "locale", "title", "description"},
-		rows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
-	)
-}
-
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
-	if len(rows) == 0 {
+	if len(keys) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
-	_, err := r.executor.ExecContext(ctx, query, args...)
+	_, err := r.executor.ExecContext(ctx, `
+INSERT INTO reference_item (
+    workspace_id, key, item_type, payload, is_active, deleted_at
+)
+SELECT
+    $1,
+    value.key,
+    value.item_type,
+    value.payload::jsonb,
+    value.is_active,
+    value.deleted_at
+FROM unnest(
+    $2::text[],
+    $3::text[],
+    $4::text[],
+    $5::boolean[],
+    $6::timestamptz[]
+) AS value(key, item_type, payload, is_active, deleted_at)
+ON CONFLICT (workspace_id, key) DO UPDATE SET
+    item_type = EXCLUDED.item_type,
+    payload = EXCLUDED.payload,
+    is_active = EXCLUDED.is_active,
+    deleted_at = EXCLUDED.deleted_at,
+    updated_at = now()`,
+		workspaceID,
+		keys,
+		types,
+		payloads,
+		active,
+		deletedAt,
+	)
 	return err
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
-	var builder strings.Builder
-	builder.WriteString("INSERT INTO ")
-	builder.WriteString(table)
-	builder.WriteString(" (")
-	builder.WriteString(strings.Join(columns, ", "))
-	builder.WriteString(") VALUES ")
-	args := make([]any, 0, len(rows)*len(columns))
-	for rowIndex, row := range rows {
-		if rowIndex > 0 {
-			builder.WriteString(", ")
+func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, conflicts map[string]struct{}, result *ImportResult) error {
+	itemKeys := make([]string, 0)
+	locales := make([]string, 0)
+	titles := make([]string, 0)
+	descriptions := make([]string, 0)
+	for _, item := range items {
+		if hasImportConflict(conflicts, "item", item.Key) && strategy == ImportConflictSkip {
+			continue
 		}
-		builder.WriteByte('(')
-		for columnIndex := range columns {
-			if columnIndex > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteByte('?')
+		for locale, text := range item.Localization {
+			itemKeys = append(itemKeys, item.Key)
+			locales = append(locales, locale)
+			titles = append(titles, text.Title)
+			descriptions = append(descriptions, text.Description)
+			result.Imported.Localizations++
 		}
-		builder.WriteByte(')')
-		args = append(args, row...)
 	}
-	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
-		builder.WriteString(duplicateUpdate)
+	if len(itemKeys) == 0 {
+		return nil
 	}
-	return builder.String(), args
+	_, err := r.executor.ExecContext(ctx, `
+INSERT INTO reference_localization (
+    workspace_id, item_key, locale, title, description
+)
+SELECT
+    $1,
+    value.item_key,
+    value.locale,
+    value.title,
+    value.description
+FROM unnest(
+    $2::text[],
+    $3::text[],
+    $4::text[],
+    $5::text[]
+) AS value(item_key, locale, title, description)
+ON CONFLICT (workspace_id, item_key, locale) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    updated_at = now()`,
+		workspaceID,
+		itemKeys,
+		locales,
+		titles,
+		descriptions,
+	)
+	return err
 }
 
 func validateExportPackage(pkg ExportPackage) error {
@@ -165,26 +192,32 @@ func countPackage(pkg ExportPackage) ImportCounts {
 }
 
 func (r *Repository) importExistingItemKeys(ctx context.Context, workspaceID string) (map[string]bool, error) {
-	items, err := r.AdminListItems(ctx, ListItemsParams{
-		WorkspaceID: workspaceID, Limit: 100000, Offset: 0,
-	})
+	keys, err := r.q.ListImportItemKeys(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]bool, len(items))
-	for _, item := range items {
-		result[item.Key] = true
+	result := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		result[key] = true
 	}
 	return result, nil
 }
 
-func previewHasConflict(preview ImportPreview, kind, key string) bool {
+func importConflictSet(preview ImportPreview) map[string]struct{} {
+	result := make(map[string]struct{}, len(preview.Conflicts))
 	for _, conflict := range preview.Conflicts {
-		if conflict.Type == kind && conflict.Key == key {
-			return true
-		}
+		result[importConflictKey(conflict.Type, conflict.Key)] = struct{}{}
 	}
-	return false
+	return result
+}
+
+func hasImportConflict(conflicts map[string]struct{}, kind, key string) bool {
+	_, ok := conflicts[importConflictKey(kind, key)]
+	return ok
+}
+
+func importConflictKey(kind, key string) string {
+	return kind + "\x00" + key
 }
 
 func defaultJSON(value []byte, fallback string) string {

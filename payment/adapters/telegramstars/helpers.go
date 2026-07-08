@@ -9,7 +9,7 @@ import (
 	"time"
 
 	utils "github.com/elum-utils/services/internal/utils"
-	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const telegramStarsSubscriptionPeriod = 30 * 24 * 60 * 60
@@ -85,9 +85,6 @@ func refIfNotEmpty(value string) *string {
 }
 
 func isDuplicateEntry(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	if errors.As(err, &mysqlErr) {
-		return mysqlErr.Number == 1062
-	}
-	return false
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

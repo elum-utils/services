@@ -15,7 +15,7 @@ func (r *Repository) UpdateWorkspace(ctx context.Context, actorID, workspaceID, 
 	if err := required(actorID, workspaceID, slug, title, status); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{Slug: slug, Title: title, Status: controlsqlc.ControlWorkspaceStatus(status), ID: workspaceID, AccountID: actorID})
+	rows, err := r.q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{Slug: slug, Title: title, Status: status, ID: workspaceID, AccountID: actorID})
 	if err != nil || rows > 0 {
 		return rows, err
 	}
@@ -184,8 +184,7 @@ func (r *Repository) RevokeInvite(ctx context.Context, actorID, workspaceID, inv
 }
 
 func mapInvite(row controlsqlc.ControlWorkspaceInvite, roleIDs []string) Invite {
-	usedCount := row.UsedCount
-	result := Invite{ID: row.ID, WorkspaceID: row.WorkspaceID, CreatedBy: row.CreatedBy, UsedCount: &usedCount, CreatedAt: row.CreatedAt, RoleIDs: append([]string(nil), roleIDs...)}
+	result := Invite{ID: row.ID, WorkspaceID: row.WorkspaceID, CreatedBy: row.CreatedBy, UsedCount: uint32Pointer(row.UsedCount), CreatedAt: row.CreatedAt, RoleIDs: append([]string(nil), roleIDs...)}
 	if row.MaxUses.Valid {
 		result.MaxUses = uint32Pointer(row.MaxUses.Int32)
 	}

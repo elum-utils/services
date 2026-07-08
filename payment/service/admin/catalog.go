@@ -228,7 +228,7 @@ func (a *Admin) UpsertProductItem(ctx context.Context, params paymentsqlc.Upsert
 		ItemID:       params.ItemID,
 		RewardType:   string(params.RewardType),
 		Quantity:     params.Quantity,
-		Scale:        params.Scale,
+		Scale:        uint16(params.Scale),
 		DurationUnit: paymentProductItemDurationUnitPtr(params.DurationUnit),
 	})
 }
@@ -268,7 +268,7 @@ func (a *Admin) GetPrice(ctx context.Context, workspaceID string, id uint64) (pa
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.repository.AdminGetPrice(ctx, paymentsqlc.AdminGetPriceParams{WorkspaceID: workspaceID, ID: id})
+	return a.repository.AdminGetPrice(ctx, paymentsqlc.AdminGetPriceParams{WorkspaceID: workspaceID, ID: int64(id)})
 }
 
 func (a *Admin) CreatePrice(ctx context.Context, params paymentsqlc.CreateProductPriceParams) (uint64, error) {
@@ -279,8 +279,8 @@ func (a *Admin) CreatePrice(ctx context.Context, params paymentsqlc.CreateProduc
 		WorkspaceID:         params.WorkspaceID,
 		ProductID:           params.ProductID,
 		AssetCode:           params.AssetCode,
-		ListAmountMinor:     params.ListAmountMinor,
-		DiscountAmountMinor: params.DiscountAmountMinor,
+		ListAmountMinor:     uint64(params.ListAmountMinor),
+		DiscountAmountMinor: uint64(params.DiscountAmountMinor),
 		IsPromotion:         params.IsPromotion,
 		StartsAt:            &params.StartsAt,
 		EndsAt:              &params.EndsAt,
@@ -292,11 +292,11 @@ func (a *Admin) UpdatePrice(ctx context.Context, params paymentsqlc.UpdateProduc
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.UpdateProductPrice(ctx, repository.ProductPriceUpdateParams{
-		ID:                  params.ID,
+		ID:                  uint64(params.ID),
 		WorkspaceID:         params.WorkspaceID,
 		AssetCode:           params.AssetCode,
-		ListAmountMinor:     params.ListAmountMinor,
-		DiscountAmountMinor: params.DiscountAmountMinor,
+		ListAmountMinor:     uint64(params.ListAmountMinor),
+		DiscountAmountMinor: uint64(params.DiscountAmountMinor),
 		IsPromotion:         params.IsPromotion,
 		StartsAt:            &params.StartsAt,
 		EndsAt:              &params.EndsAt,

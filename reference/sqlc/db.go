@@ -63,6 +63,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getItemBundleStmt, err = db.PrepareContext(ctx, getItemBundle); err != nil {
 		return nil, fmt.Errorf("error preparing query GetItemBundle: %w", err)
 	}
+	if q.listExportItemsStmt, err = db.PrepareContext(ctx, listExportItems); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportItems: %w", err)
+	}
+	if q.listExportLocalizationsStmt, err = db.PrepareContext(ctx, listExportLocalizations); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportLocalizations: %w", err)
+	}
+	if q.listImportItemKeysStmt, err = db.PrepareContext(ctx, listImportItemKeys); err != nil {
+		return nil, fmt.Errorf("error preparing query ListImportItemKeys: %w", err)
+	}
 	if q.listItemBundlesStmt, err = db.PrepareContext(ctx, listItemBundles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListItemBundles: %w", err)
 	}
@@ -139,6 +148,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getItemBundleStmt: %w", cerr)
 		}
 	}
+	if q.listExportItemsStmt != nil {
+		if cerr := q.listExportItemsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportItemsStmt: %w", cerr)
+		}
+	}
+	if q.listExportLocalizationsStmt != nil {
+		if cerr := q.listExportLocalizationsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportLocalizationsStmt: %w", cerr)
+		}
+	}
+	if q.listImportItemKeysStmt != nil {
+		if cerr := q.listImportItemKeysStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listImportItemKeysStmt: %w", cerr)
+		}
+	}
 	if q.listItemBundlesStmt != nil {
 		if cerr := q.listItemBundlesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listItemBundlesStmt: %w", cerr)
@@ -201,6 +225,9 @@ type Queries struct {
 	adminUpdateItemStmt          *sql.Stmt
 	adminUpsertLocalizationStmt  *sql.Stmt
 	getItemBundleStmt            *sql.Stmt
+	listExportItemsStmt          *sql.Stmt
+	listExportLocalizationsStmt  *sql.Stmt
+	listImportItemKeysStmt       *sql.Stmt
 	listItemBundlesStmt          *sql.Stmt
 	resolveItemBundlesStmt       *sql.Stmt
 }
@@ -222,6 +249,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpdateItemStmt:          q.adminUpdateItemStmt,
 		adminUpsertLocalizationStmt:  q.adminUpsertLocalizationStmt,
 		getItemBundleStmt:            q.getItemBundleStmt,
+		listExportItemsStmt:          q.listExportItemsStmt,
+		listExportLocalizationsStmt:  q.listExportLocalizationsStmt,
+		listImportItemKeysStmt:       q.listImportItemKeysStmt,
 		listItemBundlesStmt:          q.listItemBundlesStmt,
 		resolveItemBundlesStmt:       q.resolveItemBundlesStmt,
 	}

@@ -45,10 +45,11 @@ func (r *PaymentRepository) StoreProviderTransaction(
 	var id uint64
 	err := r.WithTx(ctx, func(tx *PaymentRepository) error {
 		var err error
-		id, err = tx.CreateProviderTransaction(ctx, transaction)
+		createdID, err := tx.CreateProviderTransaction(ctx, transaction)
 		if err != nil {
 			return err
 		}
+		id = uint64(createdID)
 		_, err = tx.UpsertProviderCursor(ctx, cursor)
 		return err
 	})

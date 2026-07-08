@@ -24,7 +24,7 @@ func (r *Repository) invalidateCPACache(workspaceID string) error {
 	if r == nil || r.db == nil || workspaceID == "" {
 		return nil
 	}
-	var outErr error
+	outErr := r.db.BumpCacheVersion("cpa", "user", "list_active_catalog", workspaceID)
 	cpaCacheKeys.Range(func(rawKey, rawWorkspaceID any) bool {
 		key, keyOK := rawKey.(string)
 		cachedWorkspaceID, workspaceOK := rawWorkspaceID.(string)

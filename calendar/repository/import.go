@@ -94,7 +94,7 @@ func (r *Repository) importCalendarsBulk(ctx context.Context, workspaceID string
 		rows = append(rows, []any{
 			id, workspaceID, calendar.Type, defaultString(calendar.Mode, ModeInterval),
 			defaultString(calendar.IntervalType, IntervalCalendar), defaultString(calendar.IntervalUnit, "day"),
-			defaultUint32(calendar.IntervalCount, 1), defaultUint32(calendar.ResetAfterIntervals, 1),
+			int32(defaultUint32(calendar.IntervalCount, 1)), int32(defaultUint32(calendar.ResetAfterIntervals, 1)),
 			defaultString(calendar.EndBehavior, EndStop), defaultString(calendar.Timezone, "UTC"),
 			calendar.HideFutureRewards, calendar.IsActive, nullableTime(calendar.StartAt), nullableTime(calendar.EndAt),
 		})
@@ -106,10 +106,11 @@ func (r *Repository) importCalendarsBulk(ctx context.Context, workspaceID string
 			"reset_after_intervals", "end_behavior", "timezone", "hide_future_rewards", "is_active", "start_at", "end_at",
 		},
 		rows,
-		"mode = VALUES(mode), interval_type = VALUES(interval_type), interval_unit = VALUES(interval_unit), "+
-			"interval_count = VALUES(interval_count), reset_after_intervals = VALUES(reset_after_intervals), "+
-			"end_behavior = VALUES(end_behavior), timezone = VALUES(timezone), hide_future_rewards = VALUES(hide_future_rewards), "+
-			"is_active = VALUES(is_active), start_at = VALUES(start_at), end_at = VALUES(end_at), deleted_at = NULL, updated_at = NOW()",
+		"(workspace_id, type)",
+		"mode = EXCLUDED.mode, interval_type = EXCLUDED.interval_type, interval_unit = EXCLUDED.interval_unit, "+
+			"interval_count = EXCLUDED.interval_count, reset_after_intervals = EXCLUDED.reset_after_intervals, "+
+			"end_behavior = EXCLUDED.end_behavior, timezone = EXCLUDED.timezone, hide_future_rewards = EXCLUDED.hide_future_rewards, "+
+			"is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at, deleted_at = NULL, updated_at = now()",
 	)
 }
 
@@ -128,7 +129,8 @@ func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID st
 	return r.execImportBulk(ctx, "calendar_localization",
 		[]string{"workspace_id", "calendar_id", "locale", "title", "description"},
 		rows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+		"(workspace_id, calendar_id, locale)",
+		"title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
 	)
 }
 
@@ -140,14 +142,15 @@ func (r *Repository) importStepsBulk(ctx context.Context, workspaceID string, ca
 		}
 		calendarID := calendarIDs[calendar.Type]
 		for _, step := range calendar.Steps {
-			rows = append(rows, []any{workspaceID, calendarID, step.Position})
+			rows = append(rows, []any{workspaceID, calendarID, int32(step.Position)})
 			result.Imported.Steps++
 		}
 	}
 	return r.execImportBulk(ctx, "calendar_step",
 		[]string{"workspace_id", "calendar_id", "position"},
 		rows,
-		"position = VALUES(position), updated_at = NOW()",
+		"(workspace_id, calendar_id, position)",
+		"position = EXCLUDED.position, updated_at = now()",
 	)
 }
 
@@ -162,8 +165,8 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 			stepID := stepIDs[stepMapKey(calendarID, step.Position)]
 			for _, reward := range step.Rewards {
 				rows = append(rows, []any{
-					workspaceID, calendarID, stepID, reward.Key, defaultString(reward.Type, "quantity"),
-					reward.Quantity, reward.Scale, nullableString(reward.Unit), defaultUint32(reward.Position, 1),
+					workspaceID, calendarID, int64(stepID), reward.Key, defaultString(reward.Type, "quantity"),
+					reward.Quantity, int16(reward.Scale), nullableString(reward.Unit), int32(defaultUint32(reward.Position, 1)),
 				})
 				result.Imported.Rewards++
 			}
@@ -172,49 +175,40 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 	return r.execImportBulk(ctx, "calendar_reward",
 		[]string{"workspace_id", "calendar_id", "step_id", "item_key", "reward_type", "item_count", "scale", "duration_unit", "position"},
 		rows,
-		"reward_type = VALUES(reward_type), item_count = VALUES(item_count), scale = VALUES(scale), "+
-			"duration_unit = VALUES(duration_unit), position = VALUES(position), updated_at = NOW()",
+		"(workspace_id, calendar_id, step_id, item_key)",
+		"reward_type = EXCLUDED.reward_type, item_count = EXCLUDED.item_count, scale = EXCLUDED.scale, "+
+			"duration_unit = EXCLUDED.duration_unit, position = EXCLUDED.position, updated_at = now()",
 	)
 }
 
 func (r *Repository) importStepIDs(ctx context.Context, workspaceID string, calendarIDs map[string]string) (map[string]uint64, error) {
-	rows, err := r.executor.QueryContext(ctx, `
-SELECT calendar_id, position, id
-FROM calendar_step
-WHERE workspace_id = ?`, workspaceID)
+	rows, err := r.q.ListImportStepIDs(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	allowed := make(map[string]bool, len(calendarIDs))
 	for _, calendarID := range calendarIDs {
 		allowed[calendarID] = true
 	}
 	result := make(map[string]uint64)
-	for rows.Next() {
-		var calendarID string
-		var position uint32
-		var id uint64
-		if err := rows.Scan(&calendarID, &position, &id); err != nil {
-			return nil, err
-		}
-		if allowed[calendarID] {
-			result[stepMapKey(calendarID, position)] = id
+	for _, row := range rows {
+		if allowed[row.CalendarID] {
+			result[stepMapKey(row.CalendarID, uint32(row.Position))] = uint64(row.ID)
 		}
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
+func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
+	query, args := compileImportBulkUpsert(table, columns, rows, conflictTarget, duplicateUpdate)
 	_, err := r.executor.ExecContext(ctx, query, args...)
 	return err
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
+func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
 	builder.WriteString(table)
@@ -231,13 +225,16 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, dupli
 			if columnIndex > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteByte('?')
+			builder.WriteByte('$')
+			builder.WriteString(fmt.Sprint(rowIndex*len(columns) + columnIndex + 1))
 		}
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
 	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+		builder.WriteString(" ON CONFLICT ")
+		builder.WriteString(conflictTarget)
+		builder.WriteString(" DO UPDATE SET ")
 		builder.WriteString(duplicateUpdate)
 	}
 	return builder.String(), args
@@ -273,7 +270,7 @@ func countPackage(pkg ExportPackage) ImportCounts {
 }
 
 func (r *Repository) importExistingCalendarTypes(ctx context.Context, workspaceID string) (map[string]string, error) {
-	calendars, err := r.ListCalendars(ctx, workspaceID, 100000, 0)
+	calendars, err := r.q.ListImportCalendarTypes(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}

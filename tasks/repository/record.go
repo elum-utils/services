@@ -10,7 +10,7 @@ import (
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
-	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordResult, error) {
@@ -62,7 +62,7 @@ func (r *Repository) sequenceStatesForUser(ctx context.Context, identity Identit
 func (r *Repository) currentProgressForUpdate(ctx context.Context, identity Identity, taskID uint64, now time.Time) (Progress, error) {
 	return repositoryValue[Progress](ctx, r, func(ctx context.Context) (Progress, error) {
 		row, err := r.q.GetCurrentProgressForUpdate(ctx, tasksqlc.GetCurrentProgressForUpdateParams{
-			WorkspaceID: identity.WorkspaceID, TaskID: taskID,
+			WorkspaceID: identity.WorkspaceID, TaskID: int64(taskID),
 			AppID: identity.AppID, PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
 			PeriodStartAt: now, PeriodEndAt: now,
 		})
@@ -102,7 +102,7 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 		}
 		progressByTask := make(map[uint64]Progress, len(progressRows))
 		for _, row := range progressRows {
-			progressByTask[row.TaskID] = mapProgress(row)
+			progressByTask[uint64(row.TaskID)] = mapProgress(row)
 		}
 		changedTaskIDs := make([]uint64, 0, len(catalog))
 		branches := make(map[string]struct{})
@@ -204,8 +204,8 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 					Source:           params.Source,
 					ExternalEventKey: params.ExternalEventKey,
 					ActionKey:        params.ActionKey,
-					Amount:           amount,
-					Payload:          eventPayload,
+					Amount:           int64(amount),
+					Payload:          rawMessageParam(eventPayload),
 				})
 			})
 			if err != nil {
@@ -245,11 +245,16 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 }
 
 func isRetryableTxError(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	if !errors.As(err, &mysqlErr) {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
 		return false
 	}
-	return mysqlErr.Number == 1213 || mysqlErr.Number == 1205
+	switch pgErr.Code {
+	case "40001", "40P01", "55P03":
+		return true
+	default:
+		return false
+	}
 }
 
 func branchKey(task Task) string {
@@ -349,7 +354,7 @@ func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (Sta
 			err  error
 		)
 		if id != 0 {
-			row, err := txRepo.q.GetStartTaskByID(ctx, tasksqlc.GetStartTaskByIDParams{WorkspaceID: params.Identity.WorkspaceID, ID: id})
+			row, err := txRepo.q.GetStartTaskByID(ctx, tasksqlc.GetStartTaskByIDParams{WorkspaceID: params.Identity.WorkspaceID, ID: int64(id)})
 			if err == nil {
 				task = mapStartTaskByID(row)
 			}
@@ -443,7 +448,7 @@ func (r *Repository) GetClaimTask(ctx context.Context, identity Identity, taskRe
 func (r *Repository) ensureProgress(ctx context.Context, identity Identity, task Task, start, end time.Time) (Progress, error) {
 	id, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.EnsureProgress(ctx, tasksqlc.EnsureProgressParams{
-			WorkspaceID: identity.WorkspaceID, TaskID: task.ID, AppID: identity.AppID,
+			WorkspaceID: identity.WorkspaceID, TaskID: int64(task.ID), AppID: identity.AppID,
 			PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
 			PeriodStartAt: start, PeriodEndAt: end,
 		})
@@ -460,10 +465,10 @@ func (r *Repository) ensureProgress(ctx context.Context, identity Identity, task
 func (r *Repository) saveProgress(ctx context.Context, progress Progress) error {
 	_, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.UpdateProgress(ctx, tasksqlc.UpdateProgressParams{
-			Progress: progress.Progress, Status: tasksqlc.TaskProgressStatus(progress.Status),
+			Progress: int64(progress.Progress), Status: progress.Status,
 			ReadyAt: nullTime(progress.ReadyAt), ClaimedAt: nullTime(progress.ClaimedAt),
-			OperationID: nullString(progress.OperationID), RewardsSnapshot: rewardsSnapshot(progress.Rewards),
-			ID: progress.ID,
+			OperationID: nullString(progress.OperationID), RewardsSnapshot: rawMessageParam(rewardsSnapshot(progress.Rewards)),
+			ID: int64(progress.ID),
 		})
 	})
 	return err
@@ -517,13 +522,13 @@ func (r *Repository) advanceSequenceState(ctx context.Context, identity Identity
 		return nil
 	}
 	next, err := r.nextSequenceTask(ctx, task.WorkspaceID, *task.SequenceKey, *task.SequencePosition)
-	status := tasksqlc.TaskSequenceStateStatusActive
+	status := "active"
 	currentTaskID := sql.NullInt64{}
 	if err != nil {
 		return err
 	}
 	if !next.Exists {
-		status = tasksqlc.TaskSequenceStateStatusCompleted
+		status = "completed"
 	} else {
 		currentTaskID = sql.NullInt64{Int64: int64(next.ID), Valid: true}
 	}

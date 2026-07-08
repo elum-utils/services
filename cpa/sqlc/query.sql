@@ -2,42 +2,43 @@
 INSERT INTO cpa_offer (
     workspace_id, id, payload, target, code_mode, code_source, shared_code,
     generated_length, generated_alphabet, is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    payload = VALUES(payload),
-    target = VALUES(target),
-    code_mode = VALUES(code_mode),
-    code_source = VALUES(code_source),
-    shared_code = VALUES(shared_code),
-    generated_length = VALUES(generated_length),
-    generated_alphabet = VALUES(generated_alphabet),
-    is_active = VALUES(is_active),
-    start_at = VALUES(start_at),
-    end_at = VALUES(end_at);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+ON CONFLICT (workspace_id, id) DO UPDATE SET
+    payload = EXCLUDED.payload,
+    target = EXCLUDED.target,
+    code_mode = EXCLUDED.code_mode,
+    code_source = EXCLUDED.code_source,
+    shared_code = EXCLUDED.shared_code,
+    generated_length = EXCLUDED.generated_length,
+    generated_alphabet = EXCLUDED.generated_alphabet,
+    is_active = EXCLUDED.is_active,
+    start_at = EXCLUDED.start_at,
+    end_at = EXCLUDED.end_at,
+    updated_at = now();
 
 -- name: AdminGetOffer :one
 SELECT *
 FROM cpa_offer
-WHERE workspace_id = ? AND id = ?
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1;
 
 -- name: GetActiveOfferForUpdate :one
 SELECT *
 FROM cpa_offer
-WHERE workspace_id = ?
-  AND id = ?
+WHERE workspace_id = $1
+  AND id = $2
   AND is_active = TRUE
-  AND (start_at IS NULL OR start_at <= NOW())
-  AND (end_at IS NULL OR end_at > NOW())
+  AND (start_at IS NULL OR start_at <= now())
+  AND (end_at IS NULL OR end_at > now())
 LIMIT 1
 FOR UPDATE;
 
 -- name: AdminListOffers :many
 SELECT *
 FROM cpa_offer
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY created_at DESC, id
-LIMIT ? OFFSET ?;
+LIMIT $2 OFFSET $3;
 
 -- name: AdminListOfferBundles :many
 SELECT
@@ -48,9 +49,9 @@ SELECT
 FROM (
     SELECT *
     FROM cpa_offer
-    WHERE cpa_offer.workspace_id = ?
+    WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT ? OFFSET ?
+    LIMIT $2 OFFSET $3
 ) o
 LEFT JOIN cpa_localization l
     ON l.workspace_id = o.workspace_id
@@ -69,9 +70,9 @@ SELECT
 FROM (
     SELECT *
     FROM cpa_offer
-    WHERE cpa_offer.workspace_id = ?
+    WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT ? OFFSET ?
+    LIMIT $2 OFFSET $3
 ) o
 JOIN cpa_reward r
     ON r.workspace_id = o.workspace_id
@@ -81,10 +82,10 @@ ORDER BY o.created_at DESC, o.id, r.id;
 -- name: ListActiveOffers :many
 SELECT *
 FROM cpa_offer
-WHERE workspace_id = ?
+WHERE workspace_id = $1
   AND is_active = TRUE
-  AND (start_at IS NULL OR start_at <= NOW())
-  AND (end_at IS NULL OR end_at > NOW())
+  AND (start_at IS NULL OR start_at <= now())
+  AND (end_at IS NULL OR end_at > now())
 ORDER BY created_at DESC, id;
 
 -- name: ListActiveOfferBundles :many
@@ -121,84 +122,211 @@ FROM cpa_offer o
 LEFT JOIN cpa_localization l
     ON l.workspace_id = o.workspace_id
    AND l.cpa_id = o.id
-   AND l.locale = ?
+   AND l.locale = $1
 LEFT JOIN cpa_assignment a
     ON a.workspace_id = o.workspace_id
    AND a.cpa_id = o.id
-   AND a.app_id = ?
-   AND a.platform_id = ?
-   AND a.platform_user_id = ?
+   AND a.app_id = $2
+   AND a.platform_id = $3
+   AND a.platform_user_id = $4
    AND a.deleted_at IS NULL
 LEFT JOIN cpa_reward r
     ON r.workspace_id = o.workspace_id
    AND r.cpa_id = o.id
-WHERE o.workspace_id = ?
+WHERE o.workspace_id = $5
   AND o.is_active = TRUE
-  AND (o.start_at IS NULL OR o.start_at <= NOW())
-  AND (o.end_at IS NULL OR o.end_at > NOW())
+  AND (o.start_at IS NULL OR o.start_at <= now())
+  AND (o.end_at IS NULL OR o.end_at > now())
 ORDER BY o.created_at DESC, o.id, r.id;
+
+-- name: ListActiveOfferBundlesCTE :many
+WITH active AS MATERIALIZED (
+    SELECT o.*
+    FROM cpa_offer o
+    WHERE o.workspace_id = $5
+      AND is_active = TRUE
+      AND (start_at IS NULL OR start_at <= now())
+      AND (end_at IS NULL OR end_at > now())
+)
+SELECT
+    o.workspace_id,
+    o.id,
+    o.payload,
+    o.target,
+    o.code_mode,
+    o.code_source,
+    o.shared_code,
+    o.generated_length,
+    o.generated_alphabet,
+    o.is_active,
+    o.start_at,
+    o.end_at,
+    o.created_at,
+    o.updated_at,
+    l.locale AS localized_locale,
+    l.title AS localized_title,
+    l.description AS localized_description,
+    a.id AS assignment_id,
+    a.code AS assignment_code,
+    a.code_mode AS assignment_code_mode,
+    a.status AS assignment_status,
+    a.issued_at AS assignment_issued_at,
+    a.completed_at AS assignment_completed_at,
+    r.reward_key,
+    r.reward_type,
+    r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
+    r.duration_unit
+FROM active o
+LEFT JOIN cpa_localization l
+    ON l.workspace_id = o.workspace_id
+   AND l.cpa_id = o.id
+   AND l.locale = $1
+LEFT JOIN cpa_assignment a
+    ON a.workspace_id = o.workspace_id
+   AND a.cpa_id = o.id
+   AND a.app_id = $2
+   AND a.platform_id = $3
+   AND a.platform_user_id = $4
+   AND a.deleted_at IS NULL
+LEFT JOIN cpa_reward r
+    ON r.workspace_id = o.workspace_id
+   AND r.cpa_id = o.id
+ORDER BY o.created_at DESC, o.id, r.id;
+
+-- name: ListActiveOfferCatalog :many
+WITH active AS MATERIALIZED (
+    SELECT o.*
+    FROM cpa_offer o
+    WHERE o.workspace_id = $2
+      AND o.is_active = TRUE
+      AND (o.start_at IS NULL OR o.start_at <= now())
+      AND (o.end_at IS NULL OR o.end_at > now())
+)
+SELECT
+    o.workspace_id,
+    o.id,
+    o.payload,
+    o.target,
+    o.code_mode,
+    o.code_source,
+    o.shared_code,
+    o.generated_length,
+    o.generated_alphabet,
+    o.is_active,
+    o.start_at,
+    o.end_at,
+    o.created_at,
+    o.updated_at,
+    l.locale AS localized_locale,
+    l.title AS localized_title,
+    l.description AS localized_description,
+    r.reward_key,
+    r.reward_type,
+    r.quantity AS reward_quantity,
+    r.scale AS reward_scale,
+    r.duration_unit
+FROM active o
+LEFT JOIN cpa_localization l
+    ON l.workspace_id = o.workspace_id
+   AND l.cpa_id = o.id
+   AND l.locale = $1
+LEFT JOIN cpa_reward r
+    ON r.workspace_id = o.workspace_id
+   AND r.cpa_id = o.id
+ORDER BY o.created_at DESC, o.id, r.id;
+
+-- name: ListLocalizationsForOffers :many
+SELECT *
+FROM cpa_localization
+WHERE workspace_id = $1
+  AND locale = $2
+  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
+ORDER BY cpa_id;
+
+-- name: ListRewardsForOffers :many
+SELECT *
+FROM cpa_reward
+WHERE workspace_id = $1
+  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
+ORDER BY cpa_id, id;
+
+-- name: ListAssignmentsForOffers :many
+SELECT *
+FROM cpa_assignment
+WHERE workspace_id = $1
+  AND app_id = $2
+  AND platform_id = $3
+  AND platform_user_id = $4
+  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
+  AND deleted_at IS NULL
+ORDER BY cpa_id;
 
 -- name: AdminDeleteOffer :execrows
 DELETE FROM cpa_offer
-WHERE workspace_id = ? AND id = ?;
+WHERE workspace_id = $1 AND id = $2;
 
 -- name: AdminUpsertLocalization :exec
 INSERT INTO cpa_localization (
     workspace_id, cpa_id, locale, title, description
-) VALUES (?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    title = VALUES(title),
-    description = VALUES(description);
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, cpa_id, locale) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    updated_at = now();
 
 -- name: GetLocalization :one
 SELECT *
 FROM cpa_localization
-WHERE workspace_id = ? AND cpa_id = ? AND locale = ?
+WHERE workspace_id = $1 AND cpa_id = $2 AND locale = $3
 LIMIT 1;
 
 -- name: ListLocalizations :many
 SELECT *
 FROM cpa_localization
-WHERE workspace_id = ? AND cpa_id = ?
+WHERE workspace_id = $1 AND cpa_id = $2
 ORDER BY locale;
 
 -- name: AdminDeleteLocalization :execrows
 DELETE FROM cpa_localization
-WHERE workspace_id = ? AND cpa_id = ? AND locale = ?;
+WHERE workspace_id = $1 AND cpa_id = $2 AND locale = $3;
 
 -- name: AdminUpsertReward :exec
 INSERT INTO cpa_reward (
     workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit
-) VALUES (?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    reward_type = VALUES(reward_type),
-    quantity = VALUES(quantity),
-    scale = VALUES(scale),
-    duration_unit = VALUES(duration_unit);
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (workspace_id, cpa_id, reward_key) DO UPDATE SET
+    reward_type = EXCLUDED.reward_type,
+    quantity = EXCLUDED.quantity,
+    scale = EXCLUDED.scale,
+    duration_unit = EXCLUDED.duration_unit,
+    updated_at = now();
 
 -- name: ListRewards :many
 SELECT *
 FROM cpa_reward
-WHERE workspace_id = ? AND cpa_id = ?
+WHERE workspace_id = $1 AND cpa_id = $2
 ORDER BY id;
 
 -- name: AdminDeleteReward :execrows
 DELETE FROM cpa_reward
-WHERE workspace_id = ? AND cpa_id = ? AND reward_key = ?;
+WHERE workspace_id = $1 AND cpa_id = $2 AND reward_key = $3;
 
 -- name: AdminAddCode :execrows
-INSERT IGNORE INTO cpa_code (workspace_id, cpa_id, code, source)
-VALUES (?, ?, ?, ?);
-
--- name: CreateGeneratedCode :execlastid
 INSERT INTO cpa_code (workspace_id, cpa_id, code, source)
-VALUES (?, ?, ?, 'generated');
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (workspace_id, cpa_id, code) DO NOTHING;
+
+-- name: CreateGeneratedCode :one
+INSERT INTO cpa_code (workspace_id, cpa_id, code, source)
+VALUES ($1, $2, $3, 'generated')
+RETURNING id;
 
 -- name: GetAvailableCodeForUpdate :one
 SELECT *
 FROM cpa_code
-WHERE workspace_id = ?
-  AND cpa_id = ?
+WHERE workspace_id = $1
+  AND cpa_id = $2
   AND source = 'pool'
   AND status = 'available'
 ORDER BY id
@@ -208,172 +336,177 @@ FOR UPDATE SKIP LOCKED;
 -- name: GetCodeByValue :one
 SELECT *
 FROM cpa_code
-WHERE workspace_id = ? AND cpa_id = ? AND code = ?
+WHERE workspace_id = $1 AND cpa_id = $2 AND code = $3
 LIMIT 1;
 
 -- name: MarkCodeIssued :execrows
 UPDATE cpa_code
-SET status = 'issued'
-WHERE id = ? AND status = 'available';
+SET status = 'issued', updated_at = now()
+WHERE id = $1 AND status = 'available';
 
 -- name: MarkCodeCompleted :execrows
 UPDATE cpa_code
-SET status = 'completed'
-WHERE id = ? AND status = 'issued';
+SET status = 'completed', updated_at = now()
+WHERE id = $1 AND status = 'issued';
 
 -- name: GetAssignment :one
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND app_id = ?
-  AND platform_id = ?
-  AND platform_user_id = ?
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
   AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: GetAssignmentForUpdate :one
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND app_id = ?
-  AND platform_id = ?
-  AND platform_user_id = ?
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
   AND deleted_at IS NULL
 LIMIT 1
 FOR UPDATE;
 
--- name: CreateAssignment :execlastid
+-- name: CreateAssignment :one
 INSERT INTO cpa_assignment (
     workspace_id, cpa_id, app_id, platform_id, platform_user_id,
     code_id, code, code_mode
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id;
 
 -- name: GetAssignmentByID :one
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: CompleteAssignment :execrows
 UPDATE cpa_assignment
-SET status = 'completed', completed_at = NOW()
-WHERE workspace_id = ?
-  AND id = ?
+SET status = 'completed', completed_at = now(), updated_at = now()
+WHERE workspace_id = $1
+  AND id = $2
   AND status = 'issued'
   AND deleted_at IS NULL;
 
 -- name: ListUserAssignments :many
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = ?
-  AND app_id = ?
-  AND platform_id = ?
-  AND platform_user_id = ?
+WHERE workspace_id = $1
+  AND app_id = $2
+  AND platform_id = $3
+  AND platform_user_id = $4
   AND deleted_at IS NULL
 ORDER BY issued_at DESC, id DESC;
 
 -- name: AdminListAssignments :many
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND (? = '' OR CAST(status AS CHAR) = ?)
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND (NULLIF($3, '')::cpa_assignment_status IS NULL OR status = NULLIF($3, '')::cpa_assignment_status)
 ORDER BY issued_at DESC, id DESC
-LIMIT ? OFFSET ?;
+LIMIT $4 OFFSET $5;
 
 -- name: AdminListCodes :many
 SELECT *
 FROM cpa_code
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND (? = '' OR CAST(status AS CHAR) = ?)
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND (NULLIF($3, '')::cpa_code_status IS NULL OR status = NULLIF($3, '')::cpa_code_status)
 ORDER BY id DESC
-LIMIT ? OFFSET ?;
+LIMIT $4 OFFSET $5;
 
 -- name: AdminListAssignmentEvents :many
 SELECT *
 FROM cpa_assignment_event
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND (? = '' OR CAST(event_type AS CHAR) = ?)
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND (NULLIF($3, '')::cpa_assignment_event_type IS NULL OR event_type = NULLIF($3, '')::cpa_assignment_event_type)
 ORDER BY occurred_at DESC, id DESC
-LIMIT ? OFFSET ?;
+LIMIT $4 OFFSET $5;
 
--- name: CreateAssignmentEvent :execlastid
+-- name: CreateAssignmentEvent :one
 INSERT INTO cpa_assignment_event (
     workspace_id, cpa_id, assignment_id, event_type
-) VALUES (?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (assignment_id, event_type) DO UPDATE SET
+    event_type = EXCLUDED.event_type
+RETURNING id;
 
 -- name: AdminDeleteAvailableCodes :execrows
 UPDATE cpa_code
-SET status = 'deleted', deleted_at = NOW()
-WHERE workspace_id = ?
-  AND cpa_id = ?
+SET status = 'deleted', deleted_at = now(), updated_at = now()
+WHERE workspace_id = $1
+  AND cpa_id = $2
   AND status = 'available';
 
 -- name: AdminDeleteIssuedCodes :execrows
 UPDATE cpa_assignment
-SET deleted_at = NOW()
-WHERE workspace_id = ?
-  AND cpa_id = ?
+SET deleted_at = now(), updated_at = now()
+WHERE workspace_id = $1
+  AND cpa_id = $2
   AND status = 'issued'
   AND deleted_at IS NULL;
 
 -- name: AdminDeleteIssuedCodeRows :execrows
 UPDATE cpa_code c
-JOIN cpa_assignment a ON a.code_id = c.id
-SET c.status = 'deleted', c.deleted_at = NOW()
-WHERE a.workspace_id = ?
-  AND a.cpa_id = ?
+SET status = 'deleted', deleted_at = now(), updated_at = now()
+FROM cpa_assignment a
+WHERE a.code_id = c.id
+  AND a.workspace_id = $1
+  AND a.cpa_id = $2
   AND a.status = 'issued'
   AND a.deleted_at IS NOT NULL;
 
 -- name: AdminDeleteCompletedCodes :execrows
 UPDATE cpa_assignment
-SET deleted_at = NOW()
-WHERE workspace_id = ?
-  AND cpa_id = ?
+SET deleted_at = now(), updated_at = now()
+WHERE workspace_id = $1
+  AND cpa_id = $2
   AND status = 'completed'
   AND deleted_at IS NULL;
 
 -- name: AdminDeleteCompletedCodeRows :execrows
 UPDATE cpa_code c
-JOIN cpa_assignment a ON a.code_id = c.id
-SET c.status = 'deleted', c.deleted_at = NOW()
-WHERE a.workspace_id = ?
-  AND a.cpa_id = ?
+SET status = 'deleted', deleted_at = now(), updated_at = now()
+FROM cpa_assignment a
+WHERE a.code_id = c.id
+  AND a.workspace_id = $1
+  AND a.cpa_id = $2
   AND a.status = 'completed'
   AND a.deleted_at IS NOT NULL;
 
 -- name: AdminGetOfferStats :one
 SELECT
     COUNT(*) AS assignments_total,
-    CAST(COALESCE(SUM(status = 'issued'), 0) AS UNSIGNED) AS issued_total,
-    CAST(COALESCE(SUM(status = 'completed'), 0) AS UNSIGNED) AS completed_total,
-    CAST(COALESCE(SUM(deleted_at IS NOT NULL), 0) AS UNSIGNED) AS deleted_total
+    COALESCE(SUM((status = 'issued')::int), 0)::bigint AS issued_total,
+    COALESCE(SUM((status = 'completed')::int), 0)::bigint AS completed_total,
+    COALESCE(SUM((deleted_at IS NOT NULL)::int), 0)::bigint AS deleted_total
 FROM cpa_assignment
-WHERE workspace_id = ? AND cpa_id = ?;
+WHERE workspace_id = $1 AND cpa_id = $2;
 
 -- name: AdminGetCodeStats :one
 SELECT
     COUNT(*) AS codes_total,
-    CAST(COALESCE(SUM(status = 'available'), 0) AS UNSIGNED) AS available_total,
-    CAST(COALESCE(SUM(status = 'issued'), 0) AS UNSIGNED) AS issued_total,
-    CAST(COALESCE(SUM(status = 'completed'), 0) AS UNSIGNED) AS completed_total,
-    CAST(COALESCE(SUM(status = 'deleted'), 0) AS UNSIGNED) AS deleted_total
+    COALESCE(SUM((status = 'available')::int), 0)::bigint AS available_total,
+    COALESCE(SUM((status = 'issued')::int), 0)::bigint AS issued_total,
+    COALESCE(SUM((status = 'completed')::int), 0)::bigint AS completed_total,
+    COALESCE(SUM((status = 'deleted')::int), 0)::bigint AS deleted_total
 FROM cpa_code
-WHERE workspace_id = ? AND cpa_id = ?;
+WHERE workspace_id = $1 AND cpa_id = $2;
 
 -- name: AdminListDailyStats :many
 SELECT *
 FROM cpa_stats_daily
-WHERE workspace_id = ?
-  AND cpa_id = ?
-  AND stats_date >= ?
-  AND stats_date <= ?
+WHERE workspace_id = $1
+  AND cpa_id = $2
+  AND stats_date >= $3
+  AND stats_date <= $4
 ORDER BY stats_date;
 
 -- name: RefreshDailyStats :exec
@@ -384,16 +517,16 @@ INSERT INTO cpa_stats_daily (
 SELECT
     workspace_id,
     cpa_id,
-    DATE(occurred_at),
-    SUM(event_type = 'issued'),
-    SUM(event_type = 'completed'),
-    COUNT(DISTINCT assignment_id)
+    occurred_at::date,
+    SUM((event_type = 'issued')::int)::bigint,
+    SUM((event_type = 'completed')::int)::bigint,
+    COUNT(DISTINCT assignment_id)::bigint
 FROM cpa_assignment_event
-WHERE occurred_at >= ?
-  AND occurred_at < ?
-GROUP BY workspace_id, cpa_id, DATE(occurred_at)
-ON DUPLICATE KEY UPDATE
-    issued_count = VALUES(issued_count),
-    completed_count = VALUES(completed_count),
-    unique_users = VALUES(unique_users),
-    updated_at = NOW();
+WHERE occurred_at >= $1
+  AND occurred_at < $2
+GROUP BY workspace_id, cpa_id, occurred_at::date
+ON CONFLICT (workspace_id, cpa_id, stats_date) DO UPDATE SET
+    issued_count = EXCLUDED.issued_count,
+    completed_count = EXCLUDED.completed_count,
+    unique_users = EXCLUDED.unique_users,
+    updated_at = now();

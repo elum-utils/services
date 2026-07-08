@@ -126,14 +126,29 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listActiveOfferBundlesStmt, err = db.PrepareContext(ctx, listActiveOfferBundles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveOfferBundles: %w", err)
 	}
+	if q.listActiveOfferBundlesCTEStmt, err = db.PrepareContext(ctx, listActiveOfferBundlesCTE); err != nil {
+		return nil, fmt.Errorf("error preparing query ListActiveOfferBundlesCTE: %w", err)
+	}
+	if q.listActiveOfferCatalogStmt, err = db.PrepareContext(ctx, listActiveOfferCatalog); err != nil {
+		return nil, fmt.Errorf("error preparing query ListActiveOfferCatalog: %w", err)
+	}
 	if q.listActiveOffersStmt, err = db.PrepareContext(ctx, listActiveOffers); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveOffers: %w", err)
+	}
+	if q.listAssignmentsForOffersStmt, err = db.PrepareContext(ctx, listAssignmentsForOffers); err != nil {
+		return nil, fmt.Errorf("error preparing query ListAssignmentsForOffers: %w", err)
 	}
 	if q.listLocalizationsStmt, err = db.PrepareContext(ctx, listLocalizations); err != nil {
 		return nil, fmt.Errorf("error preparing query ListLocalizations: %w", err)
 	}
+	if q.listLocalizationsForOffersStmt, err = db.PrepareContext(ctx, listLocalizationsForOffers); err != nil {
+		return nil, fmt.Errorf("error preparing query ListLocalizationsForOffers: %w", err)
+	}
 	if q.listRewardsStmt, err = db.PrepareContext(ctx, listRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRewards: %w", err)
+	}
+	if q.listRewardsForOffersStmt, err = db.PrepareContext(ctx, listRewardsForOffers); err != nil {
+		return nil, fmt.Errorf("error preparing query ListRewardsForOffers: %w", err)
 	}
 	if q.listUserAssignmentsStmt, err = db.PrepareContext(ctx, listUserAssignments); err != nil {
 		return nil, fmt.Errorf("error preparing query ListUserAssignments: %w", err)
@@ -322,9 +337,24 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listActiveOfferBundlesStmt: %w", cerr)
 		}
 	}
+	if q.listActiveOfferBundlesCTEStmt != nil {
+		if cerr := q.listActiveOfferBundlesCTEStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listActiveOfferBundlesCTEStmt: %w", cerr)
+		}
+	}
+	if q.listActiveOfferCatalogStmt != nil {
+		if cerr := q.listActiveOfferCatalogStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listActiveOfferCatalogStmt: %w", cerr)
+		}
+	}
 	if q.listActiveOffersStmt != nil {
 		if cerr := q.listActiveOffersStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listActiveOffersStmt: %w", cerr)
+		}
+	}
+	if q.listAssignmentsForOffersStmt != nil {
+		if cerr := q.listAssignmentsForOffersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listAssignmentsForOffersStmt: %w", cerr)
 		}
 	}
 	if q.listLocalizationsStmt != nil {
@@ -332,9 +362,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listLocalizationsStmt: %w", cerr)
 		}
 	}
+	if q.listLocalizationsForOffersStmt != nil {
+		if cerr := q.listLocalizationsForOffersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listLocalizationsForOffersStmt: %w", cerr)
+		}
+	}
 	if q.listRewardsStmt != nil {
 		if cerr := q.listRewardsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRewardsStmt: %w", cerr)
+		}
+	}
+	if q.listRewardsForOffersStmt != nil {
+		if cerr := q.listRewardsForOffersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listRewardsForOffersStmt: %w", cerr)
 		}
 	}
 	if q.listUserAssignmentsStmt != nil {
@@ -430,9 +470,14 @@ type Queries struct {
 	getCodeByValueStmt               *sql.Stmt
 	getLocalizationStmt              *sql.Stmt
 	listActiveOfferBundlesStmt       *sql.Stmt
+	listActiveOfferBundlesCTEStmt    *sql.Stmt
+	listActiveOfferCatalogStmt       *sql.Stmt
 	listActiveOffersStmt             *sql.Stmt
+	listAssignmentsForOffersStmt     *sql.Stmt
 	listLocalizationsStmt            *sql.Stmt
+	listLocalizationsForOffersStmt   *sql.Stmt
 	listRewardsStmt                  *sql.Stmt
+	listRewardsForOffersStmt         *sql.Stmt
 	listUserAssignmentsStmt          *sql.Stmt
 	markCodeCompletedStmt            *sql.Stmt
 	markCodeIssuedStmt               *sql.Stmt
@@ -477,9 +522,14 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getCodeByValueStmt:               q.getCodeByValueStmt,
 		getLocalizationStmt:              q.getLocalizationStmt,
 		listActiveOfferBundlesStmt:       q.listActiveOfferBundlesStmt,
+		listActiveOfferBundlesCTEStmt:    q.listActiveOfferBundlesCTEStmt,
+		listActiveOfferCatalogStmt:       q.listActiveOfferCatalogStmt,
 		listActiveOffersStmt:             q.listActiveOffersStmt,
+		listAssignmentsForOffersStmt:     q.listAssignmentsForOffersStmt,
 		listLocalizationsStmt:            q.listLocalizationsStmt,
+		listLocalizationsForOffersStmt:   q.listLocalizationsForOffersStmt,
 		listRewardsStmt:                  q.listRewardsStmt,
+		listRewardsForOffersStmt:         q.listRewardsForOffersStmt,
 		listUserAssignmentsStmt:          q.listUserAssignmentsStmt,
 		markCodeCompletedStmt:            q.markCodeCompletedStmt,
 		markCodeIssuedStmt:               q.markCodeIssuedStmt,

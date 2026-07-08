@@ -38,7 +38,7 @@ func (r *Repository) ListActive(ctx context.Context, identity Identity, locale, 
 	}
 	progressByTask := make(map[uint64]ActiveProgress, len(progressRows))
 	for _, row := range progressRows {
-		progressByTask[row.TaskID] = mapActiveProgress(row)
+		progressByTask[uint64(row.TaskID)] = mapActiveProgress(row)
 	}
 	for index := range tasks {
 		if progress, ok := progressByTask[tasks[index].ID]; ok {
@@ -79,8 +79,8 @@ func (r *Repository) attachComplexConditions(ctx context.Context, workspaceID st
 		return err
 	}
 	for _, row := range rows {
-		parentIndex, parentOK := taskByID[row.ParentTaskID]
-		childIndex, childOK := taskByID[row.ConditionTaskID]
+		parentIndex, parentOK := taskByID[uint64(row.ParentTaskID)]
+		childIndex, childOK := taskByID[uint64(row.ConditionTaskID)]
 		if !parentOK || !childOK || tasks[parentIndex].TaskKind != TaskKindComplex {
 			continue
 		}

@@ -11,7 +11,7 @@ import (
 )
 
 var periodAnchor = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-var periodForeverEnd = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+var periodForeverEnd = time.Date(9998, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func nullString(value *string) sql.NullString {
 	return sqlwrap.NullFromPtr(value, func(v string) sql.NullString {
@@ -41,6 +41,22 @@ func ptrUint32(value sql.NullInt32) *uint32 {
 	}
 	result := uint32(value.Int32)
 	return &result
+}
+
+func int64sFromUint64s(values []uint64) []int64 {
+	out := make([]int64, 0, len(values))
+	for _, value := range values {
+		out = append(out, int64(value))
+	}
+	return out
+}
+
+func uint64sFromInt64s(values []int64) []uint64 {
+	out := make([]uint64, 0, len(values))
+	for _, value := range values {
+		out = append(out, uint64(value))
+	}
+	return out
 }
 
 func ptrTime(value sql.NullTime) *time.Time {
@@ -95,12 +111,12 @@ func periodFor(task Task, now time.Time) (time.Time, time.Time) {
 
 func mapTask(row tasksqlc.TaskDefinition) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
-		TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery,
-		Position: row.Position, Payload: row.Payload, Target: row.Target, IntegrationKind: ptrString(row.IntegrationKind),
-		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: row.IntegrationPayload,
+		TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit), ResetEvery: uint32(row.ResetEvery),
+		Position: row.Position, Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), IntegrationKind: ptrString(row.IntegrationKind),
+		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		ImageURL:  ptrString(row.ImageUrl),
 		IsVisible: row.IsVisible, IsActive: row.IsActive, StartAt: ptrTime(row.StartAt),
 		EndAt: ptrTime(row.EndAt), DeletedAt: ptrTime(row.DeletedAt),

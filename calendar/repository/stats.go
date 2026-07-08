@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -20,14 +18,14 @@ func (r *Repository) ListOperations(ctx context.Context, workspaceID, calendarID
 	result := make([]Operation, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, Operation{
-			ID: row.ID, Identity: Identity{
+			ID: uint64(row.ID), Identity: Identity{
 				WorkspaceID: row.WorkspaceID, AppID: row.AppID,
 				PlatformID: row.PlatformID, PlatformUserID: row.PlatformUserID,
 			},
 			CalendarID: row.CalendarID, OperationID: row.OperationID,
 			Granted: row.Granted, Status: row.Status, Position: sqlNullUint32Ptr(row.Position),
-			Rewards: row.RewardsSnapshot, CurrentPosition: row.CurrentPosition,
-			ClaimCount: row.ClaimCount, OccurredAt: row.OccurredAt,
+			Rewards: row.RewardsSnapshot, CurrentPosition: uint32(row.CurrentPosition),
+			ClaimCount: uint64(row.ClaimCount), OccurredAt: row.OccurredAt,
 		})
 	}
 	return result, nil
@@ -40,12 +38,8 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID, calendarID strin
 	if err != nil {
 		return Stats{}, err
 	}
-	grants, err := interfaceUint64(row.GrantCount)
-	if err != nil {
-		return Stats{}, err
-	}
 	return Stats{
-		OperationCount: uint64(row.OperationCount), GrantCount: grants,
+		OperationCount: uint64(row.OperationCount), GrantCount: uint64(row.GrantCount),
 		UniqueUsers: uint64(row.UniqueUsers),
 	}, nil
 }
@@ -60,8 +54,8 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, calendarID
 	result := make([]DailyStats, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, DailyStats{
-			Date: row.StatsDate, OperationCount: row.OperationCount,
-			GrantCount: row.GrantCount, UniqueUsers: row.UniqueUsers,
+			Date: row.StatsDate, OperationCount: uint64(row.OperationCount),
+			GrantCount: uint64(row.GrantCount), UniqueUsers: uint64(row.UniqueUsers),
 		})
 	}
 	return result, nil
@@ -71,19 +65,4 @@ func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Tim
 	return r.q.RefreshDailyStats(ctx, calendarsqlc.RefreshDailyStatsParams{
 		OccurredAt: from, OccurredAt_2: until,
 	})
-}
-
-func interfaceUint64(value any) (uint64, error) {
-	switch value := value.(type) {
-	case int64:
-		return uint64(value), nil
-	case uint64:
-		return value, nil
-	case []byte:
-		return strconv.ParseUint(string(value), 10, 64)
-	case string:
-		return strconv.ParseUint(value, 10, 64)
-	default:
-		return 0, fmt.Errorf("calendar: unsupported numeric value %T", value)
-	}
 }

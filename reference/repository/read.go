@@ -20,7 +20,9 @@ func (r *Repository) Get(ctx context.Context, workspaceID, key, locale string) (
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Item, error) {
 		rows, err := r.q.GetItemBundle(ctx, refsqlc.GetItemBundleParams{
-			Locale: locale, WorkspaceID: workspaceID, Key: key,
+			Locale:      locale,
+			WorkspaceID: workspaceID,
+			Key:         key,
 		})
 		if err != nil {
 			return Item{}, err
@@ -48,20 +50,16 @@ func (r *Repository) Resolve(ctx context.Context, workspaceID string, keys []str
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.ResolveItemBundles(ctx, refsqlc.ResolveItemBundlesParams{
-			Locale: locale, WorkspaceID: workspaceID, Keys: keys,
+			Locale:      locale,
+			WorkspaceID: workspaceID,
+			Column3:     keys,
 		})
 		if err != nil {
 			return nil, err
 		}
-		byKey := make(map[string]Item, len(rows))
-		for _, row := range rows {
-			byKey[row.Key] = mapResolveRow(row)
-		}
 		result := make([]Item, 0, len(rows))
-		for _, key := range keys {
-			if item, ok := byKey[key]; ok {
-				result = append(result, item)
-			}
+		for _, row := range rows {
+			result = append(result, mapResolveRow(row))
 		}
 		return result, nil
 	})
@@ -77,7 +75,10 @@ func (r *Repository) List(ctx context.Context, workspaceID, locale string, limit
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.ListItemBundles(ctx, refsqlc.ListItemBundlesParams{
-			Locale: locale, WorkspaceID: workspaceID, Limit: limit, Offset: offset,
+			Locale:      locale,
+			WorkspaceID: workspaceID,
+			Limit:       limit,
+			Offset:      offset,
 		})
 		if err != nil {
 			return nil, err
@@ -92,9 +93,14 @@ func (r *Repository) List(ctx context.Context, workspaceID, locale string, limit
 
 func mapGetRow(row refsqlc.GetItemBundleRow) Item {
 	return Item{
-		WorkspaceID: row.WorkspaceID, Key: row.Key, Type: string(row.ItemType),
-		Payload: row.Payload, IsActive: row.IsActive, DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		WorkspaceID: row.WorkspaceID,
+		Key:         row.Key,
+		Type:        row.ItemType,
+		Payload:     row.Payload,
+		IsActive:    row.IsActive,
+		DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
 		Localization: nullableLocalization(
 			row.WorkspaceID, row.Key, row.Locale, row.Title, row.Description,
 		),
@@ -103,9 +109,14 @@ func mapGetRow(row refsqlc.GetItemBundleRow) Item {
 
 func mapResolveRow(row refsqlc.ResolveItemBundlesRow) Item {
 	return Item{
-		WorkspaceID: row.WorkspaceID, Key: row.Key, Type: string(row.ItemType),
-		Payload: row.Payload, IsActive: row.IsActive, DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		WorkspaceID: row.WorkspaceID,
+		Key:         row.Key,
+		Type:        row.ItemType,
+		Payload:     row.Payload,
+		IsActive:    row.IsActive,
+		DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
 		Localization: nullableLocalization(
 			row.WorkspaceID, row.Key, row.Locale, row.Title, row.Description,
 		),
@@ -114,9 +125,14 @@ func mapResolveRow(row refsqlc.ResolveItemBundlesRow) Item {
 
 func mapListRow(row refsqlc.ListItemBundlesRow) Item {
 	return Item{
-		WorkspaceID: row.WorkspaceID, Key: row.Key, Type: string(row.ItemType),
-		Payload: row.Payload, IsActive: row.IsActive, DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		WorkspaceID: row.WorkspaceID,
+		Key:         row.Key,
+		Type:        row.ItemType,
+		Payload:     row.Payload,
+		IsActive:    row.IsActive,
+		DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
 		Localization: nullableLocalization(
 			row.WorkspaceID, row.Key, row.Locale, row.Title, row.Description,
 		),
@@ -131,7 +147,10 @@ func nullableLocalization(
 		return nil
 	}
 	return &Localization{
-		WorkspaceID: workspaceID, ItemKey: key, Locale: locale.String,
-		Title: title.String, Description: description.String,
+		WorkspaceID: workspaceID,
+		ItemKey:     key,
+		Locale:      locale.String,
+		Title:       title.String,
+		Description: description.String,
 	}
 }

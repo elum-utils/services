@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
-	"github.com/elum-utils/services/internal/utils/mysqlutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
 	taskruntime "github.com/elum-utils/services/tasks/runtime"
@@ -18,6 +18,7 @@ import (
 	"github.com/elum-utils/services/tasks/service/integration"
 	"github.com/elum-utils/services/tasks/service/internalapi"
 	"github.com/elum-utils/services/tasks/service/user"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Tasks struct {
@@ -104,10 +105,7 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 	if params.User == "" || params.Database == "" {
 		return nil, ErrDatabaseConfigRequired
 	}
-	db, err := mysqlutil.Open(ctx, mysqlutil.Config{
-		User: params.User, Password: params.Password, Database: params.Database,
-		Host: params.Host, Port: params.Port,
-	})
+	db, err := openPostgres(ctx, params)
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "tasks database connection failed", err)
 	}
@@ -129,6 +127,35 @@ func open(ctx context.Context, params DatabaseParams) (*Tasks, error) {
 	service := newTasks(ctx, client, true, params.Options)
 	_ = service.SyncPartners(ctx)
 	return service, nil
+}
+
+func openPostgres(ctx context.Context, params DatabaseParams) (*sql.DB, error) {
+	host := params.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := params.Port
+	if port == 0 {
+		port = 5432
+	}
+	dsn := fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		params.User,
+		params.Password,
+		host,
+		port,
+		params.Database,
+	)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(params.Options.MaxConnections)
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func (t *Tasks) adopt(running *Tasks) {

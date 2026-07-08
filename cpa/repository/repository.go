@@ -117,9 +117,6 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "cpa_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
-		return fmt.Errorf("cpa schema upgrade cpa_reward.scale failed: %w", err)
-	}
 	return nil
 }
 

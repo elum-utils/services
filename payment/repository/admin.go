@@ -160,7 +160,7 @@ func (r *PaymentRepository) AdminListOrders(ctx context.Context, params payments
 }
 
 func (r *PaymentRepository) AdminGetOrder(ctx context.Context, id uint64) (paymentsqlc.PaymentOrder, error) {
-	return r.q.GetPaymentOrder(ctx, id)
+	return r.q.GetPaymentOrder(ctx, int64(id))
 }
 
 func (r *PaymentRepository) AdminGetOrderByPublicID(ctx context.Context, publicID string) (paymentsqlc.PaymentOrder, error) {
@@ -172,7 +172,7 @@ func (r *PaymentRepository) AdminListPaymentAttempts(ctx context.Context, params
 }
 
 func (r *PaymentRepository) AdminGetPaymentAttempt(ctx context.Context, id uint64) (paymentsqlc.PaymentAttempt, error) {
-	return r.q.AdminGetPaymentAttempt(ctx, id)
+	return r.q.AdminGetPaymentAttempt(ctx, int64(id))
 }
 
 func (r *PaymentRepository) AdminListPaymentEvents(ctx context.Context, params paymentsqlc.AdminListPaymentEventsParams) ([]paymentsqlc.PaymentEvent, error) {
@@ -180,7 +180,7 @@ func (r *PaymentRepository) AdminListPaymentEvents(ctx context.Context, params p
 }
 
 func (r *PaymentRepository) AdminGetPaymentEvent(ctx context.Context, id uint64) (paymentsqlc.PaymentEvent, error) {
-	return r.q.AdminGetPaymentEvent(ctx, id)
+	return r.q.AdminGetPaymentEvent(ctx, int64(id))
 }
 
 func (r *PaymentRepository) AdminUpdatePaymentEventProcessingStatus(ctx context.Context, params paymentsqlc.MarkPaymentEventProcessedParams) error {
@@ -213,7 +213,7 @@ func (r *PaymentRepository) AdminListFulfillments(ctx context.Context, params pa
 }
 
 func (r *PaymentRepository) AdminGetFulfillment(ctx context.Context, id uint64) (paymentsqlc.PaymentFulfillment, error) {
-	return r.q.AdminGetFulfillment(ctx, id)
+	return r.q.AdminGetFulfillment(ctx, int64(id))
 }
 
 func (r *PaymentRepository) AdminUpdateFulfillmentStatus(ctx context.Context, params paymentsqlc.AdminUpdateFulfillmentStatusParams) (int64, error) {
@@ -229,5 +229,5 @@ func (r *PaymentRepository) AdminListRefunds(ctx context.Context, params payment
 }
 
 func (r *PaymentRepository) AdminGetRefund(ctx context.Context, id uint64) (paymentsqlc.PaymentRefund, error) {
-	return r.q.AdminGetRefund(ctx, id)
+	return r.q.AdminGetRefund(ctx, int64(id))
 }

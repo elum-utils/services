@@ -114,59 +114,57 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
-	if err := r.ensureTaskDefinitionActionKind(ctx); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_definition.action_kind failed: %w", err)
+	upgrades := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "task_definition.action_kind",
+			sql:  "ALTER TABLE task_definition ALTER COLUMN action_kind TYPE VARCHAR(64)",
+		},
+		{
+			name: "task_reward.scale",
+			sql:  "ALTER TABLE task_reward ADD COLUMN IF NOT EXISTS scale SMALLINT NOT NULL DEFAULT 0",
+		},
+		{
+			name: "task_partner_reward_rule.scale",
+			sql:  "ALTER TABLE task_partner_reward_rule ADD COLUMN IF NOT EXISTS scale SMALLINT NOT NULL DEFAULT 0",
+		},
+		{
+			name: "task_partner_config.webhook_secret",
+			sql:  "ALTER TABLE task_partner_config ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128) NULL",
+		},
+		{
+			name: "task_definition.start_mode",
+			sql:  "ALTER TABLE task_definition ADD COLUMN IF NOT EXISTS start_mode VARCHAR(64) NOT NULL DEFAULT 'none'",
+		},
+		{
+			name: "task_partner_issue.external_click_id",
+			sql:  "ALTER TABLE task_partner_issue ADD COLUMN IF NOT EXISTS external_click_id VARCHAR(255) NULL",
+		},
+		{
+			name: "task_partner_issue.start_mode",
+			sql:  "ALTER TABLE task_partner_issue ADD COLUMN IF NOT EXISTS start_mode VARCHAR(64) NOT NULL DEFAULT 'none'",
+		},
+		{
+			name: "task_partner_issue.started_at",
+			sql:  "ALTER TABLE task_partner_issue ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NULL",
+		},
+		{
+			name: "task_partner_stats_daily.revoked_count",
+			sql:  "ALTER TABLE task_partner_stats_daily ADD COLUMN IF NOT EXISTS revoked_count BIGINT NOT NULL DEFAULT 0",
+		},
+		{
+			name: "task_partner_stats_daily.revoked_after_claim_count",
+			sql:  "ALTER TABLE task_partner_stats_daily ADD COLUMN IF NOT EXISTS revoked_after_claim_count BIGINT NOT NULL DEFAULT 0",
+		},
 	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_reward.scale failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_reward_rule", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_reward_rule.scale failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_config", "webhook_secret", "VARCHAR(128) NULL AFTER secret"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_config.webhook_secret failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_definition", "start_mode", "ENUM('none', 'required') NOT NULL DEFAULT 'none' AFTER claim_mode"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_definition.start_mode failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "external_click_id", "VARCHAR(255) NULL AFTER external_type"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_issue.external_click_id failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "start_mode", "ENUM('none', 'required') NOT NULL DEFAULT 'none' AFTER external_click_id"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_issue.start_mode failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_issue", "started_at", "DATETIME NULL AFTER issued_at"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_issue.started_at failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_stats_daily", "revoked_count", "BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER claimed_count"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_stats_daily.revoked_count failed: %w", err)
-	}
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "task_partner_stats_daily", "revoked_after_claim_count", "BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER revoked_count"); err != nil {
-		return fmt.Errorf("tasks schema upgrade task_partner_stats_daily.revoked_after_claim_count failed: %w", err)
-	}
-	return nil
-}
-
-func (r *Repository) ensureTaskDefinitionActionKind(ctx context.Context) error {
-	const definition = "ENUM('app_action', 'amount_action', 'channel_subscribe', 'channel_boost', 'advertisement_view', 'external', 'composite') NOT NULL"
-
-	qctx, cancel := context.WithTimeout(ctx, bootstrapQueryTimeout)
-	defer cancel()
-
-	var columnType string
-	if err := r.db.DB().QueryRowContext(qctx, `
-SELECT COLUMN_TYPE
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'task_definition'
-  AND COLUMN_NAME = 'action_kind'
-`).Scan(&columnType); err != nil {
-		return err
-	}
-
-	for _, value := range []string{"'app_action'", "'amount_action'", "'channel_subscribe'", "'channel_boost'", "'advertisement_view'", "'external'", "'composite'"} {
-		if !strings.Contains(columnType, value) {
-			return sqlwrap.ModifyColumn(ctx, r.db, bootstrapQueryTimeout, "task_definition", "action_kind", definition)
+	for _, upgrade := range upgrades {
+		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
+			_, err := r.db.DB().ExecContext(ctx, upgrade.sql)
+			return err
+		}); err != nil {
+			return fmt.Errorf("tasks schema upgrade %s failed: %w", upgrade.name, err)
 		}
 	}
 	return nil
@@ -185,14 +183,52 @@ func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 }
 
 func splitSQLStatements(raw string) []string {
-	parts := strings.Split(raw, ";")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if stmt := strings.TrimSpace(part); stmt != "" {
-			result = append(result, stmt)
+	result := make([]string, 0, 16)
+	start := 0
+	dollarQuote := ""
+	for index := 0; index < len(raw); index++ {
+		if dollarQuote != "" {
+			if strings.HasPrefix(raw[index:], dollarQuote) {
+				index += len(dollarQuote) - 1
+				dollarQuote = ""
+			}
+			continue
+		}
+		if raw[index] == '$' {
+			if tag, ok := readDollarQuoteTag(raw[index:]); ok {
+				dollarQuote = tag
+				index += len(tag) - 1
+				continue
+			}
+		}
+		if raw[index] == ';' {
+			if stmt := strings.TrimSpace(raw[start:index]); stmt != "" {
+				result = append(result, stmt)
+			}
+			start = index + 1
 		}
 	}
+	if stmt := strings.TrimSpace(raw[start:]); stmt != "" {
+		result = append(result, stmt)
+	}
 	return result
+}
+
+func readDollarQuoteTag(raw string) (string, bool) {
+	if len(raw) < 2 || raw[0] != '$' {
+		return "", false
+	}
+	for index := 1; index < len(raw); index++ {
+		switch c := raw[index]; {
+		case c == '$':
+			return raw[:index+1], true
+		case c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9':
+			continue
+		default:
+			return "", false
+		}
+	}
+	return "", false
 }
 
 func normalizePage(limit, offset int32) (int32, int32) {

@@ -21,7 +21,7 @@ func (r *Repository) CreateAccount(ctx context.Context, id, displayName string) 
 		return Account{}, err
 	}
 	now := time.Now()
-	return Account{ID: id, DisplayName: displayName, Status: string(controlsqlc.ControlAccountStatusActive), CreatedAt: now, UpdatedAt: now}, nil
+	return Account{ID: id, DisplayName: displayName, Status: "active", CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id string) (Account, error) {
@@ -29,7 +29,7 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (Account, error)
 	if err != nil {
 		return Account{}, noRows(err, ErrAccountNotFound)
 	}
-	return Account{ID: row.ID, DisplayName: row.DisplayName, Status: string(row.Status), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Account{ID: row.ID, DisplayName: row.DisplayName, Status: row.Status, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
 }
 
 func (r *Repository) CreateWorkspace(ctx context.Context, workspaceID, slug, title, actorID string) (Workspace, error) {
@@ -65,7 +65,7 @@ func (r *Repository) GetWorkspace(ctx context.Context, workspaceID string) (Work
 	if err != nil {
 		return Workspace{}, noRows(err, ErrWorkspaceNotFound)
 	}
-	return Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: string(row.Status), CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: row.Status, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
 }
 
 func (r *Repository) ListWorkspaces(ctx context.Context, accountID string, limit, offset int32) ([]Workspace, error) {
@@ -78,7 +78,7 @@ func (r *Repository) ListWorkspaces(ctx context.Context, accountID string, limit
 	}
 	result := make([]Workspace, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: string(row.Status), CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(result, Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: row.Status, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
 	}
 	return result, nil
 }

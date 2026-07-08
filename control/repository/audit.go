@@ -17,8 +17,8 @@ func (r *Repository) AppendAudit(ctx context.Context, event AuditEvent) error {
 	}
 	return r.q.CreateAuditEvent(ctx, controlsqlc.CreateAuditEventParams{
 		ID: event.ID, WorkspaceID: nullableString(event.WorkspaceID), ActorID: nullableString(event.ActorID), MethodKey: event.MethodKey,
-		TargetType: event.TargetType, TargetID: event.TargetID, BeforeData: event.BeforeData, AfterData: event.AfterData,
-		Result: controlsqlc.ControlAuditEventResult(event.Result), RequestID: event.RequestID,
+		TargetType: event.TargetType, TargetID: event.TargetID, BeforeData: rawMessageParam(event.BeforeData), AfterData: rawMessageParam(event.AfterData),
+		Result: event.Result, RequestID: event.RequestID,
 	})
 }
 
@@ -29,7 +29,7 @@ func (r *Repository) ListAudit(ctx context.Context, workspaceID string, limit, o
 	}
 	result := make([]AuditEvent, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, AuditEvent{ID: row.ID, WorkspaceID: valueString(row.WorkspaceID), ActorID: valueString(row.ActorID), MethodKey: row.MethodKey, TargetType: row.TargetType, TargetID: row.TargetID, BeforeData: row.BeforeData, AfterData: row.AfterData, Result: string(row.Result), RequestID: row.RequestID, OccurredAt: row.OccurredAt})
+		result = append(result, AuditEvent{ID: row.ID, WorkspaceID: valueString(row.WorkspaceID), ActorID: valueString(row.ActorID), MethodKey: row.MethodKey, TargetType: row.TargetType, TargetID: row.TargetID, BeforeData: nullRawMessage(row.BeforeData), AfterData: nullRawMessage(row.AfterData), Result: row.Result, RequestID: row.RequestID, OccurredAt: row.OccurredAt})
 	}
 	return result, nil
 }

@@ -17,9 +17,9 @@ func (a *Asset) ListUSDTPrices(
 		result = append(result, USDTPriceModel{
 			AssetCode:          row.AssetCode,
 			AssetTitle:         row.AssetTitle,
-			Scale:              row.Scale,
+			Scale:              uint16(row.Scale),
 			ReferenceAssetCode: row.ReferenceAssetCode,
-			USDTPerAssetMinor:  row.ReferencePerAssetMinor,
+			USDTPerAssetMinor:  uint64(row.ReferencePerAssetMinor),
 			Source:             row.Source,
 			ObservedAt:         row.ObservedAt,
 			UpdatedAt:          row.UpdatedAt,

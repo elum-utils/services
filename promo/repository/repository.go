@@ -71,10 +71,17 @@ func (r *Repository) Close() error {
 }
 
 func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
-	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
+	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{
+		Timeout: r.timeout,
+	}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
 		txRepo := &Repository{
-			db: r.db, q: r.q.WithTx(tx), callbacks: r.callbacks.WithTx(tx),
-			executor: tx, timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
+			db:        r.db,
+			q:         r.q.WithTx(tx),
+			callbacks: r.callbacks.WithTx(tx),
+			executor:  tx,
+			timeout:   r.timeout,
+			cacheL1:   r.cacheL1,
+			cacheL2:   r.cacheL2,
 		}
 		return struct{}{}, fn(txRepo)
 	})
@@ -85,10 +92,9 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.applySQL(ctx, promosqlc.SchemaSQL, "schema"); err != nil {
 		return err
 	}
-	if err := r.applySchemaUpgrades(ctx); err != nil {
-		return err
-	}
-	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
+	if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{
+		Timeout: bootstrapQueryTimeout,
+	}, func(ctx context.Context) error {
 		return callbackutil.BootstrapTable(ctx, r.db.DB(), callbackutil.PromoTable)
 	}); err != nil {
 		return err
@@ -99,16 +105,11 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	return r.applySQL(ctx, promosqlc.EventSQL, "event")
 }
 
-func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
-	if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, "promo_reward", "scale", "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"); err != nil {
-		return fmt.Errorf("promo schema upgrade promo_reward.scale failed: %w", err)
-	}
-	return nil
-}
-
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 	for _, statement := range splitSQLStatements(raw) {
-		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
+		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{
+			Timeout: bootstrapQueryTimeout,
+		}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
 		}); err != nil {

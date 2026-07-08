@@ -51,7 +51,7 @@ func (r *Repository) claimCatalogByID(ctx context.Context, workspaceID string, i
 	}, func(ctx context.Context) (Task, error) {
 		rows, err := r.q.GetClaimCatalogByID(ctx, tasksqlc.GetClaimCatalogByIDParams{
 			WorkspaceID: workspaceID,
-			ID:          id,
+			ID:          int64(id),
 		})
 		if err != nil {
 			return Task{}, err
@@ -105,7 +105,7 @@ func (r *Repository) IntegrationCheckTask(ctx context.Context, workspaceID strin
 		}, func(ctx context.Context) (Task, error) {
 			row, err := r.q.GetIntegrationCheckTaskByID(ctx, tasksqlc.GetIntegrationCheckTaskByIDParams{
 				WorkspaceID: workspaceID,
-				ID:          id,
+				ID:          int64(id),
 			})
 			if err != nil {
 				return Task{}, err
@@ -155,7 +155,7 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 	}, func(ctx context.Context) ([]Reward, error) {
 		rows, err := r.q.ListRewardsCatalog(ctx, tasksqlc.ListRewardsCatalogParams{
 			WorkspaceID: workspaceID,
-			TaskID:      taskID,
+			TaskID:      int64(taskID),
 		})
 		if err != nil {
 			return nil, err
@@ -166,7 +166,7 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 				Key:      row.RewardKey,
 				Type:     string(row.RewardType),
 				Quantity: row.Quantity,
-				Scale:    row.Scale,
+				Scale:    uint16(row.Scale),
 				Unit:     taskDurationUnitPtr(row.DurationUnit),
 			})
 		}
@@ -197,7 +197,7 @@ func (r *Repository) nextSequenceTask(ctx context.Context, workspaceID, sequence
 			}
 			return nextSequenceTask{}, err
 		}
-		return nextSequenceTask{ID: id, Exists: true}, nil
+		return nextSequenceTask{ID: uint64(id), Exists: true}, nil
 	})
 	if err != nil {
 		return nextSequenceTask{}, err

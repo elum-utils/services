@@ -166,7 +166,7 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 	}
 	var order Order
 	err = r.inTransaction(ctx, func(txRepo *PaymentRepository) error {
-		product, err := txRepo.GetProduct(ctx, ProductGetParams{
+		product, err := txRepo.getCheckoutProduct(ctx, ProductGetParams{
 			AppID:          params.AppID,
 			WorkspaceID:    workspaceID,
 			PlatformID:     params.PlatformID,
@@ -174,6 +174,7 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 			ProductID:      params.ProductID,
 			AssetCode:      params.AssetCode,
 			Locale:         params.Locale,
+			Now:            time.Now().UTC(),
 		})
 		if err != nil {
 			return err
@@ -223,13 +224,13 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 				return sql.NullInt64{Int64: v, Valid: true}
 			}),
 			ProductID:           product.ID,
-			Quantity:            quantity,
-			PriceID:             product.Price.ID,
+			Quantity:            int64(quantity),
+			PriceID:             int64(product.Price.ID),
 			AssetCode:           product.Price.AssetCode,
 			Locale:              normalizedLocale(params.Locale),
-			ListAmountMinor:     listAmountMinor,
-			DiscountAmountMinor: discountAmountMinor,
-			PayableAmountMinor:  payableAmountMinor,
+			ListAmountMinor:     int64(listAmountMinor),
+			DiscountAmountMinor: int64(discountAmountMinor),
+			PayableAmountMinor:  int64(payableAmountMinor),
 			Status:              sqlc.PaymentOrderStatusDraft,
 			ReservedUntil:       sqlwrap.NullTimeFromPtr(params.ReservedUntil),
 			ExpiresAt:           sqlwrap.NullTimeFromPtr(params.ExpiresAt),
@@ -238,14 +239,6 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 			return err
 		}
 		orderID := uint64(id)
-		if err := txRepo.q.SnapshotPaymentOrderItems(ctx, sqlc.SnapshotPaymentOrderItemsParams{
-			OrderID:     orderID,
-			Quantity:    int64(quantity),
-			WorkspaceID: product.WorkspaceID,
-			ProductID:   product.ID,
-		}); err != nil {
-			return err
-		}
 
 		order = Order{
 			ID:                  orderID,
@@ -368,7 +361,7 @@ func (r *PaymentRepository) ensureProductLimitAvailable(ctx context.Context, pro
 }
 
 func (r *PaymentRepository) GetOrder(ctx context.Context, id uint64) (Order, error) {
-	order, err := r.q.GetPaymentOrder(ctx, id)
+	order, err := r.q.GetPaymentOrder(ctx, int64(id))
 	if err != nil {
 		return Order{}, err
 	}
@@ -417,13 +410,23 @@ func (r *PaymentRepository) CreateAttempt(ctx context.Context, params AttemptCre
 			}),
 			ExpiresAt:      sqlwrap.NullTimeFromPtr(params.ExpiresAt),
 			ProviderCode_2: params.ProviderCode,
-			ID:             params.OrderID,
+			ID:             int64(params.OrderID),
 		})
 		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
+			if orderErr != nil {
+				return err
+			}
+			if order.Status != sqlc.PaymentOrderStatusDraft && order.Status != sqlc.PaymentOrderStatusPendingPayment {
+				return ErrOrderStateInvalid
+			}
 			return err
 		}
 		if id == 0 {
-			order, orderErr := txRepo.q.GetPaymentOrder(ctx, params.OrderID)
+			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
 			if orderErr != nil {
 				return orderErr
 			}
@@ -433,19 +436,19 @@ func (r *PaymentRepository) CreateAttempt(ctx context.Context, params AttemptCre
 			return sql.ErrNoRows
 		}
 
-		if _, err := txRepo.q.MarkOrderPendingPayment(ctx, params.OrderID); err != nil {
+		if _, err := txRepo.q.MarkOrderPendingPayment(ctx, int64(params.OrderID)); err != nil {
 			return err
 		}
 
 		assetCode := sqlwrap.ValueFromPtr(params.KnownAssetCode)
 		amountMinor := sqlwrap.ValueFromPtr(params.KnownAmountMinor)
 		if !useKnownOrderData {
-			order, orderErr := txRepo.q.GetPaymentOrder(ctx, params.OrderID)
+			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
 			if orderErr != nil {
 				return orderErr
 			}
 			assetCode = order.AssetCode
-			amountMinor = order.PayableAmountMinor
+			amountMinor = uint64(order.PayableAmountMinor)
 		}
 
 		attempt = Attempt{
@@ -495,7 +498,7 @@ func (r *PaymentRepository) CreateEvent(ctx context.Context, params EventCreateP
 func (r *PaymentRepository) SetAttemptProviderChargeID(ctx context.Context, attemptID uint64, providerCode string, chargeID string) (int64, error) {
 	return r.q.SetPaymentAttemptProviderChargeID(ctx, sqlc.SetPaymentAttemptProviderChargeIDParams{
 		ProviderChargeID: sql.NullString{String: chargeID, Valid: chargeID != ""},
-		ID:               attemptID,
+		ID:               int64(attemptID),
 		ProviderCode:     providerCode,
 		ProviderChargeID_2: sql.NullString{
 			String: chargeID,
@@ -505,11 +508,11 @@ func (r *PaymentRepository) SetAttemptProviderChargeID(ctx context.Context, atte
 }
 
 func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params CompleteAttemptParams) (CompleteAttemptResult, error) {
-	fulfilled, err := r.q.GetFulfilledAttemptResult(ctx, params.AttemptID)
+	fulfilled, err := r.q.GetFulfilledAttemptResult(ctx, int64(params.AttemptID))
 	if err == nil {
 		return CompleteAttemptResult{
-			OrderID:     fulfilled.OrderID,
-			AttemptID:   fulfilled.AttemptID,
+			OrderID:     uint64(fulfilled.OrderID),
+			AttemptID:   uint64(fulfilled.AttemptID),
 			AlreadyDone: true,
 		}, nil
 	}
@@ -519,7 +522,7 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 
 	var result CompleteAttemptResult
 	err = r.WithTx(ctx, func(txRepo *PaymentRepository) error {
-		attempt, err := txRepo.q.LockPaymentAttempt(ctx, params.AttemptID)
+		attempt, err := txRepo.q.LockPaymentAttempt(ctx, int64(params.AttemptID))
 		if err != nil {
 			return err
 		}
@@ -528,8 +531,8 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 			return err
 		}
 
-		result.OrderID = order.ID
-		result.AttemptID = attempt.ID
+		result.OrderID = uint64(order.ID)
+		result.AttemptID = uint64(attempt.ID)
 
 		if order.Status == sqlc.PaymentOrderStatusFulfilled {
 			result.AlreadyDone = true
@@ -538,7 +541,7 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 
 		if attempt.ProviderCode != params.ProviderCode ||
 			attempt.AssetCode != params.AssetCode ||
-			attempt.AmountMinor != params.AmountMinor ||
+			uint64(attempt.AmountMinor) != params.AmountMinor ||
 			!sameProviderPaymentID(attempt.ProviderPaymentID, sqlwrap.NullFromPtr(params.ProviderPaymentID, func(v string) sql.NullString {
 				return sql.NullString{String: v, Valid: true}
 			})) {
@@ -552,18 +555,16 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 			return err
 		}
 
-		if order.Status == sqlc.PaymentOrderStatusDraft || order.Status == sqlc.PaymentOrderStatusPendingPayment {
-			if _, err := txRepo.q.MarkOrderPaid(ctx, order.ID); err != nil {
-				return err
-			}
-		} else if order.Status != sqlc.PaymentOrderStatusPaid {
+		if order.Status != sqlc.PaymentOrderStatusDraft &&
+			order.Status != sqlc.PaymentOrderStatusPendingPayment &&
+			order.Status != sqlc.PaymentOrderStatusPaid {
 			return ErrOrderStateInvalid
 		}
-		if err := txRepo.indexPaidOrderAndIncrementLimits(ctx, order); err != nil {
+		if err := txRepo.markOrderPaidIndexAndIncrementLimits(ctx, order); err != nil {
 			return err
 		}
 
-		fulfillmentID, err := txRepo.q.CreateFulfillment(ctx, sqlc.CreateFulfillmentParams{
+		fulfillmentID, err := txRepo.q.CompleteFulfillmentFromOrder(ctx, sqlc.CompleteFulfillmentFromOrderParams{
 			OrderID:        order.ID,
 			AttemptID:      attempt.ID,
 			InternalUserID: order.InternalUserID,
@@ -578,34 +579,9 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 		if err != nil {
 			return err
 		}
-		for _, item := range items {
-			if err := txRepo.q.CreateFulfillmentItem(ctx, sqlc.CreateFulfillmentItemParams{
-				FulfillmentID: uint64(fulfillmentID),
-				WorkspaceID:   order.WorkspaceID,
-				ItemID:        item.ItemID,
-				RewardType:    sqlc.PaymentFulfillmentItemRewardType(item.RewardType),
-				Quantity:      item.Quantity,
-				Scale:         item.Scale,
-				DurationUnit: sqlc.NullPaymentFulfillmentItemDurationUnit{
-					PaymentFulfillmentItemDurationUnit: sqlc.PaymentFulfillmentItemDurationUnit(
-						orderDurationUnitValue(item.DurationUnit),
-					),
-					Valid: item.DurationUnit.Valid,
-				},
-			}); err != nil {
-				return err
-			}
-		}
-
-		if _, err := txRepo.q.MarkOrderFulfilled(ctx, order.ID); err != nil {
-			return err
-		}
-		if _, err := txRepo.q.MarkPaidOrderIndexFulfilled(ctx, order.ID); err != nil {
-			return err
-		}
 
 		if order.PurchaseKeyID.Valid {
-			if _, err := txRepo.q.IncrementPurchaseKeyUsage(ctx, uint64(order.PurchaseKeyID.Int64)); err != nil {
+			if _, err := txRepo.q.IncrementPurchaseKeyUsage(ctx, order.PurchaseKeyID.Int64); err != nil {
 				return err
 			}
 		}
@@ -627,24 +603,24 @@ func (r *PaymentRepository) enqueuePaymentFulfilledCallback(
 	items []sqlc.GetFulfillmentItemsForOrderRow,
 ) error {
 	payload := paymentFulfilledCallbackPayload{
-		OrderID:        order.ID,
-		AttemptID:      attempt.ID,
+		OrderID:        uint64(order.ID),
+		AttemptID:      uint64(attempt.ID),
 		FulfillmentID:  fulfillmentID,
 		WorkspaceID:    order.WorkspaceID,
 		AppID:          order.AppID,
 		PlatformID:     order.PlatformID,
 		PlatformUserID: order.PlatformUserID,
 		ProductID:      order.ProductID,
-		Quantity:       order.Quantity,
+		Quantity:       uint64(order.Quantity),
 		ProviderCode:   attempt.ProviderCode,
 		AssetCode:      attempt.AssetCode,
-		AmountMinor:    attempt.AmountMinor,
+		AmountMinor:    uint64(attempt.AmountMinor),
 		Rewards:        make([]paymentCallbackReward, 0, len(items)),
 	}
 	for _, item := range items {
 		payload.Rewards = append(payload.Rewards, paymentCallbackReward{
 			Key: item.ItemID, Type: string(item.RewardType), Quantity: item.Quantity,
-			Scale: item.Scale,
+			Scale: uint16(item.Scale),
 			Unit:  orderDurationUnitPtr(item.DurationUnit),
 		})
 	}
@@ -691,10 +667,7 @@ func (r *PaymentRepository) indexPaidOrderAndIncrementLimits(ctx context.Context
 		return nil
 	}
 
-	config, err := r.q.GetProductLimitConfig(ctx, sqlc.GetProductLimitConfigParams{
-		WorkspaceID: order.WorkspaceID,
-		ID:          order.ProductID,
-	})
+	config, err := r.getProductLimitConfigCached(ctx, order.WorkspaceID, order.ProductID)
 	if err != nil {
 		return err
 	}
@@ -707,7 +680,7 @@ func (r *PaymentRepository) indexPaidOrderAndIncrementLimits(ctx context.Context
 		limit:          config.GlobalLimit,
 		interval:       string(config.GlobalInterval),
 		intervalCount:  config.GlobalIntervalCount,
-		amount:         order.Quantity,
+		amount:         uint64(order.Quantity),
 	}); err != nil {
 		return err
 	}
@@ -720,7 +693,59 @@ func (r *PaymentRepository) indexPaidOrderAndIncrementLimits(ctx context.Context
 		limit:          config.UserLimit,
 		interval:       string(config.UserInterval),
 		intervalCount:  config.UserIntervalCount,
-		amount:         order.Quantity,
+		amount:         uint64(order.Quantity),
+	})
+}
+
+func (r *PaymentRepository) markOrderPaidIndexAndIncrementLimits(ctx context.Context, order sqlc.PaymentOrder) error {
+	indexed, err := r.q.MarkOrderPaidAndIndex(ctx, order.ID)
+	if err != nil {
+		return err
+	}
+	if !indexed {
+		return nil
+	}
+	config, err := r.getProductLimitConfigCached(ctx, order.WorkspaceID, order.ProductID)
+	if err != nil {
+		return err
+	}
+
+	if err := r.incrementProductLimitCounter(ctx, productLimitQuery{
+		workspaceID:    order.WorkspaceID,
+		platformID:     order.PlatformID,
+		platformUserID: "",
+		productID:      order.ProductID,
+		limit:          config.GlobalLimit,
+		interval:       string(config.GlobalInterval),
+		intervalCount:  config.GlobalIntervalCount,
+		amount:         uint64(order.Quantity),
+	}); err != nil {
+		return err
+	}
+
+	return r.incrementProductLimitCounter(ctx, productLimitQuery{
+		workspaceID:    order.WorkspaceID,
+		platformID:     order.PlatformID,
+		platformUserID: order.PlatformUserID,
+		productID:      order.ProductID,
+		limit:          config.UserLimit,
+		interval:       string(config.UserInterval),
+		intervalCount:  config.UserIntervalCount,
+		amount:         uint64(order.Quantity),
+	})
+}
+
+func (r *PaymentRepository) getProductLimitConfigCached(
+	ctx context.Context,
+	workspaceID string,
+	productID string,
+) (sqlc.GetProductLimitConfigRow, error) {
+	key := paymentCacheKey("product_limit_config", workspaceID, productID)
+	return queryPaymentVersionedCache(ctx, r, workspaceID, paymentProductLimitConfigVersionScope(workspaceID), key, func(ctx context.Context) (sqlc.GetProductLimitConfigRow, error) {
+		return r.q.GetProductLimitConfig(ctx, sqlc.GetProductLimitConfigParams{
+			WorkspaceID: workspaceID,
+			ID:          productID,
+		})
 	})
 }
 
@@ -760,7 +785,7 @@ func (r *PaymentRepository) incrementProductLimitCounter(ctx context.Context, qu
 	}
 
 	rows, err := r.q.IncrementProductLimitCounter(ctx, sqlc.IncrementProductLimitCounterParams{
-		PaidCount:      normalizeLimitAmount(query.amount),
+		PaidCount:      int64(normalizeLimitAmount(query.amount)),
 		WorkspaceID:    ensureParams.WorkspaceID,
 		PlatformID:     ensureParams.PlatformID,
 		ProductID:      ensureParams.ProductID,
@@ -768,8 +793,8 @@ func (r *PaymentRepository) incrementProductLimitCounter(ctx context.Context, qu
 		PlatformUserID: ensureParams.PlatformUserID,
 		WindowStart:    ensureParams.WindowStart,
 		WindowEnd:      ensureParams.WindowEnd,
-		PaidCount_2:    normalizeLimitAmount(query.amount),
-		PaidCount_3:    uint64(query.limit),
+		PaidCount_2:    int64(normalizeLimitAmount(query.amount)),
+		PaidCount_3:    int64(query.limit),
 	})
 	if err != nil {
 		return err
@@ -792,7 +817,7 @@ func sameProviderPaymentID(stored sql.NullString, received sql.NullString) bool 
 
 func mapOrder(order sqlc.PaymentOrder) Order {
 	return Order{
-		ID:                  order.ID,
+		ID:                  uint64(order.ID),
 		PublicID:            order.PublicID,
 		WorkspaceID:         order.WorkspaceID,
 		AppID:               order.AppID,
@@ -804,24 +829,24 @@ func mapOrder(order sqlc.PaymentOrder) Order {
 		PayerInternalUserID: nullInt64Ptr(order.PayerInternalUserID),
 		PurchaseKeyID:       nullInt64Ptr(order.PurchaseKeyID),
 		ProductID:           order.ProductID,
-		Quantity:            order.Quantity,
-		PriceID:             order.PriceID,
+		Quantity:            uint64(order.Quantity),
+		PriceID:             uint64(order.PriceID),
 		AssetCode:           order.AssetCode,
 		Locale:              order.Locale,
-		ListAmountMinor:     order.ListAmountMinor,
-		DiscountAmountMinor: order.DiscountAmountMinor,
-		PayableAmountMinor:  order.PayableAmountMinor,
+		ListAmountMinor:     uint64(order.ListAmountMinor),
+		DiscountAmountMinor: uint64(order.DiscountAmountMinor),
+		PayableAmountMinor:  uint64(order.PayableAmountMinor),
 		Status:              string(order.Status),
 	}
 }
 
 func mapAttempt(attempt sqlc.PaymentAttempt) Attempt {
 	return Attempt{
-		ID:                     attempt.ID,
-		OrderID:                attempt.OrderID,
+		ID:                     uint64(attempt.ID),
+		OrderID:                uint64(attempt.OrderID),
 		ProviderCode:           attempt.ProviderCode,
 		AssetCode:              attempt.AssetCode,
-		AmountMinor:            attempt.AmountMinor,
+		AmountMinor:            uint64(attempt.AmountMinor),
 		Status:                 string(attempt.Status),
 		ProviderPaymentID:      sqlwrap.NullStringPtr(attempt.ProviderPaymentID),
 		ProviderInvoiceID:      sqlwrap.NullStringPtr(attempt.ProviderInvoiceID),

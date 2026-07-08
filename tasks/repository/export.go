@@ -145,32 +145,36 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 
 	taskLocalizationsByID := make(map[uint64]map[string]ExportText)
 	for _, item := range taskLocalizations {
-		if taskLocalizationsByID[item.TaskID] == nil {
-			taskLocalizationsByID[item.TaskID] = make(map[string]ExportText)
+		taskID := uint64(item.TaskID)
+		if taskLocalizationsByID[taskID] == nil {
+			taskLocalizationsByID[taskID] = make(map[string]ExportText)
 		}
-		taskLocalizationsByID[item.TaskID][item.Locale] = ExportText{Title: item.Title, Description: item.Description}
+		taskLocalizationsByID[taskID][item.Locale] = ExportText{Title: item.Title, Description: item.Description}
 	}
 	rewardsByTaskID := make(map[uint64][]ExportReward)
 	for _, reward := range rewardRows {
-		rewardsByTaskID[reward.TaskID] = append(rewardsByTaskID[reward.TaskID], ExportReward{
+		taskID := uint64(reward.TaskID)
+		rewardsByTaskID[taskID] = append(rewardsByTaskID[taskID], ExportReward{
 			Key: reward.RewardKey, Type: string(reward.RewardType), Quantity: reward.Quantity,
-			Scale: reward.Scale, Unit: taskDurationUnitPtr(reward.DurationUnit), Position: reward.Position,
+			Scale: uint16(reward.Scale), Unit: taskDurationUnitPtr(reward.DurationUnit), Position: reward.Position,
 		})
 		items.add(reward.RewardKey)
 	}
 	taskKeyByID := make(map[uint64]string, len(taskRows))
 	for _, row := range taskRows {
-		taskKeyByID[row.ID] = row.Key
+		taskKeyByID[uint64(row.ID)] = row.Key
 	}
 	conditionsByParentID := make(map[uint64][]ExportCondition)
 	for _, condition := range complexConditions {
-		taskKey, ok := taskKeyByID[condition.ConditionTaskID]
+		conditionTaskID := uint64(condition.ConditionTaskID)
+		parentTaskID := uint64(condition.ParentTaskID)
+		taskKey, ok := taskKeyByID[conditionTaskID]
 		if !ok {
 			continue
 		}
-		conditionsByParentID[condition.ParentTaskID] = append(conditionsByParentID[condition.ParentTaskID], ExportCondition{
+		conditionsByParentID[parentTaskID] = append(conditionsByParentID[parentTaskID], ExportCondition{
 			TaskKey:        taskKey,
-			RequiredStatus: string(condition.RequiredStatus),
+			RequiredStatus: condition.RequiredStatus,
 			Position:       condition.Position,
 			IsRequired:     condition.IsRequired,
 		})
@@ -235,7 +239,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			Provider: row.Provider, ExternalType: row.ExternalType, Position: row.Position, IsEnabled: row.IsEnabled,
 			Reward: ExportReward{
 				Key: row.RewardKey, Type: string(row.RewardType), Quantity: row.Quantity,
-				Scale: row.Scale, Unit: nullPartnerDurationUnit(row.DurationUnit), Position: row.Position,
+				Scale: uint16(row.Scale), Unit: nullPartnerDurationUnit(row.DurationUnit), Position: row.Position,
 			},
 		})
 		items.add(row.RewardKey)

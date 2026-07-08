@@ -129,8 +129,8 @@ func (r *Repository) insertProgressEvent(ctx context.Context, params MarkIntegra
 			Source:           params.Source,
 			ExternalEventKey: params.ExternalEventKey,
 			ActionKey:        params.Task.ActionKey,
-			Amount:           params.Task.TargetCount,
-			Payload:          eventPayload,
+			Amount:           int64(params.Task.TargetCount),
+			Payload:          rawMessageParam(eventPayload),
 		})
 	})
 	if err != nil {

@@ -172,13 +172,13 @@ func (s *Store) handleEvent(ctx context.Context, event storedEvent, workerID str
 	marked := false
 	callbackCtx := Context{
 		Context:            ctx,
-		EventID:            event.ID,
+		EventID:            uint64(event.ID),
 		EventType:          event.EventType,
 		EventKey:           event.EventKey,
 		IdempotencyKey:     event.IdempotencyKey,
 		Payload:            event.Payload,
 		PayloadContentType: event.PayloadContentType,
-		Attempt:            event.AttemptCount,
+		Attempt:            uint32(event.AttemptCount),
 		CreatedAt:          event.CreatedAt,
 		store:              s,
 		workerID:           workerID,
@@ -190,17 +190,17 @@ func (s *Store) handleEvent(ctx context.Context, event storedEvent, workerID str
 	}
 	if err != nil {
 		return s.MarkFailed(ctx, FailParams{
-			ID:       event.ID,
+			ID:       uint64(event.ID),
 			WorkerID: workerID,
 			Error:    err.Error(),
-			Attempt:  event.AttemptCount,
+			Attempt:  uint32(event.AttemptCount),
 		})
 	}
 	return s.MarkFailed(ctx, FailParams{
-		ID:       event.ID,
+		ID:       uint64(event.ID),
 		WorkerID: workerID,
 		Error:    "callback handler returned without marking event",
-		Attempt:  event.AttemptCount,
+		Attempt:  uint32(event.AttemptCount),
 	})
 }
 

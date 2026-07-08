@@ -6,293 +6,28 @@ package sqlc
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
-type CalendarDefinitionEndBehavior string
-
-const (
-	CalendarDefinitionEndBehaviorRestart    CalendarDefinitionEndBehavior = "restart"
-	CalendarDefinitionEndBehaviorRepeatLast CalendarDefinitionEndBehavior = "repeat_last"
-	CalendarDefinitionEndBehaviorStop       CalendarDefinitionEndBehavior = "stop"
-)
-
-func (e *CalendarDefinitionEndBehavior) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarDefinitionEndBehavior(s)
-	case string:
-		*e = CalendarDefinitionEndBehavior(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarDefinitionEndBehavior: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarDefinitionEndBehavior struct {
-	CalendarDefinitionEndBehavior CalendarDefinitionEndBehavior `json:"calendar_definition_end_behavior"`
-	Valid                         bool                          `json:"valid"` // Valid is true if CalendarDefinitionEndBehavior is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarDefinitionEndBehavior) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarDefinitionEndBehavior, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarDefinitionEndBehavior.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarDefinitionEndBehavior) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarDefinitionEndBehavior), nil
-}
-
-type CalendarDefinitionIntervalType string
-
-const (
-	CalendarDefinitionIntervalTypeCalendar CalendarDefinitionIntervalType = "calendar"
-	CalendarDefinitionIntervalTypeFloating CalendarDefinitionIntervalType = "floating"
-)
-
-func (e *CalendarDefinitionIntervalType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarDefinitionIntervalType(s)
-	case string:
-		*e = CalendarDefinitionIntervalType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarDefinitionIntervalType: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarDefinitionIntervalType struct {
-	CalendarDefinitionIntervalType CalendarDefinitionIntervalType `json:"calendar_definition_interval_type"`
-	Valid                          bool                           `json:"valid"` // Valid is true if CalendarDefinitionIntervalType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarDefinitionIntervalType) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarDefinitionIntervalType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarDefinitionIntervalType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarDefinitionIntervalType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarDefinitionIntervalType), nil
-}
-
-type CalendarDefinitionIntervalUnit string
-
-const (
-	CalendarDefinitionIntervalUnitSecond CalendarDefinitionIntervalUnit = "second"
-	CalendarDefinitionIntervalUnitMinute CalendarDefinitionIntervalUnit = "minute"
-	CalendarDefinitionIntervalUnitHour   CalendarDefinitionIntervalUnit = "hour"
-	CalendarDefinitionIntervalUnitDay    CalendarDefinitionIntervalUnit = "day"
-	CalendarDefinitionIntervalUnitWeek   CalendarDefinitionIntervalUnit = "week"
-	CalendarDefinitionIntervalUnitMonth  CalendarDefinitionIntervalUnit = "month"
-)
-
-func (e *CalendarDefinitionIntervalUnit) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarDefinitionIntervalUnit(s)
-	case string:
-		*e = CalendarDefinitionIntervalUnit(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarDefinitionIntervalUnit: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarDefinitionIntervalUnit struct {
-	CalendarDefinitionIntervalUnit CalendarDefinitionIntervalUnit `json:"calendar_definition_interval_unit"`
-	Valid                          bool                           `json:"valid"` // Valid is true if CalendarDefinitionIntervalUnit is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarDefinitionIntervalUnit) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarDefinitionIntervalUnit, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarDefinitionIntervalUnit.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarDefinitionIntervalUnit) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarDefinitionIntervalUnit), nil
-}
-
-type CalendarDefinitionMode string
-
-const (
-	CalendarDefinitionModeInterval        CalendarDefinitionMode = "interval"
-	CalendarDefinitionModeSequential      CalendarDefinitionMode = "sequential"
-	CalendarDefinitionModeSequentialReset CalendarDefinitionMode = "sequential_reset"
-)
-
-func (e *CalendarDefinitionMode) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarDefinitionMode(s)
-	case string:
-		*e = CalendarDefinitionMode(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarDefinitionMode: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarDefinitionMode struct {
-	CalendarDefinitionMode CalendarDefinitionMode `json:"calendar_definition_mode"`
-	Valid                  bool                   `json:"valid"` // Valid is true if CalendarDefinitionMode is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarDefinitionMode) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarDefinitionMode, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarDefinitionMode.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarDefinitionMode) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarDefinitionMode), nil
-}
-
-type CalendarRewardDurationUnit string
-
-const (
-	CalendarRewardDurationUnitSecond CalendarRewardDurationUnit = "second"
-	CalendarRewardDurationUnitMinute CalendarRewardDurationUnit = "minute"
-	CalendarRewardDurationUnitHour   CalendarRewardDurationUnit = "hour"
-	CalendarRewardDurationUnitDay    CalendarRewardDurationUnit = "day"
-	CalendarRewardDurationUnitWeek   CalendarRewardDurationUnit = "week"
-	CalendarRewardDurationUnitMonth  CalendarRewardDurationUnit = "month"
-	CalendarRewardDurationUnitYear   CalendarRewardDurationUnit = "year"
-)
-
-func (e *CalendarRewardDurationUnit) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarRewardDurationUnit(s)
-	case string:
-		*e = CalendarRewardDurationUnit(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarRewardDurationUnit: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarRewardDurationUnit struct {
-	CalendarRewardDurationUnit CalendarRewardDurationUnit `json:"calendar_reward_duration_unit"`
-	Valid                      bool                       `json:"valid"` // Valid is true if CalendarRewardDurationUnit is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarRewardDurationUnit) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarRewardDurationUnit, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarRewardDurationUnit.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarRewardDurationUnit) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarRewardDurationUnit), nil
-}
-
-type CalendarRewardRewardType string
-
-const (
-	CalendarRewardRewardTypeQuantity CalendarRewardRewardType = "quantity"
-	CalendarRewardRewardTypeDuration CalendarRewardRewardType = "duration"
-)
-
-func (e *CalendarRewardRewardType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CalendarRewardRewardType(s)
-	case string:
-		*e = CalendarRewardRewardType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CalendarRewardRewardType: %T", src)
-	}
-	return nil
-}
-
-type NullCalendarRewardRewardType struct {
-	CalendarRewardRewardType CalendarRewardRewardType `json:"calendar_reward_reward_type"`
-	Valid                    bool                     `json:"valid"` // Valid is true if CalendarRewardRewardType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCalendarRewardRewardType) Scan(value interface{}) error {
-	if value == nil {
-		ns.CalendarRewardRewardType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CalendarRewardRewardType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCalendarRewardRewardType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CalendarRewardRewardType), nil
-}
-
 type CalendarDefinition struct {
-	ID                  string                         `json:"id"`
-	WorkspaceID         string                         `json:"workspace_id"`
-	Type                string                         `json:"type"`
-	Mode                CalendarDefinitionMode         `json:"mode"`
-	IntervalType        CalendarDefinitionIntervalType `json:"interval_type"`
-	IntervalUnit        CalendarDefinitionIntervalUnit `json:"interval_unit"`
-	IntervalCount       uint32                         `json:"interval_count"`
-	ResetAfterIntervals uint32                         `json:"reset_after_intervals"`
-	EndBehavior         CalendarDefinitionEndBehavior  `json:"end_behavior"`
-	Timezone            string                         `json:"timezone"`
-	HideFutureRewards   bool                           `json:"hide_future_rewards"`
-	IsActive            bool                           `json:"is_active"`
-	StartAt             sql.NullTime                   `json:"start_at"`
-	EndAt               sql.NullTime                   `json:"end_at"`
-	DeletedAt           sql.NullTime                   `json:"deleted_at"`
-	CreatedAt           time.Time                      `json:"created_at"`
-	UpdatedAt           time.Time                      `json:"updated_at"`
+	ID                  string       `json:"id"`
+	WorkspaceID         string       `json:"workspace_id"`
+	Type                string       `json:"type"`
+	Mode                string       `json:"mode"`
+	IntervalType        string       `json:"interval_type"`
+	IntervalUnit        string       `json:"interval_unit"`
+	IntervalCount       int32        `json:"interval_count"`
+	ResetAfterIntervals int32        `json:"reset_after_intervals"`
+	EndBehavior         string       `json:"end_behavior"`
+	Timezone            string       `json:"timezone"`
+	HideFutureRewards   bool         `json:"hide_future_rewards"`
+	IsActive            bool         `json:"is_active"`
+	StartAt             sql.NullTime `json:"start_at"`
+	EndAt               sql.NullTime `json:"end_at"`
+	DeletedAt           sql.NullTime `json:"deleted_at"`
+	CreatedAt           time.Time    `json:"created_at"`
+	UpdatedAt           time.Time    `json:"updated_at"`
 }
 
 type CalendarLocalization struct {
@@ -306,7 +41,7 @@ type CalendarLocalization struct {
 }
 
 type CalendarOperation struct {
-	ID                uint64          `json:"id"`
+	ID                int64           `json:"id"`
 	WorkspaceID       string          `json:"workspace_id"`
 	CalendarID        string          `json:"calendar_id"`
 	AppID             int64           `json:"app_id"`
@@ -317,13 +52,13 @@ type CalendarOperation struct {
 	Status            string          `json:"status"`
 	Position          sql.NullInt32   `json:"position"`
 	RewardsSnapshot   json.RawMessage `json:"rewards_snapshot"`
-	CurrentPosition   uint32          `json:"current_position"`
-	ClaimCount        uint64          `json:"claim_count"`
+	CurrentPosition   int32           `json:"current_position"`
+	ClaimCount        int64           `json:"claim_count"`
 	LastClaimPosition sql.NullInt32   `json:"last_claim_position"`
 	LastClaimAt       sql.NullTime    `json:"last_claim_at"`
 	NextClaimAt       sql.NullTime    `json:"next_claim_at"`
 	IsCompleted       bool            `json:"is_completed"`
-	ResetCount        uint64          `json:"reset_count"`
+	ResetCount        int64           `json:"reset_count"`
 	WasReset          bool            `json:"was_reset"`
 	OccurredAt        time.Time       `json:"occurred_at"`
 	CreatedAt         time.Time       `json:"created_at"`
@@ -335,48 +70,48 @@ type CalendarProgress struct {
 	AppID             int64         `json:"app_id"`
 	PlatformID        int64         `json:"platform_id"`
 	PlatformUserID    string        `json:"platform_user_id"`
-	CurrentPosition   uint32        `json:"current_position"`
-	ClaimCount        uint64        `json:"claim_count"`
+	CurrentPosition   int32         `json:"current_position"`
+	ClaimCount        int64         `json:"claim_count"`
 	LastClaimPosition sql.NullInt32 `json:"last_claim_position"`
 	LastClaimAt       sql.NullTime  `json:"last_claim_at"`
 	NextClaimAt       sql.NullTime  `json:"next_claim_at"`
 	IsCompleted       bool          `json:"is_completed"`
-	ResetCount        uint64        `json:"reset_count"`
+	ResetCount        int64         `json:"reset_count"`
 	LastWasReset      bool          `json:"last_was_reset"`
 	CreatedAt         time.Time     `json:"created_at"`
 	UpdatedAt         time.Time     `json:"updated_at"`
 }
 
 type CalendarReward struct {
-	ID           uint64                         `json:"id"`
-	WorkspaceID  string                         `json:"workspace_id"`
-	CalendarID   string                         `json:"calendar_id"`
-	StepID       uint64                         `json:"step_id"`
-	ItemKey      string                         `json:"item_key"`
-	RewardType   CalendarRewardRewardType       `json:"reward_type"`
-	ItemCount    int64                          `json:"item_count"`
-	Scale        uint16                         `json:"scale"`
-	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
-	Position     uint32                         `json:"position"`
-	CreatedAt    time.Time                      `json:"created_at"`
-	UpdatedAt    time.Time                      `json:"updated_at"`
+	ID           int64          `json:"id"`
+	WorkspaceID  string         `json:"workspace_id"`
+	CalendarID   string         `json:"calendar_id"`
+	StepID       int64          `json:"step_id"`
+	ItemKey      string         `json:"item_key"`
+	RewardType   string         `json:"reward_type"`
+	ItemCount    int64          `json:"item_count"`
+	Scale        int16          `json:"scale"`
+	DurationUnit sql.NullString `json:"duration_unit"`
+	Position     int32          `json:"position"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 type CalendarStatsDaily struct {
 	WorkspaceID    string    `json:"workspace_id"`
 	CalendarID     string    `json:"calendar_id"`
 	StatsDate      time.Time `json:"stats_date"`
-	OperationCount uint64    `json:"operation_count"`
-	GrantCount     uint64    `json:"grant_count"`
-	UniqueUsers    uint64    `json:"unique_users"`
+	OperationCount int64     `json:"operation_count"`
+	GrantCount     int64     `json:"grant_count"`
+	UniqueUsers    int64     `json:"unique_users"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type CalendarStep struct {
-	ID          uint64    `json:"id"`
+	ID          int64     `json:"id"`
 	WorkspaceID string    `json:"workspace_id"`
 	CalendarID  string    `json:"calendar_id"`
-	Position    uint32    `json:"position"`
+	Position    int32     `json:"position"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

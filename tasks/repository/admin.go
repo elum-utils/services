@@ -68,11 +68,11 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 				WorkspaceID: params.WorkspaceID, Key: params.Key, GroupKey: params.GroupKey,
 				SequenceKey: nullString(params.SequenceKey), SequencePosition: nullInt32FromUint32(params.SequencePosition),
 				TaskKind:  taskKind,
-				ActionKey: params.ActionKey, ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
-				ClaimMode: tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), StartMode: tasksqlc.TaskDefinitionStartMode(startMode), TargetCount: params.TargetCount,
-				ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-				Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
-				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
+				ActionKey: params.ActionKey, ActionKind: params.ActionKind,
+				ClaimMode: params.ClaimMode, StartMode: startMode, TargetCount: int64(params.TargetCount),
+				ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
+				Position: params.Position, Payload: rawMessageParam(payload), Target: rawMessageParam(target), IntegrationKind: nullString(params.IntegrationKind),
+				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(integrationPayload),
 				ImageUrl:  nullString(params.ImageURL),
 				IsVisible: params.IsVisible, IsActive: params.IsActive,
 				StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
@@ -87,15 +87,15 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 		return r.q.AdminUpdateTask(ctx, tasksqlc.AdminUpdateTaskParams{
 			GroupKey: params.GroupKey, SequenceKey: nullString(params.SequenceKey),
 			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: taskKind, ActionKey: params.ActionKey,
-			ActionKind: tasksqlc.TaskDefinitionActionKind(params.ActionKind),
-			ClaimMode:  tasksqlc.TaskDefinitionClaimMode(params.ClaimMode), StartMode: tasksqlc.TaskDefinitionStartMode(startMode), TargetCount: params.TargetCount,
-			ResetUnit: tasksqlc.TaskDefinitionResetUnit(params.ResetUnit), ResetEvery: params.ResetEvery,
-			Position: params.Position, Payload: payload, Target: target, IntegrationKind: nullString(params.IntegrationKind),
-			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: integrationPayload,
+			ActionKind: params.ActionKind,
+			ClaimMode:  params.ClaimMode, StartMode: startMode, TargetCount: int64(params.TargetCount),
+			ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
+			Position: params.Position, Payload: rawMessageParam(payload), Target: rawMessageParam(target), IntegrationKind: nullString(params.IntegrationKind),
+			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(integrationPayload),
 			ImageUrl:  nullString(params.ImageURL),
 			IsVisible: params.IsVisible, IsActive: params.IsActive,
 			StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
-			WorkspaceID: params.WorkspaceID, ID: params.ID,
+			WorkspaceID: params.WorkspaceID, ID: int64(params.ID),
 		})
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 
 func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint64) (int64, error) {
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-		return r.q.AdminDeleteTask(ctx, tasksqlc.AdminDeleteTaskParams{WorkspaceID: workspaceID, ID: id})
+		return r.q.AdminDeleteTask(ctx, tasksqlc.AdminDeleteTaskParams{WorkspaceID: workspaceID, ID: int64(id)})
 	})
 	if err != nil {
 		return 0, err
@@ -125,7 +125,7 @@ func (r *Repository) GetTask(ctx context.Context, workspaceID string, id uint64)
 		CacheL1Delay: r.cacheL1Delay,
 		CacheL2Delay: r.cacheL2Delay,
 	}, func(ctx context.Context) (Task, error) {
-		row, err := tasksqlc.New(r.db.DB()).AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{WorkspaceID: workspaceID, ID: id})
+		row, err := tasksqlc.New(r.db.DB()).AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{WorkspaceID: workspaceID, ID: int64(id)})
 		if err != nil {
 			return Task{}, err
 		}
@@ -182,7 +182,7 @@ func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string
 func (r *Repository) UpsertTaskLocalization(ctx context.Context, workspaceID string, taskID uint64, locale, title, description string) error {
 	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
 		return r.q.AdminUpsertTaskLocalization(ctx, tasksqlc.AdminUpsertTaskLocalizationParams{
-			WorkspaceID: workspaceID, TaskID: taskID, Locale: locale, Title: title, Description: description,
+			WorkspaceID: workspaceID, TaskID: int64(taskID), Locale: locale, Title: title, Description: description,
 		})
 	}); err != nil {
 		return err
@@ -193,13 +193,13 @@ func (r *Repository) UpsertTaskLocalization(ctx context.Context, workspaceID str
 func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskID uint64, reward Reward, position int32) error {
 	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
 		return r.q.AdminUpsertReward(ctx, tasksqlc.AdminUpsertRewardParams{
-			WorkspaceID: workspaceID, TaskID: taskID, RewardKey: reward.Key,
-			RewardType: tasksqlc.TaskRewardRewardType(reward.Type),
+			WorkspaceID: workspaceID, TaskID: int64(taskID), RewardKey: reward.Key,
+			RewardType: reward.Type,
 			Quantity:   reward.Quantity,
-			Scale:      reward.Scale,
-			DurationUnit: tasksqlc.NullTaskRewardDurationUnit{
-				TaskRewardDurationUnit: tasksqlc.TaskRewardDurationUnit(taskStringValue(reward.Unit)),
-				Valid:                  reward.Unit != nil,
+			Scale:      int16(reward.Scale),
+			DurationUnit: sql.NullString{
+				String: taskStringValue(reward.Unit),
+				Valid:  reward.Unit != nil,
 			},
 			Position: position,
 		})
@@ -212,7 +212,7 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskI
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskID uint64, key string) (int64, error) {
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.AdminDeleteReward(ctx, tasksqlc.AdminDeleteRewardParams{
-			WorkspaceID: workspaceID, TaskID: taskID, RewardKey: key,
+			WorkspaceID: workspaceID, TaskID: int64(taskID), RewardKey: key,
 		})
 	})
 	if err != nil {
@@ -232,9 +232,9 @@ func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComp
 	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
 		return r.q.AdminUpsertComplexCondition(ctx, tasksqlc.AdminUpsertComplexConditionParams{
 			WorkspaceID:     params.WorkspaceID,
-			ParentTaskID:    params.ParentTaskID,
-			ConditionTaskID: params.ConditionTaskID,
-			RequiredStatus:  tasksqlc.TaskComplexConditionRequiredStatus(requiredStatus),
+			ParentTaskID:    int64(params.ParentTaskID),
+			ConditionTaskID: int64(params.ConditionTaskID),
+			RequiredStatus:  requiredStatus,
 			Position:        params.Position,
 			IsRequired:      params.IsRequired,
 		})
@@ -247,7 +247,7 @@ func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComp
 func (r *Repository) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.AdminDeleteComplexCondition(ctx, tasksqlc.AdminDeleteComplexConditionParams{
-			WorkspaceID: workspaceID, ParentTaskID: parentTaskID, ConditionTaskID: conditionTaskID,
+			WorkspaceID: workspaceID, ParentTaskID: int64(parentTaskID), ConditionTaskID: int64(conditionTaskID),
 		})
 	})
 	if err != nil {
@@ -270,9 +270,9 @@ func (r *Repository) ListComplexConditions(ctx context.Context, workspaceID stri
 	for _, row := range rows {
 		out = append(out, ComplexCondition{
 			WorkspaceID:     row.WorkspaceID,
-			ParentTaskID:    row.ParentTaskID,
-			ConditionTaskID: row.ConditionTaskID,
-			RequiredStatus:  string(row.RequiredStatus),
+			ParentTaskID:    uint64(row.ParentTaskID),
+			ConditionTaskID: uint64(row.ConditionTaskID),
+			RequiredStatus:  row.RequiredStatus,
 			Position:        row.Position,
 			IsRequired:      row.IsRequired,
 		})

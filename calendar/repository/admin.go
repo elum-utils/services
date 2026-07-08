@@ -28,15 +28,20 @@ type SaveCalendarParams struct {
 
 func (r *Repository) CreateCalendar(ctx context.Context, params SaveCalendarParams) error {
 	if err := r.q.AdminCreateCalendar(ctx, calendarsqlc.AdminCreateCalendarParams{
-		ID: params.ID, WorkspaceID: params.WorkspaceID, Type: params.Type,
-		Mode:          calendarsqlc.CalendarDefinitionMode(params.Mode),
-		IntervalType:  calendarsqlc.CalendarDefinitionIntervalType(params.IntervalType),
-		IntervalUnit:  calendarsqlc.CalendarDefinitionIntervalUnit(params.IntervalUnit),
-		IntervalCount: params.IntervalCount, ResetAfterIntervals: params.ResetAfterIntervals,
-		EndBehavior: calendarsqlc.CalendarDefinitionEndBehavior(params.EndBehavior),
-		Timezone:    params.Timezone, HideFutureRewards: params.HideFutureRewards,
-		IsActive: params.IsActive, StartAt: nullableTime(params.StartAt),
-		EndAt: nullableTime(params.EndAt),
+		ID:                  params.ID,
+		WorkspaceID:         params.WorkspaceID,
+		Type:                params.Type,
+		Mode:                params.Mode,
+		IntervalType:        params.IntervalType,
+		IntervalUnit:        params.IntervalUnit,
+		IntervalCount:       int32(params.IntervalCount),
+		ResetAfterIntervals: int32(params.ResetAfterIntervals),
+		EndBehavior:         params.EndBehavior,
+		Timezone:            params.Timezone,
+		HideFutureRewards:   params.HideFutureRewards,
+		IsActive:            params.IsActive,
+		StartAt:             nullableTime(params.StartAt),
+		EndAt:               nullableTime(params.EndAt),
 	}); err != nil {
 		return err
 	}
@@ -45,14 +50,20 @@ func (r *Repository) CreateCalendar(ctx context.Context, params SaveCalendarPara
 
 func (r *Repository) UpdateCalendar(ctx context.Context, params SaveCalendarParams) (int64, error) {
 	rows, err := r.q.AdminUpdateCalendar(ctx, calendarsqlc.AdminUpdateCalendarParams{
-		Type: params.Type, Mode: calendarsqlc.CalendarDefinitionMode(params.Mode),
-		IntervalType:  calendarsqlc.CalendarDefinitionIntervalType(params.IntervalType),
-		IntervalUnit:  calendarsqlc.CalendarDefinitionIntervalUnit(params.IntervalUnit),
-		IntervalCount: params.IntervalCount, ResetAfterIntervals: params.ResetAfterIntervals,
-		EndBehavior: calendarsqlc.CalendarDefinitionEndBehavior(params.EndBehavior),
-		Timezone:    params.Timezone, HideFutureRewards: params.HideFutureRewards,
-		IsActive: params.IsActive, StartAt: nullableTime(params.StartAt),
-		EndAt: nullableTime(params.EndAt), WorkspaceID: params.WorkspaceID, ID: params.ID,
+		Type:                params.Type,
+		Mode:                params.Mode,
+		IntervalType:        params.IntervalType,
+		IntervalUnit:        params.IntervalUnit,
+		IntervalCount:       int32(params.IntervalCount),
+		ResetAfterIntervals: int32(params.ResetAfterIntervals),
+		EndBehavior:         params.EndBehavior,
+		Timezone:            params.Timezone,
+		HideFutureRewards:   params.HideFutureRewards,
+		IsActive:            params.IsActive,
+		StartAt:             nullableTime(params.StartAt),
+		EndAt:               nullableTime(params.EndAt),
+		WorkspaceID:         params.WorkspaceID,
+		ID:                  params.ID,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -193,7 +204,9 @@ func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID, calend
 
 func (r *Repository) CreateStep(ctx context.Context, workspaceID, calendarID string, position uint32) (uint64, error) {
 	id, err := r.q.AdminCreateStep(ctx, calendarsqlc.AdminCreateStepParams{
-		WorkspaceID: workspaceID, CalendarID: calendarID, Position: position,
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		Position:    int32(position),
 	})
 	if err != nil {
 		return 0, err
@@ -203,7 +216,10 @@ func (r *Repository) CreateStep(ctx context.Context, workspaceID, calendarID str
 
 func (r *Repository) UpdateStep(ctx context.Context, workspaceID, calendarID string, id uint64, position uint32) (int64, error) {
 	rows, err := r.q.AdminUpdateStep(ctx, calendarsqlc.AdminUpdateStepParams{
-		Position: position, WorkspaceID: workspaceID, CalendarID: calendarID, ID: id,
+		Position:    int32(position),
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		ID:          int64(id),
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -213,7 +229,9 @@ func (r *Repository) UpdateStep(ctx context.Context, workspaceID, calendarID str
 
 func (r *Repository) DeleteStep(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
 	rows, err := r.q.AdminDeleteStep(ctx, calendarsqlc.AdminDeleteStepParams{
-		WorkspaceID: workspaceID, CalendarID: calendarID, ID: id,
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		ID:          int64(id),
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -223,12 +241,15 @@ func (r *Repository) DeleteStep(ctx context.Context, workspaceID, calendarID str
 
 func (r *Repository) UpsertReward(ctx context.Context, workspaceID, calendarID string, stepID uint64, reward Reward, position uint32) (uint64, error) {
 	id, err := r.q.AdminUpsertReward(ctx, calendarsqlc.AdminUpsertRewardParams{
-		WorkspaceID: workspaceID, CalendarID: calendarID, StepID: stepID,
-		ItemKey: reward.Key, RewardType: calendarsqlc.CalendarRewardRewardType(reward.Type),
-		ItemCount: reward.Quantity, Scale: reward.Scale, DurationUnit: calendarsqlc.NullCalendarRewardDurationUnit{
-			CalendarRewardDurationUnit: calendarsqlc.CalendarRewardDurationUnit(calendarStringValue(reward.Unit)),
-			Valid:                      reward.Unit != nil,
-		}, Position: position,
+		WorkspaceID:  workspaceID,
+		CalendarID:   calendarID,
+		StepID:       int64(stepID),
+		ItemKey:      reward.Key,
+		RewardType:   reward.Type,
+		ItemCount:    reward.Quantity,
+		Scale:        int16(reward.Scale),
+		DurationUnit: nullableString(reward.Unit),
+		Position:     int32(position),
 	})
 	if err != nil {
 		return 0, err
@@ -238,16 +259,16 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID, calendarID s
 
 func (r *Repository) UpdateReward(ctx context.Context, workspaceID, calendarID string, stepID, id uint64, reward Reward, position uint32) (int64, error) {
 	rows, err := r.q.AdminUpdateReward(ctx, calendarsqlc.AdminUpdateRewardParams{
-		StepID: stepID, ItemKey: reward.Key,
-		RewardType: calendarsqlc.CalendarRewardRewardType(reward.Type),
-		ItemCount:  reward.Quantity,
-		Scale:      reward.Scale,
-		DurationUnit: calendarsqlc.NullCalendarRewardDurationUnit{
-			CalendarRewardDurationUnit: calendarsqlc.CalendarRewardDurationUnit(calendarStringValue(reward.Unit)),
-			Valid:                      reward.Unit != nil,
-		},
-		Position:    position,
-		WorkspaceID: workspaceID, CalendarID: calendarID, ID: id,
+		StepID:       int64(stepID),
+		ItemKey:      reward.Key,
+		RewardType:   reward.Type,
+		ItemCount:    reward.Quantity,
+		Scale:        int16(reward.Scale),
+		DurationUnit: nullableString(reward.Unit),
+		Position:     int32(position),
+		WorkspaceID:  workspaceID,
+		CalendarID:   calendarID,
+		ID:           int64(id),
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -265,22 +286,28 @@ func (r *Repository) GetReward(ctx context.Context, workspaceID, calendarID stri
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Reward, error) {
 		row, err := r.q.AdminGetReward(ctx, calendarsqlc.AdminGetRewardParams{
-			WorkspaceID: workspaceID, CalendarID: calendarID, ID: id,
+			WorkspaceID: workspaceID,
+			CalendarID:  calendarID,
+			ID:          int64(id),
 		})
 		if err != nil {
 			return Reward{}, err
 		}
 		return Reward{
-			Key: row.ItemKey, Type: string(row.RewardType), Quantity: row.ItemCount,
-			Scale: row.Scale,
-			Unit:  calendarDurationUnitPtr(row.DurationUnit),
+			Key:      row.ItemKey,
+			Type:     row.RewardType,
+			Quantity: row.ItemCount,
+			Scale:    uint16(row.Scale),
+			Unit:     calendarDurationUnitPtr(row.DurationUnit),
 		}, nil
 	})
 }
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
 	rows, err := r.q.AdminDeleteReward(ctx, calendarsqlc.AdminDeleteRewardParams{
-		WorkspaceID: workspaceID, CalendarID: calendarID, ID: id,
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		ID:          int64(id),
 	})
 	if err != nil || rows == 0 {
 		return rows, err

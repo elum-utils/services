@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	serviceerrors "github.com/elum-utils/services/errors"
-	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func normalizeLocale(locale string) string {
@@ -81,9 +81,6 @@ func uint64FromNull(value sql.NullInt64) uint64 {
 }
 
 func isDuplicateEntry(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	if errors.As(err, &mysqlErr) {
-		return mysqlErr.Number == 1062
-	}
-	return false
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

@@ -78,8 +78,8 @@ func (r *PaymentRepository) ApplyProviderRefund(ctx context.Context, params Prov
 			return sql.ErrNoRows
 		}
 
-		result.OrderID = order.ID
-		result.AttemptID = attempt.ID
+		result.OrderID = uint64(order.ID)
+		result.AttemptID = uint64(attempt.ID)
 
 		refundID, err := txRepo.q.AdminCreateRefund(ctx, sqlc.AdminCreateRefundParams{
 			OrderID:          order.ID,
@@ -134,7 +134,7 @@ func (r *PaymentRepository) ApplyProviderRefund(ctx context.Context, params Prov
 		if _, err := txRepo.CreateEvent(ctx, event); err != nil {
 			return err
 		}
-		return txRepo.enqueuePaymentRefundedCallback(ctx, order, attempt, fulfillment.ID, result.RefundID, params.Reason)
+		return txRepo.enqueuePaymentRefundedCallback(ctx, order, attempt, uint64(fulfillment.ID), result.RefundID, params.Reason)
 	})
 
 	return result, err
@@ -153,8 +153,8 @@ func (r *PaymentRepository) enqueuePaymentRefundedCallback(
 		return err
 	}
 	payload := paymentRefundedCallbackPayload{
-		OrderID:        order.ID,
-		AttemptID:      attempt.ID,
+		OrderID:        uint64(order.ID),
+		AttemptID:      uint64(attempt.ID),
 		FulfillmentID:  fulfillmentID,
 		RefundID:       refundID,
 		WorkspaceID:    order.WorkspaceID,
@@ -162,16 +162,16 @@ func (r *PaymentRepository) enqueuePaymentRefundedCallback(
 		PlatformID:     order.PlatformID,
 		PlatformUserID: order.PlatformUserID,
 		ProductID:      order.ProductID,
-		Quantity:       order.Quantity,
+		Quantity:       uint64(order.Quantity),
 		ProviderCode:   attempt.ProviderCode,
 		AssetCode:      attempt.AssetCode,
-		AmountMinor:    attempt.AmountMinor,
+		AmountMinor:    uint64(attempt.AmountMinor),
 		Rewards:        make([]paymentCallbackReward, 0, len(items)),
 	}
 	for _, item := range items {
 		payload.Rewards = append(payload.Rewards, paymentCallbackReward{
 			Key: item.ItemID, Type: string(item.RewardType), Quantity: item.Quantity,
-			Scale: item.Scale,
+			Scale: uint16(item.Scale),
 			Unit:  orderDurationUnitPtr(item.DurationUnit),
 		})
 	}
@@ -199,7 +199,7 @@ func (r *PaymentRepository) enqueuePaymentRefundedCallback(
 }
 
 func (r *PaymentRepository) GetAttempt(ctx context.Context, id uint64) (Attempt, error) {
-	attempt, err := r.q.AdminGetPaymentAttempt(ctx, id)
+	attempt, err := r.q.AdminGetPaymentAttempt(ctx, int64(id))
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -209,8 +209,8 @@ func (r *PaymentRepository) GetAttempt(ctx context.Context, id uint64) (Attempt,
 func (r *PaymentRepository) GetRefundAttempt(ctx context.Context, workspaceID string, orderID uint64) (Attempt, error) {
 	attempts, err := r.q.AdminListPaymentAttempts(ctx, sqlc.AdminListPaymentAttemptsParams{
 		WorkspaceID: workspaceID,
-		Column2:     orderID,
-		OrderID:     orderID,
+		Column2:     int64(orderID),
+		OrderID:     int64(orderID),
 		Column6:     string(sqlc.PaymentAttemptStatusSucceeded),
 		Status:      sqlc.PaymentAttemptStatusSucceeded,
 		Limit:       1,
@@ -230,11 +230,11 @@ func (r *PaymentRepository) CreateRefund(ctx context.Context, params RefundCreat
 		status = string(sqlc.PaymentRefundStatusCreated)
 	}
 	id, err := r.q.AdminCreateRefund(ctx, sqlc.AdminCreateRefundParams{
-		OrderID:          params.OrderID,
-		AttemptID:        params.AttemptID,
+		OrderID:          int64(params.OrderID),
+		AttemptID:        int64(params.AttemptID),
 		ProviderCode:     params.ProviderCode,
 		ProviderRefundID: sqlwrap.NullFromPtr(params.ProviderRefundID, func(v string) sql.NullString { return sql.NullString{String: v, Valid: true} }),
-		AmountMinor:      params.AmountMinor,
+		AmountMinor:      int64(params.AmountMinor),
 		AssetCode:        params.AssetCode,
 		Status:           sqlc.PaymentRefundStatus(status),
 		Reason:           sqlwrap.NullFromPtr(params.Reason, func(v string) sql.NullString { return sql.NullString{String: v, Valid: true} }),
@@ -244,7 +244,7 @@ func (r *PaymentRepository) CreateRefund(ctx context.Context, params RefundCreat
 
 func (r *PaymentRepository) UpdateRefundStatus(ctx context.Context, id uint64, status string, reason string) (int64, error) {
 	return r.q.AdminUpdateRefundStatus(ctx, sqlc.AdminUpdateRefundStatusParams{
-		ID:     id,
+		ID:     int64(id),
 		Status: sqlc.PaymentRefundStatus(status),
 		Reason: sqlwrap.NullFromPtr(nilIfEmpty(reason), func(v string) sql.NullString {
 			return sql.NullString{String: v, Valid: true}
@@ -254,7 +254,7 @@ func (r *PaymentRepository) UpdateRefundStatus(ctx context.Context, id uint64, s
 
 func (r *PaymentRepository) SetRefundProviderID(ctx context.Context, id uint64, providerRefundID string) (int64, error) {
 	return r.q.AdminSetRefundProviderID(ctx, sqlc.AdminSetRefundProviderIDParams{
-		ID: id,
+		ID: int64(id),
 		ProviderRefundID: sqlwrap.NullFromPtr(nilIfEmpty(providerRefundID), func(v string) sql.NullString {
 			return sql.NullString{String: v, Valid: true}
 		}),
@@ -263,7 +263,7 @@ func (r *PaymentRepository) SetRefundProviderID(ctx context.Context, id uint64, 
 
 func (r *PaymentRepository) UpdateAttemptStatus(ctx context.Context, id uint64, status string) error {
 	return r.q.UpdatePaymentAttemptStatus(ctx, sqlc.UpdatePaymentAttemptStatusParams{
-		ID:     id,
+		ID:     int64(id),
 		Status: sqlc.PaymentAttemptStatus(status),
 	})
 }
@@ -271,7 +271,7 @@ func (r *PaymentRepository) UpdateAttemptStatus(ctx context.Context, id uint64, 
 func (r *PaymentRepository) UpdateOrderStatus(ctx context.Context, workspaceID string, id uint64, status string) (int64, error) {
 	return r.q.AdminUpdateOrderStatus(ctx, sqlc.AdminUpdateOrderStatusParams{
 		WorkspaceID: workspaceID,
-		ID:          id,
+		ID:          int64(id),
 		Status:      sqlc.PaymentOrderStatus(status),
 		Column2:     status,
 		Column3:     status,

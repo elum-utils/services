@@ -141,9 +141,9 @@ func (r *Repository) importSequencesBulk(ctx context.Context, workspaceID string
 		result.Imported.Sequences++
 	}
 	return r.execImportBulk(ctx, "task_sequence",
-		[]string{"workspace_id", "`key`", "position", "is_active"},
+		[]string{"workspace_id", "key", "position", "is_active"},
 		rows,
-		"position = VALUES(position), is_active = VALUES(is_active), deleted_at = NULL, updated_at = NOW()",
+		"ON CONFLICT (workspace_id, key) DO UPDATE SET position = EXCLUDED.position, is_active = EXCLUDED.is_active, deleted_at = NULL, updated_at = now()",
 	)
 }
 
@@ -164,16 +164,16 @@ func (r *Repository) importGroupsBulk(ctx context.Context, workspaceID string, g
 		}
 	}
 	if err := r.execImportBulk(ctx, "task_group",
-		[]string{"workspace_id", "`key`", "position", "is_active"},
+		[]string{"workspace_id", "key", "position", "is_active"},
 		groupRows,
-		"position = VALUES(position), is_active = VALUES(is_active), deleted_at = NULL, updated_at = NOW()",
+		"ON CONFLICT (workspace_id, key) DO UPDATE SET position = EXCLUDED.position, is_active = EXCLUDED.is_active, deleted_at = NULL, updated_at = now()",
 	); err != nil {
 		return err
 	}
 	return r.execImportBulk(ctx, "task_group_localization",
 		[]string{"workspace_id", "group_key", "locale", "title", "description"},
 		localizationRows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, group_key, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
 	)
 }
 
@@ -219,20 +219,21 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 	}
 	if err := r.execImportBulk(ctx, "task_definition",
 		[]string{
-			"workspace_id", "`key`", "group_key", "sequence_key", "sequence_position",
+			"workspace_id", "key", "group_key", "sequence_key", "sequence_position",
 			"task_kind", "action_key", "action_kind", "claim_mode", "start_mode", "target_count",
 			"reset_unit", "reset_every", "position", "payload", "target",
 			"integration_kind", "integration_provider", "integration_payload", "image_url",
 			"is_visible", "is_active", "start_at", "end_at",
 		},
 		rows,
-		"group_key = VALUES(group_key), sequence_key = VALUES(sequence_key), sequence_position = VALUES(sequence_position), "+
-			"task_kind = VALUES(task_kind), action_key = VALUES(action_key), action_kind = VALUES(action_kind), "+
-			"claim_mode = VALUES(claim_mode), start_mode = VALUES(start_mode), target_count = VALUES(target_count), reset_unit = VALUES(reset_unit), "+
-			"reset_every = VALUES(reset_every), position = VALUES(position), payload = VALUES(payload), target = VALUES(target), "+
-			"integration_kind = VALUES(integration_kind), integration_provider = VALUES(integration_provider), "+
-			"integration_payload = VALUES(integration_payload), image_url = VALUES(image_url), is_visible = VALUES(is_visible), "+
-			"is_active = VALUES(is_active), start_at = VALUES(start_at), end_at = VALUES(end_at), deleted_at = NULL, updated_at = NOW()",
+		"ON CONFLICT (workspace_id, key) DO UPDATE SET "+
+			"group_key = EXCLUDED.group_key, sequence_key = EXCLUDED.sequence_key, sequence_position = EXCLUDED.sequence_position, "+
+			"task_kind = EXCLUDED.task_kind, action_key = EXCLUDED.action_key, action_kind = EXCLUDED.action_kind, "+
+			"claim_mode = EXCLUDED.claim_mode, start_mode = EXCLUDED.start_mode, target_count = EXCLUDED.target_count, reset_unit = EXCLUDED.reset_unit, "+
+			"reset_every = EXCLUDED.reset_every, position = EXCLUDED.position, payload = EXCLUDED.payload, target = EXCLUDED.target, "+
+			"integration_kind = EXCLUDED.integration_kind, integration_provider = EXCLUDED.integration_provider, "+
+			"integration_payload = EXCLUDED.integration_payload, image_url = EXCLUDED.image_url, is_visible = EXCLUDED.is_visible, "+
+			"is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at, deleted_at = NULL, updated_at = now()",
 	); err != nil {
 		return nil, err
 	}
@@ -246,7 +247,7 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 	resultIDs := make(map[string]uint64, len(needed))
 	for _, task := range taskRows {
 		if _, ok := needed[task.Key]; ok {
-			resultIDs[task.Key] = task.ID
+			resultIDs[task.Key] = uint64(task.ID)
 		}
 	}
 	return resultIDs, nil
@@ -272,7 +273,7 @@ func (r *Repository) importTaskLocalizationsBulk(ctx context.Context, workspaceI
 	return r.execImportBulk(ctx, "task_localization",
 		[]string{"workspace_id", "task_id", "locale", "title", "description"},
 		rows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, task_id, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
 	)
 }
 
@@ -299,8 +300,9 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 	return r.execImportBulk(ctx, "task_reward",
 		[]string{"workspace_id", "task_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit", "position"},
 		rows,
-		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
-			"duration_unit = VALUES(duration_unit), position = VALUES(position), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, task_id, reward_key) DO UPDATE SET "+
+			"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
+			"duration_unit = EXCLUDED.duration_unit, position = EXCLUDED.position, updated_at = now()",
 	)
 }
 
@@ -335,8 +337,9 @@ func (r *Repository) importComplexConditionsBulk(ctx context.Context, workspaceI
 	return r.execImportBulk(ctx, "task_complex_condition",
 		[]string{"workspace_id", "parent_task_id", "condition_task_id", "required_status", "position", "is_required"},
 		rows,
-		"required_status = VALUES(required_status), position = VALUES(position), "+
-			"is_required = VALUES(is_required), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, parent_task_id, condition_task_id) DO UPDATE SET "+
+			"required_status = EXCLUDED.required_status, position = EXCLUDED.position, "+
+			"is_required = EXCLUDED.is_required, updated_at = now()",
 	)
 }
 
@@ -362,7 +365,9 @@ func (r *Repository) importPartnerConfigsBulk(ctx context.Context, workspaceID s
 	return r.execImportBulk(ctx, "task_partner_config",
 		[]string{"workspace_id", "provider", "group_key", "platform", "is_enabled", "secret", "webhook_secret", "target", "settings"},
 		rows,
-		"is_enabled = VALUES(is_enabled), secret = VALUES(secret), webhook_secret = VALUES(webhook_secret), target = VALUES(target), settings = VALUES(settings), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, provider, group_key, platform) DO UPDATE SET "+
+			"is_enabled = EXCLUDED.is_enabled, secret = EXCLUDED.secret, webhook_secret = EXCLUDED.webhook_secret, "+
+			"target = EXCLUDED.target, settings = EXCLUDED.settings, updated_at = now()",
 	)
 }
 
@@ -392,23 +397,24 @@ func (r *Repository) importPartnerRewardRulesBulk(ctx context.Context, workspace
 			"reward_type", "quantity", "scale", "duration_unit", "position", "is_enabled",
 		},
 		rows,
-		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
-			"duration_unit = VALUES(duration_unit), position = VALUES(position), is_enabled = VALUES(is_enabled), updated_at = NOW()",
+		"ON CONFLICT (workspace_id, provider, group_key, external_type, reward_key) DO UPDATE SET "+
+			"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
+			"duration_unit = EXCLUDED.duration_unit, position = EXCLUDED.position, is_enabled = EXCLUDED.is_enabled, updated_at = now()",
 	)
 }
 
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, duplicateUpdate string) error {
+func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictUpdate string) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, duplicateUpdate)
+	query, args := compileImportBulkUpsert(table, columns, rows, conflictUpdate)
 	return repositoryExec(ctx, r, func(ctx context.Context) error {
 		_, err := r.executor.ExecContext(ctx, query, args...)
 		return err
 	})
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, duplicateUpdate string) (string, []any) {
+func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictUpdate string) (string, []any) {
 	var builder strings.Builder
 	builder.Grow(len(rows) * len(columns) * 4)
 	builder.WriteString("INSERT INTO ")
@@ -426,14 +432,15 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, dupli
 			if columnIndex > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteByte('?')
+			builder.WriteByte('$')
+			builder.WriteString(fmt.Sprint(len(args) + columnIndex + 1))
 		}
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
-	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
-		builder.WriteString(duplicateUpdate)
+	if conflictUpdate != "" {
+		builder.WriteByte(' ')
+		builder.WriteString(conflictUpdate)
 	}
 	return builder.String(), args
 }
@@ -459,17 +466,17 @@ func defaultJSON(value []byte, fallback string) string {
 	return string(value)
 }
 
-func nullRewardDurationUnit(value *string) tasksqlc.NullTaskRewardDurationUnit {
-	return tasksqlc.NullTaskRewardDurationUnit{
-		TaskRewardDurationUnit: tasksqlc.TaskRewardDurationUnit(taskStringValue(value)),
-		Valid:                  value != nil,
+func nullRewardDurationUnit(value *string) sql.NullString {
+	return sql.NullString{
+		String: taskStringValue(value),
+		Valid:  value != nil,
 	}
 }
 
-func nullPartnerRewardDurationUnit(value *string) tasksqlc.NullTaskPartnerRewardRuleDurationUnit {
-	return tasksqlc.NullTaskPartnerRewardRuleDurationUnit{
-		TaskPartnerRewardRuleDurationUnit: tasksqlc.TaskPartnerRewardRuleDurationUnit(taskStringValue(value)),
-		Valid:                             value != nil,
+func nullPartnerRewardDurationUnit(value *string) sql.NullString {
+	return sql.NullString{
+		String: taskStringValue(value),
+		Valid:  value != nil,
 	}
 }
 

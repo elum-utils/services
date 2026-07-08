@@ -192,7 +192,7 @@ func (r *PaymentRepository) UpsertProduct(ctx context.Context, params ProductUps
 			DescriptionKey: sqlwrap.NullFromPtr(params.DescriptionKey, func(v string) sql.NullString {
 				return sql.NullString{String: v, Valid: true}
 			}),
-			Target: target,
+			Target: rawMessageParam(target),
 			ImageUrl: sqlwrap.NullFromPtr(params.ImageURL, func(v string) sql.NullString {
 				return sql.NullString{String: v, Valid: true}
 			}),
@@ -391,7 +391,7 @@ func (r *PaymentRepository) UpsertProductItem(ctx context.Context, params Produc
 			ItemID:      params.ItemID,
 			RewardType:  paymentsqlc.PaymentProductItemRewardType(rewardType),
 			Quantity:    params.Quantity,
-			Scale:       params.Scale,
+			Scale:       int16(params.Scale),
 			DurationUnit: paymentsqlc.NullPaymentProductItemDurationUnit{
 				PaymentProductItemDurationUnit: paymentsqlc.PaymentProductItemDurationUnit(pointerString(params.DurationUnit)),
 				Valid:                          params.DurationUnit != nil,
@@ -479,7 +479,7 @@ func (r *PaymentRepository) CreateProductPrice(ctx context.Context, params Produ
 		} else {
 			id, err = tx.q.CreateProductPrice(ctx, paymentsqlc.CreateProductPriceParams{
 				WorkspaceID: workspaceID, ProductID: params.ProductID, AssetCode: params.AssetCode,
-				ListAmountMinor: amounts.list, DiscountAmountMinor: amounts.discount,
+				ListAmountMinor: int64(amounts.list), DiscountAmountMinor: int64(amounts.discount),
 				IsPromotion: params.IsPromotion, StartsAt: startsAt, EndsAt: endsAt,
 			})
 		}
@@ -514,7 +514,7 @@ func (r *PaymentRepository) UpdateProductPrice(ctx context.Context, params Produ
 	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
 		productID, err := tx.q.GetProductPriceProductID(ctx, paymentsqlc.GetProductPriceProductIDParams{
 			WorkspaceID: workspaceID,
-			ID:          params.ID,
+			ID:          int64(params.ID),
 		})
 		if err != nil {
 			return err
@@ -534,8 +534,8 @@ func (r *PaymentRepository) UpdateProductPrice(ctx context.Context, params Produ
 			rows, err = tx.updateDynamicProductPrice(ctx, workspaceID, params, amounts, startsAt, endsAt)
 		} else {
 			rows, err = tx.q.UpdateProductPrice(ctx, paymentsqlc.UpdateProductPriceParams{
-				ID: params.ID, WorkspaceID: workspaceID, AssetCode: params.AssetCode,
-				ListAmountMinor: amounts.list, DiscountAmountMinor: amounts.discount,
+				ID: int64(params.ID), WorkspaceID: workspaceID, AssetCode: params.AssetCode,
+				ListAmountMinor: int64(amounts.list), DiscountAmountMinor: int64(amounts.discount),
 				IsPromotion: params.IsPromotion, StartsAt: startsAt, EndsAt: endsAt,
 			})
 		}
@@ -556,14 +556,14 @@ func (r *PaymentRepository) DeleteProductPrice(ctx context.Context, workspaceID 
 	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
 		productID, err := tx.q.GetProductPriceProductID(ctx, paymentsqlc.GetProductPriceProductIDParams{
 			WorkspaceID: workspaceID,
-			ID:          id,
+			ID:          int64(id),
 		})
 		if err != nil {
 			return err
 		}
 		rows, err = tx.q.DeleteProductPrice(ctx, paymentsqlc.DeleteProductPriceParams{
 			WorkspaceID: workspaceID,
-			ID:          id,
+			ID:          int64(id),
 		})
 		if err != nil {
 			return err

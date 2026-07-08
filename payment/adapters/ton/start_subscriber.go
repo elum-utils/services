@@ -45,7 +45,7 @@ func (a *TON) StartSubscriber(ctx context.Context, params SubscriberParams) (*Su
 		SourceKey:    params.WalletAddress,
 	})
 	if err == nil {
-		lastLT = cursor.CursorSequence
+		lastLT = uint64(cursor.CursorSequence)
 	} else if err != sql.ErrNoRows {
 		return nil, err
 	}

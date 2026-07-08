@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -31,10 +30,13 @@ func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale s
 		first := rows[0]
 		value := Calendar{
 			ID: first.ID, WorkspaceID: first.WorkspaceID, Type: first.Type,
-			Mode: string(first.Mode), IntervalType: string(first.IntervalType),
-			IntervalUnit: string(first.IntervalUnit), IntervalCount: first.IntervalCount,
-			ResetAfterIntervals: first.ResetAfterIntervals, EndBehavior: string(first.EndBehavior),
-			Timezone: first.Timezone, HideFutureRewards: first.HideFutureRewards,
+			Mode:                first.Mode,
+			IntervalType:        first.IntervalType,
+			IntervalUnit:        first.IntervalUnit,
+			IntervalCount:       uint32(first.IntervalCount),
+			ResetAfterIntervals: uint32(first.ResetAfterIntervals),
+			EndBehavior:         first.EndBehavior,
+			Timezone:            first.Timezone, HideFutureRewards: first.HideFutureRewards,
 			IsActive: first.IsActive, StartAt: sqlwrap.NullTimePtr(first.StartAt),
 			EndAt: sqlwrap.NullTimePtr(first.EndAt), DeletedAt: sqlwrap.NullTimePtr(first.DeletedAt),
 			CreatedAt: first.CreatedAt, UpdatedAt: first.UpdatedAt,
@@ -57,27 +59,64 @@ func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale s
 }
 
 func (r *Repository) ListActive(ctx context.Context, workspaceID, locale string, now time.Time) ([]Calendar, error) {
-	rows, err := r.q.ListActiveCalendars(ctx, calendarsqlc.ListActiveCalendarsParams{
-		Locale: locale, WorkspaceID: workspaceID,
-		StartAt: sql.NullTime{Time: now, Valid: true}, EndAt: sql.NullTime{Time: now, Valid: true},
+	key := calendarCacheKey("user_list_active_catalog", workspaceID, locale)
+	rememberCalendarCacheKey(workspaceID, key)
+	catalog, err := sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+		Key:          key,
+		Timeout:      r.timeout,
+		CacheL1Delay: r.cacheL1,
+		CacheL2Delay: r.cacheL2,
+	}, func(ctx context.Context) ([]Calendar, error) {
+		rows, err := r.q.ListActiveCalendars(ctx, calendarsqlc.ListActiveCalendarsParams{
+			Locale:      locale,
+			WorkspaceID: workspaceID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		result := make([]Calendar, 0, len(rows))
+		for _, row := range rows {
+			value := Calendar{
+				ID:          row.ID,
+				WorkspaceID: row.WorkspaceID,
+				Type:        row.Type,
+				Mode:        row.Mode,
+				IsActive:    row.IsActive,
+				StartAt:     sqlwrap.NullTimePtr(row.StartAt),
+				EndAt:       sqlwrap.NullTimePtr(row.EndAt),
+				DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
+			}
+			if row.Locale.Valid {
+				value.Localization = &Localization{
+					WorkspaceID: row.WorkspaceID,
+					CalendarID:  row.ID,
+					Locale:      row.Locale.String,
+					Title:       row.Title.String,
+					Description: row.Description.String,
+				}
+			}
+			result = append(result, value)
+		}
+		return result, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	result := make([]Calendar, 0, len(rows))
-	for _, row := range rows {
-		value := Calendar{
-			ID: row.ID, WorkspaceID: row.WorkspaceID, Type: row.Type,
-			Mode: string(row.Mode), IsActive: row.IsActive,
-			StartAt: sqlwrap.NullTimePtr(row.StartAt), EndAt: sqlwrap.NullTimePtr(row.EndAt),
+	result := make([]Calendar, 0, len(catalog))
+	for _, calendar := range catalog {
+		if calendarVisibleAt(calendar, now) {
+			result = append(result, calendar)
 		}
-		if row.Locale.Valid {
-			value.Localization = &Localization{
-				WorkspaceID: row.WorkspaceID, CalendarID: row.ID, Locale: row.Locale.String,
-				Title: row.Title.String, Description: row.Description.String,
-			}
-		}
-		result = append(result, value)
 	}
 	return result, nil
+}
+
+func calendarVisibleAt(value Calendar, now time.Time) bool {
+	if !value.IsActive || value.DeletedAt != nil {
+		return false
+	}
+	if value.StartAt != nil && value.StartAt.After(now) {
+		return false
+	}
+	return value.EndAt == nil || value.EndAt.After(now)
 }

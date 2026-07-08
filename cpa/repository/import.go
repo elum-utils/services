@@ -84,10 +84,10 @@ func (r *Repository) importOffersBulk(ctx context.Context, workspaceID string, o
 			"generated_length", "generated_alphabet", "is_active", "start_at", "end_at",
 		},
 		rows,
-		"payload = VALUES(payload), target = VALUES(target), code_mode = VALUES(code_mode), "+
-			"code_source = VALUES(code_source), shared_code = VALUES(shared_code), generated_length = VALUES(generated_length), "+
-			"generated_alphabet = VALUES(generated_alphabet), is_active = VALUES(is_active), start_at = VALUES(start_at), "+
-			"end_at = VALUES(end_at), updated_at = NOW()",
+		"payload = EXCLUDED.payload, target = EXCLUDED.target, code_mode = EXCLUDED.code_mode, "+
+			"code_source = EXCLUDED.code_source, shared_code = EXCLUDED.shared_code, generated_length = EXCLUDED.generated_length, "+
+			"generated_alphabet = EXCLUDED.generated_alphabet, is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, "+
+			"end_at = EXCLUDED.end_at, updated_at = now()",
 	)
 }
 
@@ -105,7 +105,7 @@ func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID st
 	return r.execImportBulk(ctx, "cpa_localization",
 		[]string{"workspace_id", "cpa_id", "locale", "title", "description"},
 		rows,
-		"title = VALUES(title), description = VALUES(description), updated_at = NOW()",
+		"title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
 	)
 }
 
@@ -126,8 +126,8 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 	return r.execImportBulk(ctx, "cpa_reward",
 		[]string{"workspace_id", "cpa_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit"},
 		rows,
-		"reward_type = VALUES(reward_type), quantity = VALUES(quantity), scale = VALUES(scale), "+
-			"duration_unit = VALUES(duration_unit), updated_at = NOW()",
+		"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
+			"duration_unit = EXCLUDED.duration_unit, updated_at = now()",
 	)
 }
 
@@ -157,16 +157,32 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, dupli
 			if columnIndex > 0 {
 				builder.WriteString(", ")
 			}
-			builder.WriteByte('?')
+			builder.WriteByte('$')
+			builder.WriteString(fmt.Sprint(len(args) + columnIndex + 1))
 		}
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
 	if duplicateUpdate != "" {
-		builder.WriteString(" ON DUPLICATE KEY UPDATE ")
+		builder.WriteString(" ON CONFLICT ")
+		builder.WriteString(importConflictTarget(table))
+		builder.WriteString(" DO UPDATE SET ")
 		builder.WriteString(duplicateUpdate)
 	}
 	return builder.String(), args
+}
+
+func importConflictTarget(table string) string {
+	switch table {
+	case "cpa_offer":
+		return "(workspace_id, id)"
+	case "cpa_localization":
+		return "(workspace_id, cpa_id, locale)"
+	case "cpa_reward":
+		return "(workspace_id, cpa_id, reward_key)"
+	default:
+		return ""
+	}
 }
 
 func validateExportPackage(pkg ExportPackage) error {

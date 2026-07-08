@@ -43,6 +43,31 @@ func queryPaymentCache[T any](
 	return value, err
 }
 
+func queryPaymentVersionedCache[T any](
+	ctx context.Context,
+	repository *PaymentRepository,
+	scope string,
+	versionScope []any,
+	key string,
+	loader func(context.Context) (T, error),
+) (T, error) {
+	value, err := sqlwrap.Query(ctx, repository.db, sqlwrap.Params{
+		Key:               key,
+		Timeout:           repository.timeout,
+		CacheL1Delay:      repository.cacheL1,
+		CacheL2Delay:      repository.cacheL2,
+		CacheVersionScope: versionScope,
+	}, loader)
+	if err == nil {
+		rememberPaymentCacheKey(scope, key)
+	}
+	return value, err
+}
+
+func paymentProductLimitConfigVersionScope(workspaceID string) []any {
+	return []any{"payment", "product_limit_config", workspaceID}
+}
+
 func cloneSlice[T any](items []T) []T {
 	if len(items) == 0 {
 		return nil
@@ -56,9 +81,14 @@ func InvalidateWorkspaceCache(db *sqlwrap.Client, workspaceID string) error {
 	if db == nil || workspaceID == "" {
 		return nil
 	}
-	return invalidatePaymentCache(db, func(scope string) bool {
+	outErr := db.BumpCacheVersion(paymentProductLimitConfigVersionScope(workspaceID)...)
+	deleteErr := invalidatePaymentCache(db, func(scope string) bool {
 		return scope == workspaceID
 	})
+	if outErr != nil {
+		return outErr
+	}
+	return deleteErr
 }
 
 func InvalidateAllCache(db *sqlwrap.Client) error {

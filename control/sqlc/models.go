@@ -6,179 +6,11 @@ package sqlc
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
-
-type ControlAccountStatus string
-
-const (
-	ControlAccountStatusActive   ControlAccountStatus = "active"
-	ControlAccountStatusDisabled ControlAccountStatus = "disabled"
-)
-
-func (e *ControlAccountStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ControlAccountStatus(s)
-	case string:
-		*e = ControlAccountStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ControlAccountStatus: %T", src)
-	}
-	return nil
-}
-
-type NullControlAccountStatus struct {
-	ControlAccountStatus ControlAccountStatus `json:"control_account_status"`
-	Valid                bool                 `json:"valid"` // Valid is true if ControlAccountStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullControlAccountStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.ControlAccountStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ControlAccountStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullControlAccountStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ControlAccountStatus), nil
-}
-
-type ControlAuditEventResult string
-
-const (
-	ControlAuditEventResultSucceeded ControlAuditEventResult = "succeeded"
-	ControlAuditEventResultFailed    ControlAuditEventResult = "failed"
-)
-
-func (e *ControlAuditEventResult) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ControlAuditEventResult(s)
-	case string:
-		*e = ControlAuditEventResult(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ControlAuditEventResult: %T", src)
-	}
-	return nil
-}
-
-type NullControlAuditEventResult struct {
-	ControlAuditEventResult ControlAuditEventResult `json:"control_audit_event_result"`
-	Valid                   bool                    `json:"valid"` // Valid is true if ControlAuditEventResult is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullControlAuditEventResult) Scan(value interface{}) error {
-	if value == nil {
-		ns.ControlAuditEventResult, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ControlAuditEventResult.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullControlAuditEventResult) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ControlAuditEventResult), nil
-}
-
-type ControlWorkspaceMemberStatus string
-
-const (
-	ControlWorkspaceMemberStatusActive  ControlWorkspaceMemberStatus = "active"
-	ControlWorkspaceMemberStatusRemoved ControlWorkspaceMemberStatus = "removed"
-)
-
-func (e *ControlWorkspaceMemberStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ControlWorkspaceMemberStatus(s)
-	case string:
-		*e = ControlWorkspaceMemberStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ControlWorkspaceMemberStatus: %T", src)
-	}
-	return nil
-}
-
-type NullControlWorkspaceMemberStatus struct {
-	ControlWorkspaceMemberStatus ControlWorkspaceMemberStatus `json:"control_workspace_member_status"`
-	Valid                        bool                         `json:"valid"` // Valid is true if ControlWorkspaceMemberStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullControlWorkspaceMemberStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.ControlWorkspaceMemberStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ControlWorkspaceMemberStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullControlWorkspaceMemberStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ControlWorkspaceMemberStatus), nil
-}
-
-type ControlWorkspaceStatus string
-
-const (
-	ControlWorkspaceStatusActive   ControlWorkspaceStatus = "active"
-	ControlWorkspaceStatusArchived ControlWorkspaceStatus = "archived"
-)
-
-func (e *ControlWorkspaceStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ControlWorkspaceStatus(s)
-	case string:
-		*e = ControlWorkspaceStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ControlWorkspaceStatus: %T", src)
-	}
-	return nil
-}
-
-type NullControlWorkspaceStatus struct {
-	ControlWorkspaceStatus ControlWorkspaceStatus `json:"control_workspace_status"`
-	Valid                  bool                   `json:"valid"` // Valid is true if ControlWorkspaceStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullControlWorkspaceStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.ControlWorkspaceStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ControlWorkspaceStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullControlWorkspaceStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ControlWorkspaceStatus), nil
-}
 
 type ControlAccessService struct {
 	Service   string    `json:"service"`
@@ -188,34 +20,34 @@ type ControlAccessService struct {
 }
 
 type ControlAccount struct {
-	ID          string               `json:"id"`
-	DisplayName string               `json:"display_name"`
-	Status      ControlAccountStatus `json:"status"`
-	CreatedAt   time.Time            `json:"created_at"`
-	UpdatedAt   time.Time            `json:"updated_at"`
+	ID          string    `json:"id"`
+	DisplayName string    `json:"display_name"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type ControlAuditEvent struct {
-	ID          string                  `json:"id"`
-	WorkspaceID sql.NullString          `json:"workspace_id"`
-	ActorID     sql.NullString          `json:"actor_id"`
-	MethodKey   string                  `json:"method_key"`
-	TargetType  string                  `json:"target_type"`
-	TargetID    string                  `json:"target_id"`
-	BeforeData  json.RawMessage         `json:"before_data"`
-	AfterData   json.RawMessage         `json:"after_data"`
-	Result      ControlAuditEventResult `json:"result"`
-	RequestID   string                  `json:"request_id"`
-	OccurredAt  time.Time               `json:"occurred_at"`
+	ID          string                `json:"id"`
+	WorkspaceID sql.NullString        `json:"workspace_id"`
+	ActorID     sql.NullString        `json:"actor_id"`
+	MethodKey   string                `json:"method_key"`
+	TargetType  string                `json:"target_type"`
+	TargetID    string                `json:"target_id"`
+	BeforeData  pqtype.NullRawMessage `json:"before_data"`
+	AfterData   pqtype.NullRawMessage `json:"after_data"`
+	Result      string                `json:"result"`
+	RequestID   string                `json:"request_id"`
+	OccurredAt  time.Time             `json:"occurred_at"`
 }
 
 type ControlIdentity struct {
-	AccountID       string          `json:"account_id"`
-	Provider        string          `json:"provider"`
-	ProviderSubject string          `json:"provider_subject"`
-	Payload         json.RawMessage `json:"payload"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	AccountID       string                `json:"account_id"`
+	Provider        string                `json:"provider"`
+	ProviderSubject string                `json:"provider_subject"`
+	Payload         pqtype.NullRawMessage `json:"payload"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
 }
 
 type ControlLocalization struct {
@@ -302,13 +134,13 @@ type ControlTwoFactorChallenge struct {
 }
 
 type ControlWorkspace struct {
-	ID        string                 `json:"id"`
-	Slug      string                 `json:"slug"`
-	Title     string                 `json:"title"`
-	Status    ControlWorkspaceStatus `json:"status"`
-	CreatedBy string                 `json:"created_by"`
-	CreatedAt time.Time              `json:"created_at"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	ID        string    `json:"id"`
+	Slug      string    `json:"slug"`
+	Title     string    `json:"title"`
+	Status    string    `json:"status"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ControlWorkspaceInvite struct {
@@ -317,7 +149,7 @@ type ControlWorkspaceInvite struct {
 	CreatedBy   string        `json:"created_by"`
 	TokenHash   string        `json:"token_hash"`
 	MaxUses     sql.NullInt32 `json:"max_uses"`
-	UsedCount   uint32        `json:"used_count"`
+	UsedCount   int32         `json:"used_count"`
 	ExpiresAt   sql.NullTime  `json:"expires_at"`
 	RevokedAt   sql.NullTime  `json:"revoked_at"`
 	CreatedAt   time.Time     `json:"created_at"`
@@ -329,9 +161,9 @@ type ControlWorkspaceInviteRole struct {
 }
 
 type ControlWorkspaceMember struct {
-	WorkspaceID string                       `json:"workspace_id"`
-	AccountID   string                       `json:"account_id"`
-	Status      ControlWorkspaceMemberStatus `json:"status"`
-	JoinedAt    time.Time                    `json:"joined_at"`
-	UpdatedAt   time.Time                    `json:"updated_at"`
+	WorkspaceID string    `json:"workspace_id"`
+	AccountID   string    `json:"account_id"`
+	Status      string    `json:"status"`
+	JoinedAt    time.Time `json:"joined_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

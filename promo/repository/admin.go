@@ -8,6 +8,7 @@ import (
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
+	"github.com/sqlc-dev/pqtype"
 )
 
 type SavePromoParams struct {
@@ -32,8 +33,8 @@ func (r *Repository) CreatePromo(ctx context.Context, params SavePromoParams) (u
 		Code:           params.Code,
 		CodeNormalized: normalizeCode(params.Code),
 		Payload:        params.Payload,
-		Target:         target,
-		MaxActivations: params.MaxActivations,
+		Target:         rawMessageParam(target),
+		MaxActivations: int64(params.MaxActivations),
 		IsActive:       params.IsActive,
 		StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
 			return sql.NullTime{Time: v, Valid: true}
@@ -57,8 +58,8 @@ func (r *Repository) UpdatePromo(ctx context.Context, params SavePromoParams) (i
 		Code:           params.Code,
 		CodeNormalized: normalizeCode(params.Code),
 		Payload:        params.Payload,
-		Target:         target,
-		MaxActivations: params.MaxActivations,
+		Target:         rawMessageParam(target),
+		MaxActivations: int64(params.MaxActivations),
 		IsActive:       params.IsActive,
 		StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
 			return sql.NullTime{Time: v, Valid: true}
@@ -67,7 +68,7 @@ func (r *Repository) UpdatePromo(ctx context.Context, params SavePromoParams) (i
 			return sql.NullTime{Time: v, Valid: true}
 		}),
 		WorkspaceID: params.WorkspaceID,
-		ID:          params.ID,
+		ID:          int64(params.ID),
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -84,7 +85,10 @@ func (r *Repository) GetPromo(ctx context.Context, workspaceID string, id uint64
 		CacheL1Delay: r.cacheL1,
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Promo, error) {
-		row, err := r.q.AdminGetPromo(ctx, promosqlc.AdminGetPromoParams{WorkspaceID: workspaceID, ID: id})
+		row, err := r.q.AdminGetPromo(ctx, promosqlc.AdminGetPromoParams{
+			WorkspaceID: workspaceID,
+			ID:          int64(id),
+		})
 		if err != nil {
 			return Promo{}, err
 		}
@@ -103,7 +107,9 @@ func (r *Repository) ListPromos(ctx context.Context, workspaceID string, limit, 
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Promo, error) {
 		rows, err := r.q.AdminListPromos(ctx, promosqlc.AdminListPromosParams{
-			WorkspaceID: workspaceID, Limit: limit, Offset: offset,
+			WorkspaceID: workspaceID,
+			Limit:       limit,
+			Offset:      offset,
 		})
 		if err != nil {
 			return nil, err
@@ -117,7 +123,10 @@ func (r *Repository) ListPromos(ctx context.Context, workspaceID string, limit, 
 }
 
 func (r *Repository) SoftDeletePromo(ctx context.Context, workspaceID string, id uint64) (int64, error) {
-	rows, err := r.q.AdminSoftDeletePromo(ctx, promosqlc.AdminSoftDeletePromoParams{WorkspaceID: workspaceID, ID: id})
+	rows, err := r.q.AdminSoftDeletePromo(ctx, promosqlc.AdminSoftDeletePromoParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
@@ -126,8 +135,11 @@ func (r *Repository) SoftDeletePromo(ctx context.Context, workspaceID string, id
 
 func (r *Repository) UpsertLocalization(ctx context.Context, value Localization) error {
 	if err := r.q.AdminUpsertLocalization(ctx, promosqlc.AdminUpsertLocalizationParams{
-		WorkspaceID: value.WorkspaceID, PromoID: value.PromoID, Locale: value.Locale,
-		Title: value.Title, Description: value.Description,
+		WorkspaceID: value.WorkspaceID,
+		PromoID:     int64(value.PromoID),
+		Locale:      value.Locale,
+		Title:       value.Title,
+		Description: value.Description,
 	}); err != nil {
 		return err
 	}
@@ -144,7 +156,9 @@ func (r *Repository) GetLocalization(ctx context.Context, workspaceID string, pr
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Localization, error) {
 		row, err := r.q.AdminGetLocalization(ctx, promosqlc.AdminGetLocalizationParams{
-			WorkspaceID: workspaceID, PromoID: promoID, Locale: locale,
+			WorkspaceID: workspaceID,
+			PromoID:     int64(promoID),
+			Locale:      locale,
 		})
 		if err != nil {
 			return Localization{}, err
@@ -163,7 +177,8 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID string, 
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Localization, error) {
 		rows, err := r.q.AdminListLocalizations(ctx, promosqlc.AdminListLocalizationsParams{
-			WorkspaceID: workspaceID, PromoID: promoID,
+			WorkspaceID: workspaceID,
+			PromoID:     int64(promoID),
 		})
 		if err != nil {
 			return nil, err
@@ -178,7 +193,9 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID string, 
 
 func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID string, promoID uint64, locale string) (int64, error) {
 	rows, err := r.q.AdminDeleteLocalization(ctx, promosqlc.AdminDeleteLocalizationParams{
-		WorkspaceID: workspaceID, PromoID: promoID, Locale: locale,
+		WorkspaceID: workspaceID,
+		PromoID:     int64(promoID),
+		Locale:      locale,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -188,12 +205,15 @@ func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID string,
 
 func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, promoID uint64, reward Reward) error {
 	if err := r.q.AdminUpsertReward(ctx, promosqlc.AdminUpsertRewardParams{
-		WorkspaceID: workspaceID, PromoID: promoID, RewardKey: reward.Key,
-		RewardType: promosqlc.PromoRewardRewardType(reward.Type), Quantity: reward.Quantity,
-		Scale: reward.Scale,
-		DurationUnit: promosqlc.NullPromoRewardDurationUnit{
-			PromoRewardDurationUnit: promosqlc.PromoRewardDurationUnit(stringValue(reward.Unit)),
-			Valid:                   reward.Unit != nil,
+		WorkspaceID: workspaceID,
+		PromoID:     int64(promoID),
+		RewardKey:   reward.Key,
+		RewardType:  promosqlc.PromoRewardType(reward.Type),
+		Quantity:    reward.Quantity,
+		Scale:       int16(reward.Scale),
+		DurationUnit: promosqlc.NullPromoDurationUnit{
+			PromoDurationUnit: promosqlc.PromoDurationUnit(stringValue(reward.Unit)),
+			Valid:             reward.Unit != nil,
 		},
 	}); err != nil {
 		return err
@@ -211,7 +231,9 @@ func (r *Repository) GetReward(ctx context.Context, workspaceID string, promoID 
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Reward, error) {
 		row, err := r.q.AdminGetReward(ctx, promosqlc.AdminGetRewardParams{
-			WorkspaceID: workspaceID, PromoID: promoID, RewardKey: key,
+			WorkspaceID: workspaceID,
+			PromoID:     int64(promoID),
+			RewardKey:   key,
 		})
 		if err != nil {
 			return Reward{}, err
@@ -229,7 +251,10 @@ func (r *Repository) ListRewards(ctx context.Context, workspaceID string, promoI
 		CacheL1Delay: r.cacheL1,
 		CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Reward, error) {
-		rows, err := r.q.ListRewards(ctx, promosqlc.ListRewardsParams{WorkspaceID: workspaceID, PromoID: promoID})
+		rows, err := r.q.ListRewards(ctx, promosqlc.ListRewardsParams{
+			WorkspaceID: workspaceID,
+			PromoID:     int64(promoID),
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -246,16 +271,16 @@ func mapReward(row promosqlc.PromoReward) Reward {
 		Key:      row.RewardKey,
 		Type:     string(row.RewardType),
 		Quantity: row.Quantity,
-		Scale:    row.Scale,
+		Scale:    uint16(row.Scale),
 		Unit:     promoDurationUnitPtr(row.DurationUnit),
 	}
 }
 
-func promoDurationUnitPtr(value promosqlc.NullPromoRewardDurationUnit) *string {
+func promoDurationUnitPtr(value promosqlc.NullPromoDurationUnit) *string {
 	if !value.Valid {
 		return nil
 	}
-	unit := string(value.PromoRewardDurationUnit)
+	unit := string(value.PromoDurationUnit)
 	return &unit
 }
 
@@ -268,7 +293,9 @@ func stringValue(value *string) string {
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, promoID uint64, key string) (int64, error) {
 	rows, err := r.q.AdminDeleteReward(ctx, promosqlc.AdminDeleteRewardParams{
-		WorkspaceID: workspaceID, PromoID: promoID, RewardKey: key,
+		WorkspaceID: workspaceID,
+		PromoID:     int64(promoID),
+		RewardKey:   key,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -278,17 +305,42 @@ func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, promo
 
 func mapPromo(row promosqlc.PromoOffer) Promo {
 	return Promo{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Payload: row.Payload, Target: row.Target,
-		MaxActivations: row.MaxActivations, ActivationCount: row.ActivationCount,
-		IsActive: row.IsActive, StartAt: sqlwrap.NullTimePtr(row.StartAt),
-		EndAt: sqlwrap.NullTimePtr(row.EndAt), DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
-		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		ID:              uint64(row.ID),
+		WorkspaceID:     row.WorkspaceID,
+		Code:            row.Code,
+		Payload:         row.Payload,
+		Target:          nullRawMessage(row.Target),
+		MaxActivations:  uint64(row.MaxActivations),
+		ActivationCount: uint64(row.ActivationCount),
+		IsActive:        row.IsActive,
+		StartAt:         sqlwrap.NullTimePtr(row.StartAt),
+		EndAt:           sqlwrap.NullTimePtr(row.EndAt),
+		DeletedAt:       sqlwrap.NullTimePtr(row.DeletedAt),
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
 	}
 }
 
 func mapLocalization(row promosqlc.PromoLocalization) Localization {
 	return Localization{
-		WorkspaceID: row.WorkspaceID, PromoID: row.PromoID, Locale: row.Locale,
-		Title: row.Title, Description: row.Description,
+		WorkspaceID: row.WorkspaceID,
+		PromoID:     uint64(row.PromoID),
+		Locale:      row.Locale,
+		Title:       row.Title,
+		Description: row.Description,
 	}
+}
+
+func nullRawMessage(value pqtype.NullRawMessage) json.RawMessage {
+	if !value.Valid {
+		return nil
+	}
+	return json.RawMessage(value.RawMessage)
+}
+
+func rawMessageParam(value json.RawMessage) pqtype.NullRawMessage {
+	if len(value) == 0 {
+		return pqtype.NullRawMessage{}
+	}
+	return pqtype.NullRawMessage{RawMessage: value, Valid: true}
 }

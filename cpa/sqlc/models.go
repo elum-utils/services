@@ -10,90 +10,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
-type CpaAssignmentCodeMode string
+type CpaAssignmentEventType string
 
 const (
-	CpaAssignmentCodeModeSharedCode   CpaAssignmentCodeMode = "shared_code"
-	CpaAssignmentCodeModePersonalCode CpaAssignmentCodeMode = "personal_code"
+	CpaAssignmentEventTypeIssued    CpaAssignmentEventType = "issued"
+	CpaAssignmentEventTypeCompleted CpaAssignmentEventType = "completed"
 )
 
-func (e *CpaAssignmentCodeMode) Scan(src interface{}) error {
+func (e *CpaAssignmentEventType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = CpaAssignmentCodeMode(s)
+		*e = CpaAssignmentEventType(s)
 	case string:
-		*e = CpaAssignmentCodeMode(s)
+		*e = CpaAssignmentEventType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for CpaAssignmentCodeMode: %T", src)
+		return fmt.Errorf("unsupported scan type for CpaAssignmentEventType: %T", src)
 	}
 	return nil
 }
 
-type NullCpaAssignmentCodeMode struct {
-	CpaAssignmentCodeMode CpaAssignmentCodeMode `json:"cpa_assignment_code_mode"`
-	Valid                 bool                  `json:"valid"` // Valid is true if CpaAssignmentCodeMode is not NULL
+type NullCpaAssignmentEventType struct {
+	CpaAssignmentEventType CpaAssignmentEventType `json:"cpa_assignment_event_type"`
+	Valid                  bool                   `json:"valid"` // Valid is true if CpaAssignmentEventType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullCpaAssignmentCodeMode) Scan(value interface{}) error {
+func (ns *NullCpaAssignmentEventType) Scan(value interface{}) error {
 	if value == nil {
-		ns.CpaAssignmentCodeMode, ns.Valid = "", false
+		ns.CpaAssignmentEventType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.CpaAssignmentCodeMode.Scan(value)
+	return ns.CpaAssignmentEventType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullCpaAssignmentCodeMode) Value() (driver.Value, error) {
+func (ns NullCpaAssignmentEventType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.CpaAssignmentCodeMode), nil
-}
-
-type CpaAssignmentEventEventType string
-
-const (
-	CpaAssignmentEventEventTypeIssued    CpaAssignmentEventEventType = "issued"
-	CpaAssignmentEventEventTypeCompleted CpaAssignmentEventEventType = "completed"
-)
-
-func (e *CpaAssignmentEventEventType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CpaAssignmentEventEventType(s)
-	case string:
-		*e = CpaAssignmentEventEventType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CpaAssignmentEventEventType: %T", src)
-	}
-	return nil
-}
-
-type NullCpaAssignmentEventEventType struct {
-	CpaAssignmentEventEventType CpaAssignmentEventEventType `json:"cpa_assignment_event_event_type"`
-	Valid                       bool                        `json:"valid"` // Valid is true if CpaAssignmentEventEventType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCpaAssignmentEventEventType) Scan(value interface{}) error {
-	if value == nil {
-		ns.CpaAssignmentEventEventType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CpaAssignmentEventEventType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCpaAssignmentEventEventType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CpaAssignmentEventEventType), nil
+	return string(ns.CpaAssignmentEventType), nil
 }
 
 type CpaAssignmentStatus string
@@ -136,6 +96,48 @@ func (ns NullCpaAssignmentStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.CpaAssignmentStatus), nil
+}
+
+type CpaCodeMode string
+
+const (
+	CpaCodeModeSharedCode   CpaCodeMode = "shared_code"
+	CpaCodeModePersonalCode CpaCodeMode = "personal_code"
+)
+
+func (e *CpaCodeMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CpaCodeMode(s)
+	case string:
+		*e = CpaCodeMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CpaCodeMode: %T", src)
+	}
+	return nil
+}
+
+type NullCpaCodeMode struct {
+	CpaCodeMode CpaCodeMode `json:"cpa_code_mode"`
+	Valid       bool        `json:"valid"` // Valid is true if CpaCodeMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCpaCodeMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.CpaCodeMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CpaCodeMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCpaCodeMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CpaCodeMode), nil
 }
 
 type CpaCodeSource string
@@ -224,208 +226,124 @@ func (ns NullCpaCodeStatus) Value() (driver.Value, error) {
 	return string(ns.CpaCodeStatus), nil
 }
 
-type CpaOfferCodeMode string
+type CpaDurationUnit string
 
 const (
-	CpaOfferCodeModeSharedCode   CpaOfferCodeMode = "shared_code"
-	CpaOfferCodeModePersonalCode CpaOfferCodeMode = "personal_code"
+	CpaDurationUnitSecond CpaDurationUnit = "second"
+	CpaDurationUnitMinute CpaDurationUnit = "minute"
+	CpaDurationUnitHour   CpaDurationUnit = "hour"
+	CpaDurationUnitDay    CpaDurationUnit = "day"
+	CpaDurationUnitWeek   CpaDurationUnit = "week"
+	CpaDurationUnitMonth  CpaDurationUnit = "month"
+	CpaDurationUnitYear   CpaDurationUnit = "year"
 )
 
-func (e *CpaOfferCodeMode) Scan(src interface{}) error {
+func (e *CpaDurationUnit) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = CpaOfferCodeMode(s)
+		*e = CpaDurationUnit(s)
 	case string:
-		*e = CpaOfferCodeMode(s)
+		*e = CpaDurationUnit(s)
 	default:
-		return fmt.Errorf("unsupported scan type for CpaOfferCodeMode: %T", src)
+		return fmt.Errorf("unsupported scan type for CpaDurationUnit: %T", src)
 	}
 	return nil
 }
 
-type NullCpaOfferCodeMode struct {
-	CpaOfferCodeMode CpaOfferCodeMode `json:"cpa_offer_code_mode"`
-	Valid            bool             `json:"valid"` // Valid is true if CpaOfferCodeMode is not NULL
+type NullCpaDurationUnit struct {
+	CpaDurationUnit CpaDurationUnit `json:"cpa_duration_unit"`
+	Valid           bool            `json:"valid"` // Valid is true if CpaDurationUnit is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullCpaOfferCodeMode) Scan(value interface{}) error {
+func (ns *NullCpaDurationUnit) Scan(value interface{}) error {
 	if value == nil {
-		ns.CpaOfferCodeMode, ns.Valid = "", false
+		ns.CpaDurationUnit, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.CpaOfferCodeMode.Scan(value)
+	return ns.CpaDurationUnit.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullCpaOfferCodeMode) Value() (driver.Value, error) {
+func (ns NullCpaDurationUnit) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.CpaOfferCodeMode), nil
+	return string(ns.CpaDurationUnit), nil
 }
 
-type CpaOfferCodeSource string
+type CpaRewardType string
 
 const (
-	CpaOfferCodeSourceGenerated CpaOfferCodeSource = "generated"
-	CpaOfferCodeSourcePool      CpaOfferCodeSource = "pool"
+	CpaRewardTypeQuantity CpaRewardType = "quantity"
+	CpaRewardTypeDuration CpaRewardType = "duration"
 )
 
-func (e *CpaOfferCodeSource) Scan(src interface{}) error {
+func (e *CpaRewardType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = CpaOfferCodeSource(s)
+		*e = CpaRewardType(s)
 	case string:
-		*e = CpaOfferCodeSource(s)
+		*e = CpaRewardType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for CpaOfferCodeSource: %T", src)
+		return fmt.Errorf("unsupported scan type for CpaRewardType: %T", src)
 	}
 	return nil
 }
 
-type NullCpaOfferCodeSource struct {
-	CpaOfferCodeSource CpaOfferCodeSource `json:"cpa_offer_code_source"`
-	Valid              bool               `json:"valid"` // Valid is true if CpaOfferCodeSource is not NULL
+type NullCpaRewardType struct {
+	CpaRewardType CpaRewardType `json:"cpa_reward_type"`
+	Valid         bool          `json:"valid"` // Valid is true if CpaRewardType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullCpaOfferCodeSource) Scan(value interface{}) error {
+func (ns *NullCpaRewardType) Scan(value interface{}) error {
 	if value == nil {
-		ns.CpaOfferCodeSource, ns.Valid = "", false
+		ns.CpaRewardType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.CpaOfferCodeSource.Scan(value)
+	return ns.CpaRewardType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullCpaOfferCodeSource) Value() (driver.Value, error) {
+func (ns NullCpaRewardType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.CpaOfferCodeSource), nil
-}
-
-type CpaRewardDurationUnit string
-
-const (
-	CpaRewardDurationUnitSecond CpaRewardDurationUnit = "second"
-	CpaRewardDurationUnitMinute CpaRewardDurationUnit = "minute"
-	CpaRewardDurationUnitHour   CpaRewardDurationUnit = "hour"
-	CpaRewardDurationUnitDay    CpaRewardDurationUnit = "day"
-	CpaRewardDurationUnitWeek   CpaRewardDurationUnit = "week"
-	CpaRewardDurationUnitMonth  CpaRewardDurationUnit = "month"
-	CpaRewardDurationUnitYear   CpaRewardDurationUnit = "year"
-)
-
-func (e *CpaRewardDurationUnit) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CpaRewardDurationUnit(s)
-	case string:
-		*e = CpaRewardDurationUnit(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CpaRewardDurationUnit: %T", src)
-	}
-	return nil
-}
-
-type NullCpaRewardDurationUnit struct {
-	CpaRewardDurationUnit CpaRewardDurationUnit `json:"cpa_reward_duration_unit"`
-	Valid                 bool                  `json:"valid"` // Valid is true if CpaRewardDurationUnit is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCpaRewardDurationUnit) Scan(value interface{}) error {
-	if value == nil {
-		ns.CpaRewardDurationUnit, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CpaRewardDurationUnit.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCpaRewardDurationUnit) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CpaRewardDurationUnit), nil
-}
-
-type CpaRewardRewardType string
-
-const (
-	CpaRewardRewardTypeQuantity CpaRewardRewardType = "quantity"
-	CpaRewardRewardTypeDuration CpaRewardRewardType = "duration"
-)
-
-func (e *CpaRewardRewardType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = CpaRewardRewardType(s)
-	case string:
-		*e = CpaRewardRewardType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for CpaRewardRewardType: %T", src)
-	}
-	return nil
-}
-
-type NullCpaRewardRewardType struct {
-	CpaRewardRewardType CpaRewardRewardType `json:"cpa_reward_reward_type"`
-	Valid               bool                `json:"valid"` // Valid is true if CpaRewardRewardType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullCpaRewardRewardType) Scan(value interface{}) error {
-	if value == nil {
-		ns.CpaRewardRewardType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.CpaRewardRewardType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullCpaRewardRewardType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.CpaRewardRewardType), nil
+	return string(ns.CpaRewardType), nil
 }
 
 type CpaAssignment struct {
-	ID             uint64                `json:"id"`
-	WorkspaceID    string                `json:"workspace_id"`
-	CpaID          string                `json:"cpa_id"`
-	AppID          int64                 `json:"app_id"`
-	PlatformID     int64                 `json:"platform_id"`
-	PlatformUserID string                `json:"platform_user_id"`
-	CodeID         sql.NullInt64         `json:"code_id"`
-	Code           string                `json:"code"`
-	CodeMode       CpaAssignmentCodeMode `json:"code_mode"`
-	Status         CpaAssignmentStatus   `json:"status"`
-	IssuedAt       time.Time             `json:"issued_at"`
-	CompletedAt    sql.NullTime          `json:"completed_at"`
-	DeletedAt      sql.NullTime          `json:"deleted_at"`
-	UpdatedAt      time.Time             `json:"updated_at"`
+	ID             int64               `json:"id"`
+	WorkspaceID    string              `json:"workspace_id"`
+	CpaID          string              `json:"cpa_id"`
+	AppID          int64               `json:"app_id"`
+	PlatformID     int64               `json:"platform_id"`
+	PlatformUserID string              `json:"platform_user_id"`
+	CodeID         sql.NullInt64       `json:"code_id"`
+	Code           string              `json:"code"`
+	CodeMode       CpaCodeMode         `json:"code_mode"`
+	Status         CpaAssignmentStatus `json:"status"`
+	IssuedAt       time.Time           `json:"issued_at"`
+	CompletedAt    sql.NullTime        `json:"completed_at"`
+	DeletedAt      sql.NullTime        `json:"deleted_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
 }
 
 type CpaAssignmentEvent struct {
-	ID           uint64                      `json:"id"`
-	WorkspaceID  string                      `json:"workspace_id"`
-	CpaID        string                      `json:"cpa_id"`
-	AssignmentID uint64                      `json:"assignment_id"`
-	EventType    CpaAssignmentEventEventType `json:"event_type"`
-	OccurredAt   time.Time                   `json:"occurred_at"`
-	CreatedAt    time.Time                   `json:"created_at"`
+	ID           int64                  `json:"id"`
+	WorkspaceID  string                 `json:"workspace_id"`
+	CpaID        string                 `json:"cpa_id"`
+	AssignmentID int64                  `json:"assignment_id"`
+	EventType    CpaAssignmentEventType `json:"event_type"`
+	OccurredAt   time.Time              `json:"occurred_at"`
+	CreatedAt    time.Time              `json:"created_at"`
 }
 
 type CpaCode struct {
-	ID          uint64        `json:"id"`
+	ID          int64         `json:"id"`
 	WorkspaceID string        `json:"workspace_id"`
 	CpaID       string        `json:"cpa_id"`
 	Code        string        `json:"code"`
@@ -447,41 +365,41 @@ type CpaLocalization struct {
 }
 
 type CpaOffer struct {
-	WorkspaceID       string                 `json:"workspace_id"`
-	ID                string                 `json:"id"`
-	Payload           json.RawMessage        `json:"payload"`
-	Target            json.RawMessage        `json:"target"`
-	CodeMode          CpaOfferCodeMode       `json:"code_mode"`
-	CodeSource        NullCpaOfferCodeSource `json:"code_source"`
-	SharedCode        sql.NullString         `json:"shared_code"`
-	GeneratedLength   sql.NullInt16          `json:"generated_length"`
-	GeneratedAlphabet sql.NullString         `json:"generated_alphabet"`
-	IsActive          bool                   `json:"is_active"`
-	StartAt           sql.NullTime           `json:"start_at"`
-	EndAt             sql.NullTime           `json:"end_at"`
-	CreatedAt         time.Time              `json:"created_at"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	WorkspaceID       string                `json:"workspace_id"`
+	ID                string                `json:"id"`
+	Payload           json.RawMessage       `json:"payload"`
+	Target            pqtype.NullRawMessage `json:"target"`
+	CodeMode          CpaCodeMode           `json:"code_mode"`
+	CodeSource        NullCpaCodeSource     `json:"code_source"`
+	SharedCode        sql.NullString        `json:"shared_code"`
+	GeneratedLength   sql.NullInt16         `json:"generated_length"`
+	GeneratedAlphabet sql.NullString        `json:"generated_alphabet"`
+	IsActive          bool                  `json:"is_active"`
+	StartAt           sql.NullTime          `json:"start_at"`
+	EndAt             sql.NullTime          `json:"end_at"`
+	CreatedAt         time.Time             `json:"created_at"`
+	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
 type CpaReward struct {
-	ID           uint64                    `json:"id"`
-	WorkspaceID  string                    `json:"workspace_id"`
-	CpaID        string                    `json:"cpa_id"`
-	RewardKey    string                    `json:"reward_key"`
-	RewardType   CpaRewardRewardType       `json:"reward_type"`
-	Quantity     int64                     `json:"quantity"`
-	Scale        uint16                    `json:"scale"`
-	DurationUnit NullCpaRewardDurationUnit `json:"duration_unit"`
-	CreatedAt    time.Time                 `json:"created_at"`
-	UpdatedAt    time.Time                 `json:"updated_at"`
+	ID           int64               `json:"id"`
+	WorkspaceID  string              `json:"workspace_id"`
+	CpaID        string              `json:"cpa_id"`
+	RewardKey    string              `json:"reward_key"`
+	RewardType   CpaRewardType       `json:"reward_type"`
+	Quantity     int64               `json:"quantity"`
+	Scale        int16               `json:"scale"`
+	DurationUnit NullCpaDurationUnit `json:"duration_unit"`
+	CreatedAt    time.Time           `json:"created_at"`
+	UpdatedAt    time.Time           `json:"updated_at"`
 }
 
 type CpaStatsDaily struct {
 	WorkspaceID    string    `json:"workspace_id"`
 	CpaID          string    `json:"cpa_id"`
 	StatsDate      time.Time `json:"stats_date"`
-	IssuedCount    uint64    `json:"issued_count"`
-	CompletedCount uint64    `json:"completed_count"`
-	UniqueUsers    uint64    `json:"unique_users"`
+	IssuedCount    int64     `json:"issued_count"`
+	CompletedCount int64     `json:"completed_count"`
+	UniqueUsers    int64     `json:"unique_users"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

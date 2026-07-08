@@ -12,9 +12,11 @@ func (r *Repository) CreateItem(ctx context.Context, params SaveItemParams) erro
 		return err
 	}
 	if err := r.q.AdminCreateItem(ctx, refsqlc.AdminCreateItemParams{
-		WorkspaceID: params.WorkspaceID, Key: params.Key,
-		ItemType: refsqlc.ReferenceItemItemType(params.Type),
-		Payload:  params.Payload, IsActive: params.IsActive,
+		WorkspaceID: params.WorkspaceID,
+		Key:         params.Key,
+		ItemType:    params.Type,
+		Payload:     params.Payload,
+		IsActive:    params.IsActive,
 	}); err != nil {
 		return err
 	}
@@ -26,8 +28,10 @@ func (r *Repository) UpdateItem(ctx context.Context, params SaveItemParams) (int
 		return 0, err
 	}
 	rows, err := r.q.AdminUpdateItem(ctx, refsqlc.AdminUpdateItemParams{
-		Payload: params.Payload, IsActive: params.IsActive,
-		WorkspaceID: params.WorkspaceID, Key: params.Key,
+		Payload:     params.Payload,
+		IsActive:    params.IsActive,
+		WorkspaceID: params.WorkspaceID,
+		Key:         params.Key,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -40,9 +44,10 @@ func (r *Repository) DangerousChangeType(ctx context.Context, params DangerousCh
 		return 0, err
 	}
 	rows, err := r.q.AdminDangerousChangeType(ctx, refsqlc.AdminDangerousChangeTypeParams{
-		ItemType:    refsqlc.ReferenceItemItemType(params.NewType),
-		WorkspaceID: params.WorkspaceID, Key: params.Key,
-		ItemType_2: refsqlc.ReferenceItemItemType(params.CurrentType),
+		ItemType:    params.NewType,
+		WorkspaceID: params.WorkspaceID,
+		Key:         params.Key,
+		ItemType_2:  params.CurrentType,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -55,7 +60,8 @@ func (r *Repository) SoftDeleteItem(ctx context.Context, workspaceID, key string
 		return 0, err
 	}
 	rows, err := r.q.AdminSoftDeleteItem(ctx, refsqlc.AdminSoftDeleteItemParams{
-		WorkspaceID: workspaceID, Key: key,
+		WorkspaceID: workspaceID,
+		Key:         key,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -68,7 +74,9 @@ func (r *Repository) RestoreItem(ctx context.Context, workspaceID, key string, a
 		return 0, err
 	}
 	rows, err := r.q.AdminRestoreItem(ctx, refsqlc.AdminRestoreItemParams{
-		IsActive: active, WorkspaceID: workspaceID, Key: key,
+		IsActive:    active,
+		WorkspaceID: workspaceID,
+		Key:         key,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -86,7 +94,8 @@ func (r *Repository) AdminGetItem(ctx context.Context, workspaceID, key string) 
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Item, error) {
 		rows, err := r.q.AdminGetItemBundle(ctx, refsqlc.AdminGetItemBundleParams{
-			WorkspaceID: workspaceID, Key: key,
+			WorkspaceID: workspaceID,
+			Key:         key,
 		})
 		if err != nil {
 			return Item{}, err
@@ -96,17 +105,23 @@ func (r *Repository) AdminGetItem(ctx context.Context, workspaceID, key string) 
 		}
 		first := rows[0]
 		item := Item{
-			WorkspaceID: first.WorkspaceID, Key: first.Key, Type: string(first.ItemType),
-			Payload: first.Payload, IsActive: first.IsActive,
-			DeletedAt: sqlwrap.NullTimePtr(first.DeletedAt),
-			CreatedAt: first.CreatedAt, UpdatedAt: first.UpdatedAt,
+			WorkspaceID:   first.WorkspaceID,
+			Key:           first.Key,
+			Type:          first.ItemType,
+			Payload:       first.Payload,
+			IsActive:      first.IsActive,
+			DeletedAt:     sqlwrap.NullTimePtr(first.DeletedAt),
+			CreatedAt:     first.CreatedAt,
+			UpdatedAt:     first.UpdatedAt,
 			Localizations: make([]Localization, 0, len(rows)),
 		}
 		for _, row := range rows {
 			if row.Locale.Valid {
 				item.Localizations = append(item.Localizations, Localization{
-					WorkspaceID: row.WorkspaceID, ItemKey: row.Key,
-					Locale: row.Locale.String, Title: row.Title.String,
+					WorkspaceID: row.WorkspaceID,
+					ItemKey:     row.Key,
+					Locale:      row.Locale.String,
+					Title:       row.Title.String,
 					Description: row.Description.String,
 				})
 			}
@@ -129,8 +144,11 @@ func (r *Repository) AdminListItems(ctx context.Context, params ListItemsParams)
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.AdminListItems(ctx, refsqlc.AdminListItemsParams{
 			WorkspaceID: params.WorkspaceID,
-			Column2:     params.Type, ItemType: refsqlc.ReferenceItemItemType(params.Type),
-			Column4: params.OnlyNotDeleted, Limit: params.Limit, Offset: params.Offset,
+			Column2:     params.Type,
+			ItemType:    params.Type,
+			Column4:     params.OnlyNotDeleted,
+			Limit:       params.Limit,
+			Offset:      params.Offset,
 		})
 		if err != nil {
 			return nil, err
@@ -138,10 +156,14 @@ func (r *Repository) AdminListItems(ctx context.Context, params ListItemsParams)
 		result := make([]Item, 0, len(rows))
 		for _, row := range rows {
 			result = append(result, Item{
-				WorkspaceID: row.WorkspaceID, Key: row.Key, Type: string(row.ItemType),
-				Payload: row.Payload, IsActive: row.IsActive,
-				DeletedAt: sqlwrap.NullTimePtr(row.DeletedAt),
-				CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+				WorkspaceID: row.WorkspaceID,
+				Key:         row.Key,
+				Type:        row.ItemType,
+				Payload:     row.Payload,
+				IsActive:    row.IsActive,
+				DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
+				CreatedAt:   row.CreatedAt,
+				UpdatedAt:   row.UpdatedAt,
 			})
 		}
 		return result, nil
@@ -153,8 +175,11 @@ func (r *Repository) UpsertLocalization(ctx context.Context, value Localization)
 		return err
 	}
 	if err := r.q.AdminUpsertLocalization(ctx, refsqlc.AdminUpsertLocalizationParams{
-		WorkspaceID: value.WorkspaceID, ItemKey: value.ItemKey, Locale: value.Locale,
-		Title: value.Title, Description: value.Description,
+		WorkspaceID: value.WorkspaceID,
+		ItemKey:     value.ItemKey,
+		Locale:      value.Locale,
+		Title:       value.Title,
+		Description: value.Description,
 	}); err != nil {
 		return err
 	}
@@ -171,7 +196,9 @@ func (r *Repository) GetLocalization(ctx context.Context, workspaceID, key, loca
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) (Localization, error) {
 		row, err := r.q.AdminGetLocalization(ctx, refsqlc.AdminGetLocalizationParams{
-			WorkspaceID: workspaceID, ItemKey: key, Locale: locale,
+			WorkspaceID: workspaceID,
+			ItemKey:     key,
+			Locale:      locale,
 		})
 		if err != nil {
 			return Localization{}, err
@@ -190,7 +217,8 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID, key str
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Localization, error) {
 		rows, err := r.q.AdminListLocalizations(ctx, refsqlc.AdminListLocalizationsParams{
-			WorkspaceID: workspaceID, ItemKey: key,
+			WorkspaceID: workspaceID,
+			ItemKey:     key,
 		})
 		if err != nil {
 			return nil, err
@@ -208,7 +236,9 @@ func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID, key, l
 		return 0, err
 	}
 	rows, err := r.q.AdminDeleteLocalization(ctx, refsqlc.AdminDeleteLocalizationParams{
-		WorkspaceID: workspaceID, ItemKey: key, Locale: locale,
+		WorkspaceID: workspaceID,
+		ItemKey:     key,
+		Locale:      locale,
 	})
 	if err != nil || rows == 0 {
 		return rows, err
@@ -230,9 +260,12 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID string) (Stats, e
 			return Stats{}, err
 		}
 		return Stats{
-			ItemsTotal: uint64(row.ItemsTotal), ItemsNotDeleted: uint64(row.ItemsNotDeleted),
-			ActiveItems: uint64(row.ActiveItems), DeletedItems: uint64(row.DeletedItems),
-			QuantityItems: uint64(row.QuantityItems), DurationItems: uint64(row.DurationItems),
+			ItemsTotal:      uint64(row.ItemsTotal),
+			ItemsNotDeleted: uint64(row.ItemsNotDeleted),
+			ActiveItems:     uint64(row.ActiveItems),
+			DeletedItems:    uint64(row.DeletedItems),
+			QuantityItems:   uint64(row.QuantityItems),
+			DurationItems:   uint64(row.DurationItems),
 		}, nil
 	})
 }

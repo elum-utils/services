@@ -8,29 +8,29 @@ import (
 
 func mapActionTask(row tasksqlc.ListRecordTasksRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
-		TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery,
-		Position: row.Position, Payload: row.Payload, Target: row.Target, Rewards: make([]Reward, 0),
+		TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit), ResetEvery: uint32(row.ResetEvery),
+		Position: row.Position, Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), Rewards: make([]Reward, 0),
 	}
 }
 
 func mapClaimTaskByID(rows []tasksqlc.GetClaimBundleByIDForUpdateRow) Task {
 	row := rows[0]
 	task := Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
-		TargetCount: row.TargetCount, Payload: row.Payload, Target: row.Target, ImageURL: ptrString(row.ImageUrl),
+		TargetCount: uint64(row.TargetCount), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), ImageURL: ptrString(row.ImageUrl),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload,
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		Rewards:            make([]Reward, 0, len(rows)),
 	}
 	for _, item := range rows {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
-				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
+				Key: item.RewardKey.String, Type: item.RewardType.String,
 				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
 				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
@@ -39,10 +39,10 @@ func mapClaimTaskByID(rows []tasksqlc.GetClaimBundleByIDForUpdateRow) Task {
 	if row.ProgressID.Valid {
 		task.Progress = &Progress{
 			ID: uint64(row.ProgressID.Int64), Progress: uint64(row.Progress.Int64),
-			Status: string(row.Status.TaskProgressStatus), PeriodStartAt: row.PeriodStartAt.Time,
+			Status: row.Status.String, PeriodStartAt: row.PeriodStartAt.Time,
 			PeriodEndAt: row.PeriodEndAt.Time, ReadyAt: ptrTime(row.ReadyAt),
 			ClaimedAt: ptrTime(row.ClaimedAt), OperationID: ptrString(row.OperationID),
-			Rewards: decodeRewards(row.RewardsSnapshot),
+			Rewards: decodeRewards(nullRawMessage(row.RewardsSnapshot)),
 		}
 	}
 	return task
@@ -51,18 +51,18 @@ func mapClaimTaskByID(rows []tasksqlc.GetClaimBundleByIDForUpdateRow) Task {
 func mapClaimTaskByKey(rows []tasksqlc.GetClaimBundleByKeyForUpdateRow) Task {
 	row := rows[0]
 	task := Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
-		TargetCount: row.TargetCount, Payload: row.Payload, Target: row.Target, ImageURL: ptrString(row.ImageUrl),
+		TargetCount: uint64(row.TargetCount), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), ImageURL: ptrString(row.ImageUrl),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload,
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		Rewards:            make([]Reward, 0, len(rows)),
 	}
 	for _, item := range rows {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
-				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
+				Key: item.RewardKey.String, Type: item.RewardType.String,
 				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
 				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
@@ -71,10 +71,10 @@ func mapClaimTaskByKey(rows []tasksqlc.GetClaimBundleByKeyForUpdateRow) Task {
 	if row.ProgressID.Valid {
 		task.Progress = &Progress{
 			ID: uint64(row.ProgressID.Int64), Progress: uint64(row.Progress.Int64),
-			Status: string(row.Status.TaskProgressStatus), PeriodStartAt: row.PeriodStartAt.Time,
+			Status: row.Status.String, PeriodStartAt: row.PeriodStartAt.Time,
 			PeriodEndAt: row.PeriodEndAt.Time, ReadyAt: ptrTime(row.ReadyAt),
 			ClaimedAt: ptrTime(row.ClaimedAt), OperationID: ptrString(row.OperationID),
-			Rewards: decodeRewards(row.RewardsSnapshot),
+			Rewards: decodeRewards(nullRawMessage(row.RewardsSnapshot)),
 		}
 	}
 	return task
@@ -85,11 +85,11 @@ func mapActiveBundles(rows []tasksqlc.ListActiveTaskBundlesRow) []Task {
 	var lastID uint64
 	index := -1
 	for _, row := range rows {
-		if index < 0 || row.ID != lastID {
+		if index < 0 || uint64(row.ID) != lastID {
 			task := Task{
-				ID: row.ID, Key: row.Key, GroupKey: row.GroupKey,
+				ID: uint64(row.ID), Key: row.Key, GroupKey: row.GroupKey,
 				TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
-				TargetCount: row.TargetCount, Payload: row.Payload, Target: row.Target, ImageURL: ptrString(row.ImageUrl),
+				TargetCount: uint64(row.TargetCount), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), ImageURL: ptrString(row.ImageUrl),
 				StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
 				Rewards: make([]Reward, 0),
 			}
@@ -104,11 +104,11 @@ func mapActiveBundles(rows []tasksqlc.ListActiveTaskBundlesRow) []Task {
 			}
 			result = append(result, task)
 			index = len(result) - 1
-			lastID = row.ID
+			lastID = uint64(row.ID)
 		}
 		if row.RewardID.Valid {
 			result[index].Rewards = append(result[index].Rewards, Reward{
-				Key: row.RewardKey.String, Type: string(row.RewardType.TaskRewardRewardType),
+				Key: row.RewardKey.String, Type: row.RewardType.String,
 				Quantity: row.RewardQuantity.Int64, Scale: uint16FromNull(row.RewardScale),
 				Unit: taskDurationUnitPtr(row.DurationUnit),
 			})
@@ -119,23 +119,23 @@ func mapActiveBundles(rows []tasksqlc.ListActiveTaskBundlesRow) []Task {
 
 func mapRecordCatalogTask(row tasksqlc.ListRecordCatalogRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit),
-		ResetEvery: row.ResetEvery, Position: row.Position, Payload: row.Payload, Target: row.Target,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit),
+		ResetEvery: uint32(row.ResetEvery), Position: row.Position, Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
 		StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
 	}
 }
 
 func mapIntegrationCheckTaskByID(row tasksqlc.GetIntegrationCheckTaskByIDRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit),
-		ResetEvery: row.ResetEvery, Payload: row.Payload, Target: row.Target, IntegrationKind: ptrString(row.IntegrationKind),
-		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: row.IntegrationPayload,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit),
+		ResetEvery: uint32(row.ResetEvery), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), IntegrationKind: ptrString(row.IntegrationKind),
+		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		ImageURL: ptrString(row.ImageUrl), StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
 		Rewards: make([]Reward, 0),
 	}
@@ -143,12 +143,12 @@ func mapIntegrationCheckTaskByID(row tasksqlc.GetIntegrationCheckTaskByIDRow) Ta
 
 func mapIntegrationCheckTaskByKey(row tasksqlc.GetIntegrationCheckTaskByKeyRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount, ResetUnit: string(row.ResetUnit),
-		ResetEvery: row.ResetEvery, Payload: row.Payload, Target: row.Target, IntegrationKind: ptrString(row.IntegrationKind),
-		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: row.IntegrationPayload,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit),
+		ResetEvery: uint32(row.ResetEvery), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), IntegrationKind: ptrString(row.IntegrationKind),
+		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		ImageURL: ptrString(row.ImageUrl), StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
 		Rewards: make([]Reward, 0),
 	}
@@ -156,26 +156,26 @@ func mapIntegrationCheckTaskByKey(row tasksqlc.GetIntegrationCheckTaskByKeyRow) 
 
 func mapStartTaskByID(row tasksqlc.GetStartTaskByIDRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount,
-		ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery, Payload: row.Payload, Target: row.Target,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount),
+		ResetUnit: string(row.ResetUnit), ResetEvery: uint32(row.ResetEvery), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload, ImageURL: ptrString(row.ImageUrl),
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload), ImageURL: ptrString(row.ImageUrl),
 		StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt), Rewards: make([]Reward, 0),
 	}
 }
 
 func mapStartTaskByKey(row tasksqlc.GetStartTaskByKeyRow) Task {
 	return Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount,
-		ResetUnit: string(row.ResetUnit), ResetEvery: row.ResetEvery, Payload: row.Payload, Target: row.Target,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount),
+		ResetUnit: string(row.ResetUnit), ResetEvery: uint32(row.ResetEvery), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload, ImageURL: ptrString(row.ImageUrl),
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload), ImageURL: ptrString(row.ImageUrl),
 		StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt), Rewards: make([]Reward, 0),
 	}
 }
@@ -183,18 +183,18 @@ func mapStartTaskByKey(row tasksqlc.GetStartTaskByKeyRow) Task {
 func mapClaimCatalogTaskByID(rows []tasksqlc.GetClaimCatalogByIDRow) Task {
 	row := rows[0]
 	task := Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount, Payload: row.Payload, Target: row.Target,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload, ImageURL: ptrString(row.ImageUrl),
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload), ImageURL: ptrString(row.ImageUrl),
 		Rewards: make([]Reward, 0, len(rows)),
 	}
 	for _, item := range rows {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
-				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
+				Key: item.RewardKey.String, Type: item.RewardType.String,
 				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
 				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
@@ -206,18 +206,18 @@ func mapClaimCatalogTaskByID(rows []tasksqlc.GetClaimCatalogByIDRow) Task {
 func mapClaimCatalogTaskByKey(rows []tasksqlc.GetClaimCatalogByKeyRow) Task {
 	row := rows[0]
 	task := Task{
-		ID: row.ID, WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
+		ID: uint64(row.ID), WorkspaceID: row.WorkspaceID, Key: row.Key, GroupKey: row.GroupKey,
 		SequenceKey: ptrString(row.SequenceKey), SequencePosition: ptrUint32(row.SequencePosition),
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind),
-		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: row.TargetCount, Payload: row.Payload, Target: row.Target,
+		ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode), TargetCount: uint64(row.TargetCount), Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
 		IntegrationKind: ptrString(row.IntegrationKind), IntegrationProvider: ptrString(row.IntegrationProvider),
-		IntegrationPayload: row.IntegrationPayload, ImageURL: ptrString(row.ImageUrl),
+		IntegrationPayload: nullRawMessage(row.IntegrationPayload), ImageURL: ptrString(row.ImageUrl),
 		Rewards: make([]Reward, 0, len(rows)),
 	}
 	for _, item := range rows {
 		if item.RewardID.Valid {
 			task.Rewards = append(task.Rewards, Reward{
-				Key: item.RewardKey.String, Type: string(item.RewardType.TaskRewardRewardType),
+				Key: item.RewardKey.String, Type: item.RewardType.String,
 				Quantity: item.RewardQuantity.Int64, Scale: uint16FromNull(item.RewardScale),
 				Unit: taskDurationUnitPtr(item.DurationUnit),
 			})
@@ -226,11 +226,11 @@ func mapClaimCatalogTaskByKey(rows []tasksqlc.GetClaimCatalogByKeyRow) Task {
 	return task
 }
 
-func taskDurationUnitPtr(value tasksqlc.NullTaskRewardDurationUnit) *string {
+func taskDurationUnitPtr(value sql.NullString) *string {
 	if !value.Valid {
 		return nil
 	}
-	unit := string(value.TaskRewardDurationUnit)
+	unit := value.String
 	return &unit
 }
 
@@ -250,16 +250,16 @@ func taskStringValue(value *string) string {
 
 func mapProgress(row tasksqlc.TaskProgress) Progress {
 	return Progress{
-		ID: row.ID, Progress: row.Progress, Status: string(row.Status),
+		ID: uint64(row.ID), Progress: uint64(row.Progress), Status: row.Status,
 		PeriodStartAt: row.PeriodStartAt, PeriodEndAt: row.PeriodEndAt,
 		ReadyAt: ptrTime(row.ReadyAt), ClaimedAt: ptrTime(row.ClaimedAt),
-		OperationID: ptrString(row.OperationID), Rewards: decodeRewards(row.RewardsSnapshot),
+		OperationID: ptrString(row.OperationID), Rewards: decodeRewards(nullRawMessage(row.RewardsSnapshot)),
 	}
 }
 
 func mapActiveProgress(row tasksqlc.TaskProgress) ActiveProgress {
 	return ActiveProgress{
-		Progress: row.Progress, Status: string(row.Status),
+		Progress: uint64(row.Progress), Status: row.Status,
 		PeriodStartAt: row.PeriodStartAt, PeriodEndAt: row.PeriodEndAt,
 		ReadyAt: ptrTime(row.ReadyAt), ClaimedAt: ptrTime(row.ClaimedAt),
 	}

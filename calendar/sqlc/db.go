@@ -99,8 +99,26 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listActiveCalendarsStmt, err = db.PrepareContext(ctx, listActiveCalendars); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveCalendars: %w", err)
 	}
+	if q.listExportCalendarsStmt, err = db.PrepareContext(ctx, listExportCalendars); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportCalendars: %w", err)
+	}
+	if q.listExportLocalizationsStmt, err = db.PrepareContext(ctx, listExportLocalizations); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportLocalizations: %w", err)
+	}
+	if q.listExportStepsWithRewardsStmt, err = db.PrepareContext(ctx, listExportStepsWithRewards); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportStepsWithRewards: %w", err)
+	}
+	if q.listImportCalendarTypesStmt, err = db.PrepareContext(ctx, listImportCalendarTypes); err != nil {
+		return nil, fmt.Errorf("error preparing query ListImportCalendarTypes: %w", err)
+	}
+	if q.listImportStepIDsStmt, err = db.PrepareContext(ctx, listImportStepIDs); err != nil {
+		return nil, fmt.Errorf("error preparing query ListImportStepIDs: %w", err)
+	}
 	if q.refreshDailyStatsStmt, err = db.PrepareContext(ctx, refreshDailyStats); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshDailyStats: %w", err)
+	}
+	if q.upsertProgressStmt, err = db.PrepareContext(ctx, upsertProgress); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertProgress: %w", err)
 	}
 	return &q, nil
 }
@@ -232,9 +250,39 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listActiveCalendarsStmt: %w", cerr)
 		}
 	}
+	if q.listExportCalendarsStmt != nil {
+		if cerr := q.listExportCalendarsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportCalendarsStmt: %w", cerr)
+		}
+	}
+	if q.listExportLocalizationsStmt != nil {
+		if cerr := q.listExportLocalizationsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportLocalizationsStmt: %w", cerr)
+		}
+	}
+	if q.listExportStepsWithRewardsStmt != nil {
+		if cerr := q.listExportStepsWithRewardsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportStepsWithRewardsStmt: %w", cerr)
+		}
+	}
+	if q.listImportCalendarTypesStmt != nil {
+		if cerr := q.listImportCalendarTypesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listImportCalendarTypesStmt: %w", cerr)
+		}
+	}
+	if q.listImportStepIDsStmt != nil {
+		if cerr := q.listImportStepIDsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listImportStepIDsStmt: %w", cerr)
+		}
+	}
 	if q.refreshDailyStatsStmt != nil {
 		if cerr := q.refreshDailyStatsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing refreshDailyStatsStmt: %w", cerr)
+		}
+	}
+	if q.upsertProgressStmt != nil {
+		if cerr := q.upsertProgressStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertProgressStmt: %w", cerr)
 		}
 	}
 	return err
@@ -274,65 +322,77 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                           DBTX
-	tx                           *sql.Tx
-	adminCreateCalendarStmt      *sql.Stmt
-	adminCreateStepStmt          *sql.Stmt
-	adminDeleteLocalizationStmt  *sql.Stmt
-	adminDeleteRewardStmt        *sql.Stmt
-	adminDeleteStepStmt          *sql.Stmt
-	adminGetCalendarStmt         *sql.Stmt
-	adminGetLocalizationStmt     *sql.Stmt
-	adminGetRewardStmt           *sql.Stmt
-	adminGetStatsStmt            *sql.Stmt
-	adminListCalendarsStmt       *sql.Stmt
-	adminListDailyStatsStmt      *sql.Stmt
-	adminListLocalizationsStmt   *sql.Stmt
-	adminListOperationsStmt      *sql.Stmt
-	adminSetCalendarActiveStmt   *sql.Stmt
-	adminSoftDeleteCalendarStmt  *sql.Stmt
-	adminUpdateCalendarStmt      *sql.Stmt
-	adminUpdateRewardStmt        *sql.Stmt
-	adminUpdateStepStmt          *sql.Stmt
-	adminUpsertLocalizationStmt  *sql.Stmt
-	adminUpsertRewardStmt        *sql.Stmt
-	createOperationStmt          *sql.Stmt
-	getCalendarBundleStmt        *sql.Stmt
-	getProgressStmt              *sql.Stmt
-	getRecordBundleForUpdateStmt *sql.Stmt
-	listActiveCalendarsStmt      *sql.Stmt
-	refreshDailyStatsStmt        *sql.Stmt
+	db                             DBTX
+	tx                             *sql.Tx
+	adminCreateCalendarStmt        *sql.Stmt
+	adminCreateStepStmt            *sql.Stmt
+	adminDeleteLocalizationStmt    *sql.Stmt
+	adminDeleteRewardStmt          *sql.Stmt
+	adminDeleteStepStmt            *sql.Stmt
+	adminGetCalendarStmt           *sql.Stmt
+	adminGetLocalizationStmt       *sql.Stmt
+	adminGetRewardStmt             *sql.Stmt
+	adminGetStatsStmt              *sql.Stmt
+	adminListCalendarsStmt         *sql.Stmt
+	adminListDailyStatsStmt        *sql.Stmt
+	adminListLocalizationsStmt     *sql.Stmt
+	adminListOperationsStmt        *sql.Stmt
+	adminSetCalendarActiveStmt     *sql.Stmt
+	adminSoftDeleteCalendarStmt    *sql.Stmt
+	adminUpdateCalendarStmt        *sql.Stmt
+	adminUpdateRewardStmt          *sql.Stmt
+	adminUpdateStepStmt            *sql.Stmt
+	adminUpsertLocalizationStmt    *sql.Stmt
+	adminUpsertRewardStmt          *sql.Stmt
+	createOperationStmt            *sql.Stmt
+	getCalendarBundleStmt          *sql.Stmt
+	getProgressStmt                *sql.Stmt
+	getRecordBundleForUpdateStmt   *sql.Stmt
+	listActiveCalendarsStmt        *sql.Stmt
+	listExportCalendarsStmt        *sql.Stmt
+	listExportLocalizationsStmt    *sql.Stmt
+	listExportStepsWithRewardsStmt *sql.Stmt
+	listImportCalendarTypesStmt    *sql.Stmt
+	listImportStepIDsStmt          *sql.Stmt
+	refreshDailyStatsStmt          *sql.Stmt
+	upsertProgressStmt             *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                           tx,
-		tx:                           tx,
-		adminCreateCalendarStmt:      q.adminCreateCalendarStmt,
-		adminCreateStepStmt:          q.adminCreateStepStmt,
-		adminDeleteLocalizationStmt:  q.adminDeleteLocalizationStmt,
-		adminDeleteRewardStmt:        q.adminDeleteRewardStmt,
-		adminDeleteStepStmt:          q.adminDeleteStepStmt,
-		adminGetCalendarStmt:         q.adminGetCalendarStmt,
-		adminGetLocalizationStmt:     q.adminGetLocalizationStmt,
-		adminGetRewardStmt:           q.adminGetRewardStmt,
-		adminGetStatsStmt:            q.adminGetStatsStmt,
-		adminListCalendarsStmt:       q.adminListCalendarsStmt,
-		adminListDailyStatsStmt:      q.adminListDailyStatsStmt,
-		adminListLocalizationsStmt:   q.adminListLocalizationsStmt,
-		adminListOperationsStmt:      q.adminListOperationsStmt,
-		adminSetCalendarActiveStmt:   q.adminSetCalendarActiveStmt,
-		adminSoftDeleteCalendarStmt:  q.adminSoftDeleteCalendarStmt,
-		adminUpdateCalendarStmt:      q.adminUpdateCalendarStmt,
-		adminUpdateRewardStmt:        q.adminUpdateRewardStmt,
-		adminUpdateStepStmt:          q.adminUpdateStepStmt,
-		adminUpsertLocalizationStmt:  q.adminUpsertLocalizationStmt,
-		adminUpsertRewardStmt:        q.adminUpsertRewardStmt,
-		createOperationStmt:          q.createOperationStmt,
-		getCalendarBundleStmt:        q.getCalendarBundleStmt,
-		getProgressStmt:              q.getProgressStmt,
-		getRecordBundleForUpdateStmt: q.getRecordBundleForUpdateStmt,
-		listActiveCalendarsStmt:      q.listActiveCalendarsStmt,
-		refreshDailyStatsStmt:        q.refreshDailyStatsStmt,
+		db:                             tx,
+		tx:                             tx,
+		adminCreateCalendarStmt:        q.adminCreateCalendarStmt,
+		adminCreateStepStmt:            q.adminCreateStepStmt,
+		adminDeleteLocalizationStmt:    q.adminDeleteLocalizationStmt,
+		adminDeleteRewardStmt:          q.adminDeleteRewardStmt,
+		adminDeleteStepStmt:            q.adminDeleteStepStmt,
+		adminGetCalendarStmt:           q.adminGetCalendarStmt,
+		adminGetLocalizationStmt:       q.adminGetLocalizationStmt,
+		adminGetRewardStmt:             q.adminGetRewardStmt,
+		adminGetStatsStmt:              q.adminGetStatsStmt,
+		adminListCalendarsStmt:         q.adminListCalendarsStmt,
+		adminListDailyStatsStmt:        q.adminListDailyStatsStmt,
+		adminListLocalizationsStmt:     q.adminListLocalizationsStmt,
+		adminListOperationsStmt:        q.adminListOperationsStmt,
+		adminSetCalendarActiveStmt:     q.adminSetCalendarActiveStmt,
+		adminSoftDeleteCalendarStmt:    q.adminSoftDeleteCalendarStmt,
+		adminUpdateCalendarStmt:        q.adminUpdateCalendarStmt,
+		adminUpdateRewardStmt:          q.adminUpdateRewardStmt,
+		adminUpdateStepStmt:            q.adminUpdateStepStmt,
+		adminUpsertLocalizationStmt:    q.adminUpsertLocalizationStmt,
+		adminUpsertRewardStmt:          q.adminUpsertRewardStmt,
+		createOperationStmt:            q.createOperationStmt,
+		getCalendarBundleStmt:          q.getCalendarBundleStmt,
+		getProgressStmt:                q.getProgressStmt,
+		getRecordBundleForUpdateStmt:   q.getRecordBundleForUpdateStmt,
+		listActiveCalendarsStmt:        q.listActiveCalendarsStmt,
+		listExportCalendarsStmt:        q.listExportCalendarsStmt,
+		listExportLocalizationsStmt:    q.listExportLocalizationsStmt,
+		listExportStepsWithRewardsStmt: q.listExportStepsWithRewardsStmt,
+		listImportCalendarTypesStmt:    q.listImportCalendarTypesStmt,
+		listImportStepIDsStmt:          q.listImportStepIDsStmt,
+		refreshDailyStatsStmt:          q.refreshDailyStatsStmt,
+		upsertProgressStmt:             q.upsertProgressStmt,
 	}
 }

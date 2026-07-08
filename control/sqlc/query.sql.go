@@ -10,11 +10,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 const activateTwoFactor = `-- name: ActivateTwoFactor :execrows
-UPDATE control_two_factor SET activated_at = NOW()
-WHERE account_id = ? AND activated_at IS NULL
+UPDATE control_two_factor SET activated_at = now()
+WHERE account_id = $1 AND activated_at IS NULL
 `
 
 func (q *Queries) ActivateTwoFactor(ctx context.Context, accountID string) (int64, error) {
@@ -26,7 +28,7 @@ func (q *Queries) ActivateTwoFactor(ctx context.Context, accountID string) (int6
 }
 
 const addInviteRole = `-- name: AddInviteRole :exec
-INSERT INTO control_workspace_invite_role (invite_id, role_id) VALUES (?, ?)
+INSERT INTO control_workspace_invite_role (invite_id, role_id) VALUES ($1, $2)
 `
 
 type AddInviteRoleParams struct {
@@ -40,7 +42,9 @@ func (q *Queries) AddInviteRole(ctx context.Context, arg AddInviteRoleParams) er
 }
 
 const addRoleMember = `-- name: AddRoleMember :exec
-INSERT IGNORE INTO control_role_member (role_id, account_id) VALUES (?, ?)
+INSERT INTO control_role_member (role_id, account_id)
+VALUES ($1, $2)
+ON CONFLICT (role_id, account_id) DO NOTHING
 `
 
 type AddRoleMemberParams struct {
@@ -55,8 +59,10 @@ func (q *Queries) AddRoleMember(ctx context.Context, arg AddRoleMemberParams) er
 
 const addWorkspaceMember = `-- name: AddWorkspaceMember :exec
 INSERT INTO control_workspace_member (workspace_id, account_id)
-VALUES (?, ?)
-ON DUPLICATE KEY UPDATE status = 'active'
+VALUES ($1, $2)
+ON CONFLICT (workspace_id, account_id) DO UPDATE SET
+    status = 'active',
+    updated_at = now()
 `
 
 type AddWorkspaceMemberParams struct {
@@ -73,11 +79,11 @@ const checkAccess = `-- name: CheckAccess :one
 SELECT EXISTS(
     SELECT 1
     FROM control_workspace_member m
-    JOIN control_method cm ON cm.method_key = ?
+    JOIN control_method cm ON cm.method_key = $1
     JOIN control_role_member rm ON rm.account_id = m.account_id
     JOIN control_role r ON r.id = rm.role_id
     LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
-    WHERE m.workspace_id = ? AND m.account_id = ? AND m.status = 'active'
+    WHERE m.workspace_id = $2 AND m.account_id = $3 AND m.status = 'active'
       AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
       AND (r.is_owner = TRUE OR p.method_key IS NOT NULL)
 ) AS allowed
@@ -97,7 +103,7 @@ func (q *Queries) CheckAccess(ctx context.Context, arg CheckAccessParams) (bool,
 }
 
 const clearRolePermissions = `-- name: ClearRolePermissions :execrows
-DELETE FROM control_role_permission WHERE role_id = ?
+DELETE FROM control_role_permission WHERE role_id = $1
 `
 
 func (q *Queries) ClearRolePermissions(ctx context.Context, roleID string) (int64, error) {
@@ -109,7 +115,7 @@ func (q *Queries) ClearRolePermissions(ctx context.Context, roleID string) (int6
 }
 
 const countIdentities = `-- name: CountIdentities :one
-SELECT COUNT(*) AS count FROM control_identity WHERE account_id = ?
+SELECT COUNT(*) AS count FROM control_identity WHERE account_id = $1
 `
 
 func (q *Queries) CountIdentities(ctx context.Context, accountID string) (int64, error) {
@@ -120,7 +126,7 @@ func (q *Queries) CountIdentities(ctx context.Context, accountID string) (int64,
 }
 
 const createAccount = `-- name: CreateAccount :exec
-INSERT INTO control_account (id, display_name) VALUES (?, ?)
+INSERT INTO control_account (id, display_name) VALUES ($1, $2)
 `
 
 type CreateAccountParams struct {
@@ -137,20 +143,20 @@ const createAuditEvent = `-- name: CreateAuditEvent :exec
 INSERT INTO control_audit_event (
     id, workspace_id, actor_id, method_key, target_type, target_id,
     before_data, after_data, result, request_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateAuditEventParams struct {
-	ID          string                  `json:"id"`
-	WorkspaceID sql.NullString          `json:"workspace_id"`
-	ActorID     sql.NullString          `json:"actor_id"`
-	MethodKey   string                  `json:"method_key"`
-	TargetType  string                  `json:"target_type"`
-	TargetID    string                  `json:"target_id"`
-	BeforeData  json.RawMessage         `json:"before_data"`
-	AfterData   json.RawMessage         `json:"after_data"`
-	Result      ControlAuditEventResult `json:"result"`
-	RequestID   string                  `json:"request_id"`
+	ID          string                `json:"id"`
+	WorkspaceID sql.NullString        `json:"workspace_id"`
+	ActorID     sql.NullString        `json:"actor_id"`
+	MethodKey   string                `json:"method_key"`
+	TargetType  string                `json:"target_type"`
+	TargetID    string                `json:"target_id"`
+	BeforeData  pqtype.NullRawMessage `json:"before_data"`
+	AfterData   pqtype.NullRawMessage `json:"after_data"`
+	Result      string                `json:"result"`
+	RequestID   string                `json:"request_id"`
 }
 
 func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventParams) error {
@@ -171,7 +177,7 @@ func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventPara
 
 const createInvite = `-- name: CreateInvite :exec
 INSERT INTO control_workspace_invite (id, workspace_id, created_by, token_hash, max_uses, expires_at)
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateInviteParams struct {
@@ -197,7 +203,7 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) erro
 
 const createRole = `-- name: CreateRole :exec
 INSERT INTO control_role (id, workspace_id, code, title, description, position, is_owner)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateRoleParams struct {
@@ -225,7 +231,7 @@ func (q *Queries) CreateRole(ctx context.Context, arg CreateRoleParams) error {
 
 const createSession = `-- name: CreateSession :exec
 INSERT INTO control_session (id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateSessionParams struct {
@@ -253,7 +259,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 
 const createTwoFactorChallenge = `-- name: CreateTwoFactorChallenge :exec
 INSERT INTO control_two_factor_challenge (id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateTwoFactorChallengeParams struct {
@@ -280,7 +286,7 @@ func (q *Queries) CreateTwoFactorChallenge(ctx context.Context, arg CreateTwoFac
 }
 
 const createWorkspace = `-- name: CreateWorkspace :exec
-INSERT INTO control_workspace (id, slug, title, created_by) VALUES (?, ?, ?, ?)
+INSERT INTO control_workspace (id, slug, title, created_by) VALUES ($1, $2, $3, $4)
 `
 
 type CreateWorkspaceParams struct {
@@ -301,7 +307,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 }
 
 const deleteIdentity = `-- name: DeleteIdentity :execrows
-DELETE FROM control_identity WHERE account_id = ? AND provider = ?
+DELETE FROM control_identity WHERE account_id = $1 AND provider = $2
 `
 
 type DeleteIdentityParams struct {
@@ -318,8 +324,8 @@ func (q *Queries) DeleteIdentity(ctx context.Context, arg DeleteIdentityParams) 
 }
 
 const deleteRole = `-- name: DeleteRole :execrows
-UPDATE control_role SET deleted_at = NOW()
-WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL AND is_owner = FALSE
+UPDATE control_role SET deleted_at = now()
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND is_owner = FALSE
 `
 
 type DeleteRoleParams struct {
@@ -336,7 +342,7 @@ func (q *Queries) DeleteRole(ctx context.Context, arg DeleteRoleParams) (int64, 
 }
 
 const deleteRolePermission = `-- name: DeleteRolePermission :execrows
-DELETE FROM control_role_permission WHERE role_id = ? AND method_key = ?
+DELETE FROM control_role_permission WHERE role_id = $1 AND method_key = $2
 `
 
 type DeleteRolePermissionParams struct {
@@ -353,7 +359,7 @@ func (q *Queries) DeleteRolePermission(ctx context.Context, arg DeleteRolePermis
 }
 
 const deleteTwoFactor = `-- name: DeleteTwoFactor :execrows
-DELETE FROM control_two_factor WHERE account_id = ?
+DELETE FROM control_two_factor WHERE account_id = $1
 `
 
 func (q *Queries) DeleteTwoFactor(ctx context.Context, accountID string) (int64, error) {
@@ -365,7 +371,7 @@ func (q *Queries) DeleteTwoFactor(ctx context.Context, accountID string) (int64,
 }
 
 const deleteTwoFactorChallenge = `-- name: DeleteTwoFactorChallenge :execrows
-DELETE FROM control_two_factor_challenge WHERE id = ?
+DELETE FROM control_two_factor_challenge WHERE id = $1
 `
 
 func (q *Queries) DeleteTwoFactorChallenge(ctx context.Context, id string) (int64, error) {
@@ -380,7 +386,7 @@ const findAccountByIdentity = `-- name: FindAccountByIdentity :one
 SELECT a.id, a.display_name, a.status, a.created_at, a.updated_at
 FROM control_identity i
 JOIN control_account a ON a.id = i.account_id
-WHERE i.provider = ? AND i.provider_subject = ?
+WHERE i.provider = $1 AND i.provider_subject = $2
 LIMIT 1
 `
 
@@ -404,7 +410,7 @@ func (q *Queries) FindAccountByIdentity(ctx context.Context, arg FindAccountById
 
 const getAccount = `-- name: GetAccount :one
 SELECT id, display_name, status, created_at, updated_at
-FROM control_account WHERE id = ? LIMIT 1
+FROM control_account WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetAccount(ctx context.Context, id string) (ControlAccount, error) {
@@ -426,7 +432,7 @@ SELECT COALESCE((
     FROM control_workspace_member m
     JOIN control_role_member rm ON rm.account_id = m.account_id
     JOIN control_role r ON r.id = rm.role_id
-    WHERE m.workspace_id = ? AND m.account_id = ? AND m.status = 'active'
+    WHERE m.workspace_id = $1 AND m.account_id = $2 AND m.status = 'active'
       AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
     ORDER BY r.position
     LIMIT 1
@@ -448,7 +454,7 @@ func (q *Queries) GetAccountPosition(ctx context.Context, arg GetAccountPosition
 const getActiveInviteByHashForUpdate = `-- name: GetActiveInviteByHashForUpdate :one
 SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
 FROM control_workspace_invite
-WHERE token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())
+WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
   AND (max_uses IS NULL OR used_count < max_uses)
 LIMIT 1 FOR UPDATE
 `
@@ -473,7 +479,7 @@ func (q *Queries) GetActiveInviteByHashForUpdate(ctx context.Context, tokenHash 
 const getActiveSessionByHash = `-- name: GetActiveSessionByHash :one
 SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, revoked_at, last_used_at, created_at
 FROM control_session
-WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > NOW()
+WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 LIMIT 1
 `
 
@@ -497,7 +503,7 @@ func (q *Queries) GetActiveSessionByHash(ctx context.Context, tokenHash string) 
 
 const getMethod = `-- name: GetMethod :one
 SELECT method_key, service, group_key, position, created_at, updated_at
-FROM control_method WHERE method_key = ? LIMIT 1
+FROM control_method WHERE method_key = $1 LIMIT 1
 `
 
 func (q *Queries) GetMethod(ctx context.Context, methodKey string) (ControlMethod, error) {
@@ -516,7 +522,7 @@ func (q *Queries) GetMethod(ctx context.Context, methodKey string) (ControlMetho
 
 const getRole = `-- name: GetRole :one
 SELECT id, workspace_id, code, title, description, position, is_owner, deleted_at, created_at, updated_at
-FROM control_role WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL LIMIT 1
+FROM control_role WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL LIMIT 1
 `
 
 type GetRoleParams struct {
@@ -544,7 +550,7 @@ func (q *Queries) GetRole(ctx context.Context, arg GetRoleParams) (ControlRole, 
 
 const getTwoFactor = `-- name: GetTwoFactor :one
 SELECT account_id, secret, backup_hashes, activated_at, created_at, updated_at
-FROM control_two_factor WHERE account_id = ? LIMIT 1
+FROM control_two_factor WHERE account_id = $1 LIMIT 1
 `
 
 func (q *Queries) GetTwoFactor(ctx context.Context, accountID string) (ControlTwoFactor, error) {
@@ -564,7 +570,7 @@ func (q *Queries) GetTwoFactor(ctx context.Context, accountID string) (ControlTw
 const getTwoFactorChallengeForUpdate = `-- name: GetTwoFactorChallengeForUpdate :one
 SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, created_at
 FROM control_two_factor_challenge
-WHERE token_hash = ? AND expires_at > NOW()
+WHERE token_hash = $1 AND expires_at > now()
 LIMIT 1 FOR UPDATE
 `
 
@@ -589,7 +595,7 @@ SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip, c.e
        f.secret, f.backup_hashes, f.activated_at
 FROM control_two_factor_challenge c
 JOIN control_two_factor f ON f.account_id = c.account_id
-WHERE c.token_hash = ? AND c.expires_at > NOW()
+WHERE c.token_hash = $1 AND c.expires_at > now()
 LIMIT 1 FOR UPDATE
 `
 
@@ -624,7 +630,7 @@ func (q *Queries) GetTwoFactorChallengeWithFactorForUpdate(ctx context.Context, 
 
 const getTwoFactorForUpdate = `-- name: GetTwoFactorForUpdate :one
 SELECT account_id, secret, backup_hashes, activated_at, created_at, updated_at
-FROM control_two_factor WHERE account_id = ? LIMIT 1 FOR UPDATE
+FROM control_two_factor WHERE account_id = $1 LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) GetTwoFactorForUpdate(ctx context.Context, accountID string) (ControlTwoFactor, error) {
@@ -643,7 +649,7 @@ func (q *Queries) GetTwoFactorForUpdate(ctx context.Context, accountID string) (
 
 const getWorkspace = `-- name: GetWorkspace :one
 SELECT id, slug, title, status, created_by, created_at, updated_at
-FROM control_workspace WHERE id = ? LIMIT 1
+FROM control_workspace WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetWorkspace(ctx context.Context, id string) (ControlWorkspace, error) {
@@ -663,7 +669,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id string) (ControlWorkspace
 
 const hasActiveTwoFactor = `-- name: HasActiveTwoFactor :one
 SELECT EXISTS(
-    SELECT 1 FROM control_two_factor WHERE account_id = ? AND activated_at IS NOT NULL
+    SELECT 1 FROM control_two_factor WHERE account_id = $1 AND activated_at IS NOT NULL
 ) AS active
 `
 
@@ -676,7 +682,7 @@ func (q *Queries) HasActiveTwoFactor(ctx context.Context, accountID string) (boo
 
 const incrementInviteUse = `-- name: IncrementInviteUse :execrows
 UPDATE control_workspace_invite SET used_count = used_count + 1
-WHERE id = ? AND revoked_at IS NULL AND (max_uses IS NULL OR used_count < max_uses)
+WHERE id = $1 AND revoked_at IS NULL AND (max_uses IS NULL OR used_count < max_uses)
 `
 
 func (q *Queries) IncrementInviteUse(ctx context.Context, id string) (int64, error) {
@@ -690,7 +696,7 @@ func (q *Queries) IncrementInviteUse(ctx context.Context, id string) (int64, err
 const isActiveWorkspaceMember = `-- name: IsActiveWorkspaceMember :one
 SELECT EXISTS(
     SELECT 1 FROM control_workspace_member
-    WHERE workspace_id = ? AND account_id = ? AND status = 'active'
+    WHERE workspace_id = $1 AND account_id = $2 AND status = 'active'
 ) AS active
 `
 
@@ -719,23 +725,23 @@ FROM control_method_group g
 JOIN control_method m ON m.service = g.service AND m.group_key = g.group_key
 JOIN control_access_service service_catalog ON service_catalog.service = g.service
 LEFT JOIN control_localization service_title
-    ON service_title.localization_key = CONCAT('control.access_service.', g.service, '.title')
-   AND service_title.locale = ?
+    ON service_title.localization_key = 'control.access_service.' || g.service || '.title'
+   AND service_title.locale = $1
 LEFT JOIN control_localization service_description
-    ON service_description.localization_key = CONCAT('control.access_service.', g.service, '.description')
-   AND service_description.locale = ?
+    ON service_description.localization_key = 'control.access_service.' || g.service || '.description'
+   AND service_description.locale = $2
 LEFT JOIN control_localization group_loc
-    ON group_loc.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key)
-   AND group_loc.locale = ?
+    ON group_loc.localization_key = 'control.method_group.' || g.service || '.' || g.group_key
+   AND group_loc.locale = $3
 LEFT JOIN control_localization group_description
-    ON group_description.localization_key = CONCAT('control.method_group.', g.service, '.', g.group_key, '.description')
-   AND group_description.locale = ?
+    ON group_description.localization_key = 'control.method_group.' || g.service || '.' || g.group_key || '.description'
+   AND group_description.locale = $4
 LEFT JOIN control_localization access_loc
-    ON access_loc.localization_key = CONCAT('control.method.', m.method_key)
-   AND access_loc.locale = ?
+    ON access_loc.localization_key = 'control.method.' || m.method_key
+   AND access_loc.locale = $5
 LEFT JOIN control_localization access_description
-    ON access_description.localization_key = CONCAT('control.method.', m.method_key, '.description')
-   AND access_description.locale = ?
+    ON access_description.localization_key = 'control.method.' || m.method_key || '.description'
+   AND access_description.locale = $6
 ORDER BY service_catalog.position, g.position, m.position, m.method_key
 `
 
@@ -808,10 +814,10 @@ func (q *Queries) ListAccessCatalog(ctx context.Context, arg ListAccessCatalogPa
 
 const listAuditEvents = `-- name: ListAuditEvents :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
+       COALESCE(before_data, '{}'::jsonb) AS before_data, COALESCE(after_data, '{}'::jsonb) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
-WHERE workspace_id = ?
-ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?
+WHERE workspace_id = $1
+ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3
 `
 
 type ListAuditEventsParams struct {
@@ -857,14 +863,14 @@ func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams
 
 const listAuditEventsFiltered = `-- name: ListAuditEventsFiltered :many
 SELECT id, workspace_id, actor_id, method_key, target_type, target_id,
-       COALESCE(before_data, JSON_OBJECT()) AS before_data, COALESCE(after_data, JSON_OBJECT()) AS after_data, result, request_id, occurred_at
+       COALESCE(before_data, '{}'::jsonb) AS before_data, COALESCE(after_data, '{}'::jsonb) AS after_data, result, request_id, occurred_at
 FROM control_audit_event
-WHERE workspace_id = ?
-  AND (? = '' OR method_key = ?)
-  AND (? = '' OR actor_id = ?)
-  AND (? IS NULL OR occurred_at >= ?)
-  AND (? IS NULL OR occurred_at < ?)
-ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?
+WHERE workspace_id = $1
+  AND ($2 = '' OR method_key = $3)
+  AND ($4 = '' OR actor_id = $5)
+  AND ($6 IS NULL OR occurred_at >= $7)
+  AND ($8 IS NULL OR occurred_at < $9)
+ORDER BY occurred_at DESC, id DESC LIMIT $10 OFFSET $11
 `
 
 type ListAuditEventsFilteredParams struct {
@@ -931,7 +937,7 @@ func (q *Queries) ListAuditEventsFiltered(ctx context.Context, arg ListAuditEven
 const listAuthorizedMethods = `-- name: ListAuthorizedMethods :many
 SELECT DISTINCT cm.method_key, cm.service, cm.group_key, cm.position
 FROM control_method cm
-JOIN control_workspace_member m ON m.workspace_id = ? AND m.account_id = ? AND m.status = 'active'
+JOIN control_workspace_member m ON m.workspace_id = $1 AND m.account_id = $2 AND m.status = 'active'
 JOIN control_role_member rm ON rm.account_id = m.account_id
 JOIN control_role r ON r.id = rm.role_id AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
 LEFT JOIN control_role_permission p ON p.role_id = r.id AND p.method_key = cm.method_key
@@ -980,8 +986,8 @@ func (q *Queries) ListAuthorizedMethods(ctx context.Context, arg ListAuthorizedM
 }
 
 const listIdentities = `-- name: ListIdentities :many
-SELECT account_id, provider, provider_subject, COALESCE(payload, JSON_OBJECT()) AS payload, created_at, updated_at
-FROM control_identity WHERE account_id = ? ORDER BY provider
+SELECT account_id, provider, provider_subject, COALESCE(payload, '{}'::jsonb) AS payload, created_at, updated_at
+FROM control_identity WHERE account_id = $1 ORDER BY provider
 `
 
 func (q *Queries) ListIdentities(ctx context.Context, accountID string) ([]ControlIdentity, error) {
@@ -1015,7 +1021,7 @@ func (q *Queries) ListIdentities(ctx context.Context, accountID string) ([]Contr
 }
 
 const listInviteRoles = `-- name: ListInviteRoles :many
-SELECT role_id FROM control_workspace_invite_role WHERE invite_id = ? ORDER BY role_id
+SELECT role_id FROM control_workspace_invite_role WHERE invite_id = $1 ORDER BY role_id
 `
 
 func (q *Queries) ListInviteRoles(ctx context.Context, inviteID string) ([]string, error) {
@@ -1043,7 +1049,7 @@ func (q *Queries) ListInviteRoles(ctx context.Context, inviteID string) ([]strin
 
 const listInvites = `-- name: ListInvites :many
 SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
-FROM control_workspace_invite WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?
+FROM control_workspace_invite WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListInvitesParams struct {
@@ -1159,7 +1165,7 @@ const listRolePermissions = `-- name: ListRolePermissions :many
 SELECT p.role_id, p.method_key, p.created_at
 FROM control_role_permission p
 JOIN control_role r ON r.id = p.role_id
-WHERE r.workspace_id = ? AND p.role_id = ? AND r.deleted_at IS NULL
+WHERE r.workspace_id = $1 AND p.role_id = $2 AND r.deleted_at IS NULL
 ORDER BY p.method_key
 `
 
@@ -1196,7 +1202,7 @@ SELECT r.id, r.workspace_id, r.code, r.title, r.description, r.position, r.is_ow
        COUNT(rm.account_id) AS member_count
 FROM control_role r
 LEFT JOIN control_role_member rm ON rm.role_id = r.id
-WHERE r.workspace_id = ? AND r.deleted_at IS NULL
+WHERE r.workspace_id = $1 AND r.deleted_at IS NULL
 GROUP BY r.id
 ORDER BY r.position, r.id
 `
@@ -1252,7 +1258,7 @@ func (q *Queries) ListRoles(ctx context.Context, workspaceID string) ([]ListRole
 
 const listSessions = `-- name: ListSessions :many
 SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, revoked_at, last_used_at, created_at
-FROM control_session WHERE account_id = ? ORDER BY created_at DESC
+FROM control_session WHERE account_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListSessions(ctx context.Context, accountID string) ([]ControlSession, error) {
@@ -1296,10 +1302,10 @@ FROM control_workspace_member m
 JOIN control_account a ON a.id = m.account_id
 LEFT JOIN control_role_member rm ON rm.account_id = m.account_id
 LEFT JOIN control_role r ON r.id = rm.role_id AND r.workspace_id = m.workspace_id AND r.deleted_at IS NULL
-WHERE m.workspace_id = ? AND m.status = 'active'
+WHERE m.workspace_id = $1 AND m.status = 'active'
 GROUP BY m.workspace_id, m.account_id, m.status, m.joined_at, m.updated_at, a.display_name
 ORDER BY position, m.joined_at
-LIMIT ? OFFSET ?
+LIMIT $2 OFFSET $3
 `
 
 type ListWorkspaceMembersParams struct {
@@ -1309,13 +1315,13 @@ type ListWorkspaceMembersParams struct {
 }
 
 type ListWorkspaceMembersRow struct {
-	WorkspaceID string                       `json:"workspace_id"`
-	AccountID   string                       `json:"account_id"`
-	Status      ControlWorkspaceMemberStatus `json:"status"`
-	JoinedAt    time.Time                    `json:"joined_at"`
-	UpdatedAt   time.Time                    `json:"updated_at"`
-	DisplayName string                       `json:"display_name"`
-	Position    interface{}                  `json:"position"`
+	WorkspaceID string      `json:"workspace_id"`
+	AccountID   string      `json:"account_id"`
+	Status      string      `json:"status"`
+	JoinedAt    time.Time   `json:"joined_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+	DisplayName string      `json:"display_name"`
+	Position    interface{} `json:"position"`
 }
 
 func (q *Queries) ListWorkspaceMembers(ctx context.Context, arg ListWorkspaceMembersParams) ([]ListWorkspaceMembersRow, error) {
@@ -1353,8 +1359,8 @@ const listWorkspacesForAccount = `-- name: ListWorkspacesForAccount :many
 SELECT w.id, w.slug, w.title, w.status, w.created_by, w.created_at, w.updated_at
 FROM control_workspace w
 JOIN control_workspace_member m ON m.workspace_id = w.id
-WHERE m.account_id = ? AND m.status = 'active'
-ORDER BY w.created_at DESC LIMIT ? OFFSET ?
+WHERE m.account_id = $1 AND m.status = 'active'
+ORDER BY w.created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListWorkspacesForAccountParams struct {
@@ -1395,7 +1401,7 @@ func (q *Queries) ListWorkspacesForAccount(ctx context.Context, arg ListWorkspac
 }
 
 const removeRoleMember = `-- name: RemoveRoleMember :execrows
-DELETE FROM control_role_member WHERE role_id = ? AND account_id = ?
+DELETE FROM control_role_member WHERE role_id = $1 AND account_id = $2
 `
 
 type RemoveRoleMemberParams struct {
@@ -1413,7 +1419,7 @@ func (q *Queries) RemoveRoleMember(ctx context.Context, arg RemoveRoleMemberPara
 
 const removeWorkspaceMember = `-- name: RemoveWorkspaceMember :execrows
 UPDATE control_workspace_member SET status = 'removed'
-WHERE workspace_id = ? AND account_id = ? AND status = 'active'
+WHERE workspace_id = $1 AND account_id = $2 AND status = 'active'
 `
 
 type RemoveWorkspaceMemberParams struct {
@@ -1430,10 +1436,11 @@ func (q *Queries) RemoveWorkspaceMember(ctx context.Context, arg RemoveWorkspace
 }
 
 const removeWorkspaceMemberRoles = `-- name: RemoveWorkspaceMemberRoles :execrows
-DELETE rm
-FROM control_role_member rm
-JOIN control_role r ON r.id = rm.role_id
-WHERE r.workspace_id = ? AND rm.account_id = ?
+DELETE FROM control_role_member rm
+USING control_role r
+WHERE r.id = rm.role_id
+  AND r.workspace_id = $1
+  AND rm.account_id = $2
 `
 
 type RemoveWorkspaceMemberRolesParams struct {
@@ -1450,8 +1457,8 @@ func (q *Queries) RemoveWorkspaceMemberRoles(ctx context.Context, arg RemoveWork
 }
 
 const revokeAllSessions = `-- name: RevokeAllSessions :execrows
-UPDATE control_session SET revoked_at = NOW()
-WHERE account_id = ? AND revoked_at IS NULL AND (? = '' OR id <> ?)
+UPDATE control_session SET revoked_at = now()
+WHERE account_id = $1 AND revoked_at IS NULL AND ($2 = '' OR id <> $3)
 `
 
 type RevokeAllSessionsParams struct {
@@ -1469,8 +1476,8 @@ func (q *Queries) RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsPa
 }
 
 const revokeInvite = `-- name: RevokeInvite :execrows
-UPDATE control_workspace_invite SET revoked_at = NOW()
-WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL
+UPDATE control_workspace_invite SET revoked_at = now()
+WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL
 `
 
 type RevokeInviteParams struct {
@@ -1488,11 +1495,11 @@ func (q *Queries) RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int
 
 const revokeInviteAsActiveMember = `-- name: RevokeInviteAsActiveMember :execrows
 UPDATE control_workspace_invite i
-SET i.revoked_at = NOW()
-WHERE i.id = ? AND i.workspace_id = ? AND i.revoked_at IS NULL
+SET revoked_at = now()
+WHERE i.id = $1 AND i.workspace_id = $2 AND i.revoked_at IS NULL
   AND EXISTS (
       SELECT 1 FROM control_workspace_member m
-      WHERE m.workspace_id = i.workspace_id AND m.account_id = ? AND m.status = 'active'
+      WHERE m.workspace_id = i.workspace_id AND m.account_id = $3 AND m.status = 'active'
   )
 `
 
@@ -1511,8 +1518,8 @@ func (q *Queries) RevokeInviteAsActiveMember(ctx context.Context, arg RevokeInvi
 }
 
 const revokeSession = `-- name: RevokeSession :execrows
-UPDATE control_session SET revoked_at = NOW()
-WHERE id = ? AND account_id = ? AND revoked_at IS NULL
+UPDATE control_session SET revoked_at = now()
+WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL
 `
 
 type RevokeSessionParams struct {
@@ -1529,7 +1536,9 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (i
 }
 
 const setRolePermission = `-- name: SetRolePermission :exec
-INSERT IGNORE INTO control_role_permission (role_id, method_key) VALUES (?, ?)
+INSERT INTO control_role_permission (role_id, method_key)
+VALUES ($1, $2)
+ON CONFLICT (role_id, method_key) DO NOTHING
 `
 
 type SetRolePermissionParams struct {
@@ -1543,8 +1552,8 @@ func (q *Queries) SetRolePermission(ctx context.Context, arg SetRolePermissionPa
 }
 
 const touchSession = `-- name: TouchSession :execrows
-UPDATE control_session SET last_used_at = NOW()
-WHERE id = ? AND revoked_at IS NULL
+UPDATE control_session SET last_used_at = now()
+WHERE id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) TouchSession(ctx context.Context, id string) (int64, error) {
@@ -1556,7 +1565,7 @@ func (q *Queries) TouchSession(ctx context.Context, id string) (int64, error) {
 }
 
 const updatePendingTwoFactorBackupHashes = `-- name: UpdatePendingTwoFactorBackupHashes :execrows
-UPDATE control_two_factor SET backup_hashes = ? WHERE account_id = ? AND activated_at IS NULL
+UPDATE control_two_factor SET backup_hashes = $1 WHERE account_id = $2 AND activated_at IS NULL
 `
 
 type UpdatePendingTwoFactorBackupHashesParams struct {
@@ -1573,8 +1582,8 @@ func (q *Queries) UpdatePendingTwoFactorBackupHashes(ctx context.Context, arg Up
 }
 
 const updateRole = `-- name: UpdateRole :execrows
-UPDATE control_role SET title = ?, description = ?, position = ?
-WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL AND is_owner = FALSE
+UPDATE control_role SET title = $1, description = $2, position = $3
+WHERE id = $4 AND workspace_id = $5 AND deleted_at IS NULL AND is_owner = FALSE
 `
 
 type UpdateRoleParams struct {
@@ -1600,7 +1609,7 @@ func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (int64, 
 }
 
 const updateTwoFactorBackupHashes = `-- name: UpdateTwoFactorBackupHashes :execrows
-UPDATE control_two_factor SET backup_hashes = ? WHERE account_id = ? AND activated_at IS NOT NULL
+UPDATE control_two_factor SET backup_hashes = $1 WHERE account_id = $2 AND activated_at IS NOT NULL
 `
 
 type UpdateTwoFactorBackupHashesParams struct {
@@ -1617,14 +1626,14 @@ func (q *Queries) UpdateTwoFactorBackupHashes(ctx context.Context, arg UpdateTwo
 }
 
 const updateWorkspace = `-- name: UpdateWorkspace :execrows
-UPDATE control_workspace SET slug = ?, title = ?, status = ? WHERE id = ?
+UPDATE control_workspace SET slug = $1, title = $2, status = $3 WHERE id = $4
 `
 
 type UpdateWorkspaceParams struct {
-	Slug   string                 `json:"slug"`
-	Title  string                 `json:"title"`
-	Status ControlWorkspaceStatus `json:"status"`
-	ID     string                 `json:"id"`
+	Slug   string `json:"slug"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	ID     string `json:"id"`
 }
 
 func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (int64, error) {
@@ -1642,20 +1651,20 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 
 const updateWorkspaceAsActiveMember = `-- name: UpdateWorkspaceAsActiveMember :execrows
 UPDATE control_workspace w
-SET w.slug = ?, w.title = ?, w.status = ?
-WHERE w.id = ?
+SET slug = $1, title = $2, status = $3
+WHERE w.id = $4
   AND EXISTS (
       SELECT 1 FROM control_workspace_member m
-      WHERE m.workspace_id = w.id AND m.account_id = ? AND m.status = 'active'
+      WHERE m.workspace_id = w.id AND m.account_id = $5 AND m.status = 'active'
   )
 `
 
 type UpdateWorkspaceAsActiveMemberParams struct {
-	Slug      string                 `json:"slug"`
-	Title     string                 `json:"title"`
-	Status    ControlWorkspaceStatus `json:"status"`
-	ID        string                 `json:"id"`
-	AccountID string                 `json:"account_id"`
+	Slug      string `json:"slug"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	ID        string `json:"id"`
+	AccountID string `json:"account_id"`
 }
 
 func (q *Queries) UpdateWorkspaceAsActiveMember(ctx context.Context, arg UpdateWorkspaceAsActiveMemberParams) (int64, error) {
@@ -1674,15 +1683,18 @@ func (q *Queries) UpdateWorkspaceAsActiveMember(ctx context.Context, arg UpdateW
 
 const upsertIdentity = `-- name: UpsertIdentity :exec
 INSERT INTO control_identity (account_id, provider, provider_subject, payload)
-VALUES (?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE provider_subject = VALUES(provider_subject), payload = VALUES(payload)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (account_id, provider) DO UPDATE SET
+    provider_subject = EXCLUDED.provider_subject,
+    payload = EXCLUDED.payload,
+    updated_at = now()
 `
 
 type UpsertIdentityParams struct {
-	AccountID       string          `json:"account_id"`
-	Provider        string          `json:"provider"`
-	ProviderSubject string          `json:"provider_subject"`
-	Payload         json.RawMessage `json:"payload"`
+	AccountID       string                `json:"account_id"`
+	Provider        string                `json:"provider"`
+	ProviderSubject string                `json:"provider_subject"`
+	Payload         pqtype.NullRawMessage `json:"payload"`
 }
 
 func (q *Queries) UpsertIdentity(ctx context.Context, arg UpsertIdentityParams) error {
@@ -1697,8 +1709,12 @@ func (q *Queries) UpsertIdentity(ctx context.Context, arg UpsertIdentityParams) 
 
 const upsertMethod = `-- name: UpsertMethod :exec
 INSERT INTO control_method (method_key, service, group_key, position)
-VALUES (?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE service = VALUES(service), group_key = VALUES(group_key), position = VALUES(position)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (method_key) DO UPDATE SET
+    service = EXCLUDED.service,
+    group_key = EXCLUDED.group_key,
+    position = EXCLUDED.position,
+    updated_at = now()
 `
 
 type UpsertMethodParams struct {
@@ -1720,8 +1736,10 @@ func (q *Queries) UpsertMethod(ctx context.Context, arg UpsertMethodParams) erro
 
 const upsertMethodGroup = `-- name: UpsertMethodGroup :exec
 INSERT INTO control_method_group (service, group_key, position)
-VALUES (?, ?, ?)
-ON DUPLICATE KEY UPDATE position = VALUES(position)
+VALUES ($1, $2, $3)
+ON CONFLICT (service, group_key) DO UPDATE SET
+    position = EXCLUDED.position,
+    updated_at = now()
 `
 
 type UpsertMethodGroupParams struct {
@@ -1737,8 +1755,12 @@ func (q *Queries) UpsertMethodGroup(ctx context.Context, arg UpsertMethodGroupPa
 
 const upsertTwoFactor = `-- name: UpsertTwoFactor :exec
 INSERT INTO control_two_factor (account_id, secret, backup_hashes, activated_at)
-VALUES (?, ?, ?, NULL)
-ON DUPLICATE KEY UPDATE secret = VALUES(secret), backup_hashes = VALUES(backup_hashes), activated_at = NULL
+VALUES ($1, $2, $3, NULL)
+ON CONFLICT (account_id) DO UPDATE SET
+    secret = EXCLUDED.secret,
+    backup_hashes = EXCLUDED.backup_hashes,
+    activated_at = NULL,
+    updated_at = now()
 `
 
 type UpsertTwoFactorParams struct {

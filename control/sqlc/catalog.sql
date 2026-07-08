@@ -7,7 +7,9 @@ VALUES
     ('cpa',50),
     ('payment',60),
     ('reference',70)
-ON DUPLICATE KEY UPDATE position=VALUES(position);
+ON CONFLICT (service) DO UPDATE SET
+    position = EXCLUDED.position,
+    updated_at = now();
 
 INSERT INTO control_method_group (service, group_key, position)
 VALUES
@@ -62,7 +64,9 @@ VALUES
     ('reference','localization',20),
     ('reference','stats',30),
     ('reference','import_export',40)
-ON DUPLICATE KEY UPDATE position=VALUES(position);
+ON CONFLICT (service, group_key) DO UPDATE SET
+    position = EXCLUDED.position,
+    updated_at = now();
 
 INSERT INTO control_method (method_key, service, group_key, position)
 VALUES
@@ -203,15 +207,18 @@ VALUES
     ('tasks.import.preview','tasks','import_export',20),
     ('tasks.import','tasks','import_export',30),
     ('tasks.task.delete','tasks','task',10)
-ON DUPLICATE KEY UPDATE service=VALUES(service),
-group_key=VALUES(group_key),
-position=VALUES(position);
+ON CONFLICT (method_key) DO UPDATE SET
+    service = EXCLUDED.service,
+    group_key = EXCLUDED.group_key,
+    position = EXCLUDED.position,
+    updated_at = now();
 INSERT INTO control_method (method_key, service, group_key)
 VALUES
     ('tasks.task.write','tasks','task')
-ON DUPLICATE KEY UPDATE
-service=VALUES(service),
-group_key=VALUES(group_key);
+ON CONFLICT (method_key) DO UPDATE SET
+    service = EXCLUDED.service,
+    group_key = EXCLUDED.group_key,
+    updated_at = now();
 
 INSERT INTO control_localization (localization_key, locale, value)
 VALUES
@@ -243,8 +250,6 @@ VALUES
     ('control.access_service.tasks.title','en','Tasks'),
     ('control.access_service.tasks.description','ru','Управление заданиями, партнерскими заданиями, наградами и статистикой.'),
     ('control.access_service.tasks.description','en','Manage tasks, partner tasks, rewards, and statistics.'),
-    ('control.method.control.workspace.create.description','ru','Разрешает: Создание рабочей области.'),
-    ('control.method.control.workspace.create.description','en','Allows: Create workspace.'),
     ('control.method.control.workspace.get.description','ru','Разрешает: Просмотр рабочей области.'),
     ('control.method.control.workspace.get.description','en','Allows: View workspace.'),
     ('control.method.control.workspace.list.description','ru','Разрешает: Список рабочих областей.'),
@@ -253,14 +258,10 @@ VALUES
     ('control.method.control.workspace.update.description','en','Allows: Update workspace.'),
     ('control.method.control.member.list.description','ru','Разрешает: Список участников рабочей области.'),
     ('control.method.control.member.list.description','en','Allows: List workspace members.'),
-    ('control.method.control.member.remove.description','ru','Разрешает: Удаление участника рабочей области.'),
-    ('control.method.control.member.remove.description','en','Allows: Remove workspace member.'),
     ('control.method.control.invite.create.description','ru','Разрешает: Создание приглашения.'),
     ('control.method.control.invite.create.description','en','Allows: Create workspace invite.'),
     ('control.method.control.invite.list.description','ru','Разрешает: Список приглашений рабочей области.'),
     ('control.method.control.invite.list.description','en','Allows: List workspace invites.'),
-    ('control.method.control.invite.revoke.description','ru','Разрешает: Отзыв приглашения рабочей области.'),
-    ('control.method.control.invite.revoke.description','en','Allows: Revoke workspace invite.'),
     ('control.method.control.role.create.description','ru','Разрешает: Создание роли.'),
     ('control.method.control.role.create.description','en','Allows: Create workspace role.'),
     ('control.method.control.role.get.description','ru','Разрешает: Просмотр роли.'),
@@ -269,8 +270,6 @@ VALUES
     ('control.method.control.role.list.description','en','Allows: List workspace roles.'),
     ('control.method.control.role.update.description','ru','Разрешает: Изменение роли.'),
     ('control.method.control.role.update.description','en','Allows: Update workspace role.'),
-    ('control.method.control.role.delete.description','ru','Разрешает: Удаление роли.'),
-    ('control.method.control.role.delete.description','en','Allows: Delete workspace role.'),
     ('control.method.control.role_member.set.description','ru','Разрешает: Назначение роли участнику.'),
     ('control.method.control.role_member.set.description','en','Allows: Assign role to member.'),
     ('control.method.control.role_member.remove.description','ru','Разрешает: Снятие роли с участника.'),
@@ -653,8 +652,6 @@ VALUES
     ('control.method_group.tasks.task.description','en','Section: Tasks.'),
     ('control.method_group.tasks.import_export.description','ru','Раздел: Импорт и экспорт.'),
     ('control.method_group.tasks.import_export.description','en','Section: Import and export.'),
-    ('control.method.control.workspace.create','ru','Создание рабочей области'),
-    ('control.method.control.workspace.create','en','Create workspace'),
     ('control.method.control.workspace.get','ru','Просмотр рабочей области'),
     ('control.method.control.workspace.get','en','View workspace'),
     ('control.method.control.workspace.list','ru','Список рабочих областей'),
@@ -663,14 +660,10 @@ VALUES
     ('control.method.control.workspace.update','en','Update workspace'),
     ('control.method.control.member.list','ru','Список участников рабочей области'),
     ('control.method.control.member.list','en','List workspace members'),
-    ('control.method.control.member.remove','ru','Удаление участника рабочей области'),
-    ('control.method.control.member.remove','en','Remove workspace member'),
     ('control.method.control.invite.create','ru','Создание приглашения'),
     ('control.method.control.invite.create','en','Create workspace invite'),
     ('control.method.control.invite.list','ru','Список приглашений рабочей области'),
     ('control.method.control.invite.list','en','List workspace invites'),
-    ('control.method.control.invite.revoke','ru','Отзыв приглашения рабочей области'),
-    ('control.method.control.invite.revoke','en','Revoke workspace invite'),
     ('control.method.control.role.create','ru','Создание роли'),
     ('control.method.control.role.create','en','Create workspace role'),
     ('control.method.control.role.get','ru','Просмотр роли'),
@@ -679,8 +672,6 @@ VALUES
     ('control.method.control.role.list','en','List workspace roles'),
     ('control.method.control.role.update','ru','Изменение роли'),
     ('control.method.control.role.update','en','Update workspace role'),
-    ('control.method.control.role.delete','ru','Удаление роли'),
-    ('control.method.control.role.delete','en','Delete workspace role'),
     ('control.method.control.role_member.set','ru','Назначение роли участнику'),
     ('control.method.control.role_member.set','en','Assign role to member'),
     ('control.method.control.role_member.remove','ru','Снятие роли с участника'),
@@ -1063,4 +1054,6 @@ VALUES
     ('control.method.control.method.read','en','View method catalog'),
     ('control.method.control.audit.read','ru','Просмотр аудита рабочей области'),
     ('control.method.control.audit.read','en','View workspace audit')
-ON DUPLICATE KEY UPDATE value=VALUES(value);
+ON CONFLICT (localization_key, locale) DO UPDATE SET
+    value = EXCLUDED.value,
+    updated_at = now();

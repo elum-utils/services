@@ -49,9 +49,9 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, cpaID stri
 	for _, row := range rows {
 		result = append(result, DailyStats{
 			Date:           row.StatsDate,
-			IssuedCount:    row.IssuedCount,
-			CompletedCount: row.CompletedCount,
-			UniqueUsers:    row.UniqueUsers,
+			IssuedCount:    uint64(row.IssuedCount),
+			CompletedCount: uint64(row.CompletedCount),
+			UniqueUsers:    uint64(row.UniqueUsers),
 		})
 	}
 	return result, nil

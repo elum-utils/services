@@ -61,7 +61,7 @@ func (a *Admin) GetProviderTransaction(ctx context.Context, workspaceID string, 
 	defer cancel()
 	return a.repository.AdminGetProviderTransaction(mergedCtx, paymentsqlc.AdminGetProviderTransactionParams{
 		WorkspaceID: workspaceID,
-		ID:          id,
+		ID:          int64(id),
 	})
 }
 
@@ -82,7 +82,7 @@ func (a *Admin) UpdateProviderTransactionStatus(ctx context.Context, workspaceID
 	defer cancel()
 	return a.repository.AdminUpdateProviderTransactionStatus(mergedCtx, paymentsqlc.AdminUpdateProviderTransactionStatusParams{
 		WorkspaceID: workspaceID,
-		ID:          id,
+		ID:          int64(id),
 		Status:      paymentsqlc.PaymentProviderTransactionStatus(status),
 		Error:       sql.NullString{String: message, Valid: message != ""},
 	})

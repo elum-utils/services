@@ -32,7 +32,7 @@ func (a *Admin) GetPurchaseKey(ctx context.Context, workspaceID string, id uint6
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.repository.AdminGetPurchaseKey(ctx, paymentsqlc.AdminGetPurchaseKeyParams{WorkspaceID: workspaceID, ID: id})
+	return a.repository.AdminGetPurchaseKey(ctx, paymentsqlc.AdminGetPurchaseKeyParams{WorkspaceID: workspaceID, ID: int64(id)})
 }
 
 func (a *Admin) UpdatePurchaseKeyStatus(ctx context.Context, workspaceID string, id uint64, status string) (int64, error) {
@@ -41,7 +41,7 @@ func (a *Admin) UpdatePurchaseKeyStatus(ctx context.Context, workspaceID string,
 	ctx = mergedCtx
 	return a.repository.AdminUpdatePurchaseKeyStatus(ctx, paymentsqlc.AdminUpdatePurchaseKeyStatusParams{
 		WorkspaceID: workspaceID,
-		ID:          id,
+		ID:          int64(id),
 		Status:      paymentsqlc.PaymentPurchaseKeyStatus(status),
 	})
 }
@@ -94,8 +94,8 @@ func (a *Admin) ListPaymentAttempts(ctx context.Context, params AttemptListParam
 	limit, offset := normalizePage(params.Page)
 	return a.repository.AdminListPaymentAttempts(ctx, paymentsqlc.AdminListPaymentAttemptsParams{
 		WorkspaceID:  params.WorkspaceID,
-		Column2:      params.OrderID,
-		OrderID:      params.OrderID,
+		Column2:      int64(params.OrderID),
+		OrderID:      int64(params.OrderID),
 		Column4:      params.ProviderCode,
 		ProviderCode: params.ProviderCode,
 		Column6:      params.Status,
@@ -148,7 +148,7 @@ func (a *Admin) UpdatePaymentEventProcessingStatus(ctx context.Context, id uint6
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminUpdatePaymentEventProcessingStatus(ctx, paymentsqlc.MarkPaymentEventProcessedParams{
-		ID:               id,
+		ID:               int64(id),
 		ProcessingStatus: paymentsqlc.PaymentEventProcessingStatus(status),
 		ProcessingError:  sql.NullString{String: message, Valid: message != ""},
 	})
@@ -180,7 +180,7 @@ func (a *Admin) GetSubscription(ctx context.Context, workspaceID string, id uint
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.repository.AdminGetSubscription(ctx, paymentsqlc.AdminGetSubscriptionParams{WorkspaceID: workspaceID, ID: id})
+	return a.repository.AdminGetSubscription(ctx, paymentsqlc.AdminGetSubscriptionParams{WorkspaceID: workspaceID, ID: int64(id)})
 }
 
 func (a *Admin) GetSubscriptionByProviderID(ctx context.Context, providerCode string, providerSubscriptionID string) (paymentsqlc.PaymentSubscription, error) {
@@ -216,8 +216,8 @@ func (a *Admin) ListFulfillments(ctx context.Context, params FulfillmentListPara
 		WorkspaceID: params.WorkspaceID,
 		Column2:     params.Status,
 		Status:      paymentsqlc.PaymentFulfillmentStatus(params.Status),
-		Column4:     params.OrderID,
-		OrderID:     params.OrderID,
+		Column4:     int64(params.OrderID),
+		OrderID:     int64(params.OrderID),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -235,7 +235,7 @@ func (a *Admin) UpdateFulfillmentStatus(ctx context.Context, id uint64, status s
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminUpdateFulfillmentStatus(ctx, paymentsqlc.AdminUpdateFulfillmentStatusParams{
-		ID:      id,
+		ID:      int64(id),
 		Status:  paymentsqlc.PaymentFulfillmentStatus(status),
 		Error:   sql.NullString{String: message, Valid: message != ""},
 		Column3: status,
@@ -250,8 +250,8 @@ func (a *Admin) ListFulfillmentItems(ctx context.Context, params FulfillmentItem
 	limit, offset := normalizePage(params.Page)
 	return a.repository.AdminListFulfillmentItems(ctx, paymentsqlc.AdminListFulfillmentItemsParams{
 		WorkspaceID:   params.WorkspaceID,
-		Column2:       params.FulfillmentID,
-		FulfillmentID: params.FulfillmentID,
+		Column2:       int64(params.FulfillmentID),
+		FulfillmentID: int64(params.FulfillmentID),
 		Limit:         limit,
 		Offset:        offset,
 	})
@@ -284,8 +284,8 @@ func (a *Admin) ListRefunds(ctx context.Context, params RefundListParams) ([]pay
 	limit, offset := normalizePage(params.Page)
 	return a.repository.AdminListRefunds(ctx, paymentsqlc.AdminListRefundsParams{
 		WorkspaceID:  params.WorkspaceID,
-		Column2:      params.OrderID,
-		OrderID:      params.OrderID,
+		Column2:      int64(params.OrderID),
+		OrderID:      int64(params.OrderID),
 		Column4:      params.ProviderCode,
 		ProviderCode: params.ProviderCode,
 		Column6:      params.Status,

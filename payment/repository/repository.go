@@ -12,6 +12,7 @@ import (
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
@@ -116,6 +117,9 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 			_, err := r.db.DB().ExecContext(ctx, stmt)
 			return err
 		}); err != nil {
+			if isDuplicateTypeStatement(stmt, err) {
+				continue
+			}
 			return fmt.Errorf("statement failed: %w\n%s", err, stmt)
 		}
 	}
@@ -134,30 +138,16 @@ func (r *PaymentRepository) Bootstrap(ctx context.Context, schemaPath ...string)
 	return r.applySQL(ctx, paymentsqlc.EventSQL, "event")
 }
 
+func isDuplicateTypeStatement(stmt string, err error) bool {
+	if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(stmt)), "CREATE TYPE ") {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42710"
+}
+
 func (r *PaymentRepository) applySchemaUpgrades(ctx context.Context) error {
-	upgrades := []struct {
-		table      string
-		column     string
-		definition string
-	}{
-		{table: "payment_asset", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER asset_kind"},
-		{table: "payment_product_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
-		{table: "payment_product_cache", column: "item_scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER item_quantity"},
-		{table: "payment_order_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
-		{table: "payment_fulfillment_item", column: "scale", definition: "SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER quantity"},
-	}
-	for _, upgrade := range upgrades {
-		if err := sqlwrap.EnsureColumn(ctx, r.db, bootstrapQueryTimeout, upgrade.table, upgrade.column, upgrade.definition); err != nil {
-			return fmt.Errorf("payment schema upgrade %s.%s failed: %w", upgrade.table, upgrade.column, err)
-		}
-	}
-	if err := sqlwrap.EnsureIndex(ctx, r.db, bootstrapQueryTimeout,
-		"payment_ton_wallet",
-		"payment_ton_wallet_workspace_uq",
-		"UNIQUE KEY `payment_ton_wallet_workspace_uq` (`workspace_id`)",
-	); err != nil {
-		return fmt.Errorf("payment schema upgrade payment_ton_wallet.workspace unique key failed: %w", err)
-	}
+	_ = ctx
 	return nil
 }
 
@@ -218,7 +208,7 @@ func (r *PaymentRepository) UpsertAsset(ctx context.Context, params AssetUpsertP
 		Code:      params.Code,
 		Title:     params.Title,
 		AssetKind: params.AssetKind,
-		Scale:     params.Scale,
+		Scale:     int16(params.Scale),
 		Chain: sqlwrap.NullFromPtr(params.Chain, func(v string) sql.NullString {
 			return sql.NullString{String: v, Valid: true}
 		}),
@@ -294,16 +284,52 @@ func (r *PaymentRepository) DeleteProviderAsset(ctx context.Context, providerCod
 }
 
 func splitSQLStatements(raw string) []string {
-	parts := strings.Split(raw, ";")
-	statements := make([]string, 0, len(parts))
-	for _, part := range parts {
-		stmt := strings.TrimSpace(part)
-		if stmt == "" {
+	statements := make([]string, 0, 16)
+	start := 0
+	dollarQuote := ""
+	for index := 0; index < len(raw); index++ {
+		if dollarQuote != "" {
+			if strings.HasPrefix(raw[index:], dollarQuote) {
+				index += len(dollarQuote) - 1
+				dollarQuote = ""
+			}
 			continue
 		}
+		if raw[index] == '$' {
+			if tag, ok := readDollarQuoteTag(raw[index:]); ok {
+				dollarQuote = tag
+				index += len(tag) - 1
+				continue
+			}
+		}
+		if raw[index] == ';' {
+			if stmt := strings.TrimSpace(raw[start:index]); stmt != "" {
+				statements = append(statements, stmt)
+			}
+			start = index + 1
+		}
+	}
+	if stmt := strings.TrimSpace(raw[start:]); stmt != "" {
 		statements = append(statements, stmt)
 	}
 	return statements
+}
+
+func readDollarQuoteTag(raw string) (string, bool) {
+	if len(raw) < 2 || raw[0] != '$' {
+		return "", false
+	}
+	for index := 1; index < len(raw); index++ {
+		switch c := raw[index]; {
+		case c == '$':
+			return raw[:index+1], true
+		case c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9':
+			continue
+		default:
+			return "", false
+		}
+	}
+	return "", false
 }
 
 func requireWorkspaceID(workspaceID string) (string, error) {

@@ -65,7 +65,7 @@ func (r *PaymentRepository) exportGroups(ctx context.Context, workspaceID string
 	rows, err := r.executor.QueryContext(ctx, `
 SELECT code, title_key, description_key, position, is_active
 FROM payment_product_group
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY position, code`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ SELECT id, group_code, title_key, description_key, target, image_url, link_url, 
        global_limit, global_interval, global_interval_count, user_limit, user_interval,
        user_interval_count, available_from, available_until, is_visible, is_closed
 FROM payment_product
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY position, id`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (r *PaymentRepository) exportItems(ctx context.Context, workspaceID string,
 	rows, err := r.executor.QueryContext(ctx, `
 SELECT id, item_type, title_key, description_key, rarity, position
 FROM payment_item
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY position, id`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (r *PaymentRepository) exportProductItems(ctx context.Context, workspaceID 
 	rows, err := r.executor.QueryContext(ctx, `
 SELECT product_id, item_id, reward_type, quantity, scale, duration_unit
 FROM payment_product_item
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY product_id, item_id`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ SELECT id, product_id, asset_code, list_amount_minor, discount_amount_minor, pri
        reference_asset_code, reference_list_amount_minor, reference_discount_amount_minor,
        coefficient, is_promotion, starts_at, ends_at
 FROM payment_price
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY product_id, asset_code, starts_at, id`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (r *PaymentRepository) exportLocalizations(ctx context.Context, workspaceID
 	rows, err := r.executor.QueryContext(ctx, `
 SELECT localization_key, locale, value
 FROM payment_localization
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY localization_key, locale`, workspaceID)
 	if err != nil {
 		return nil, err

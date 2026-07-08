@@ -7,9 +7,10 @@ package sqlc
 import (
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 type PaymentAssetAssetKind string
@@ -1358,7 +1359,7 @@ type PaymentAsset struct {
 	Code            string                `json:"code"`
 	Title           string                `json:"title"`
 	AssetKind       PaymentAssetAssetKind `json:"asset_kind"`
-	Scale           uint16                `json:"scale"`
+	Scale           int16                 `json:"scale"`
 	Chain           sql.NullString        `json:"chain"`
 	Network         sql.NullString        `json:"network"`
 	ContractAddress sql.NullString        `json:"contract_address"`
@@ -1370,7 +1371,7 @@ type PaymentAsset struct {
 type PaymentAssetRate struct {
 	AssetCode              string         `json:"asset_code"`
 	ReferenceAssetCode     string         `json:"reference_asset_code"`
-	ReferencePerAssetMinor uint64         `json:"reference_per_asset_minor"`
+	ReferencePerAssetMinor int64          `json:"reference_per_asset_minor"`
 	Source                 string         `json:"source"`
 	ObservedAt             time.Time      `json:"observed_at"`
 	AutoUpdateEnabled      bool           `json:"auto_update_enabled"`
@@ -1386,11 +1387,11 @@ type PaymentAssetRate struct {
 }
 
 type PaymentAttempt struct {
-	ID                     uint64               `json:"id"`
-	OrderID                uint64               `json:"order_id"`
+	ID                     int64                `json:"id"`
+	OrderID                int64                `json:"order_id"`
 	ProviderCode           string               `json:"provider_code"`
 	AssetCode              string               `json:"asset_code"`
-	AmountMinor            uint64               `json:"amount_minor"`
+	AmountMinor            int64                `json:"amount_minor"`
 	Status                 PaymentAttemptStatus `json:"status"`
 	ProviderPaymentID      sql.NullString       `json:"provider_payment_id"`
 	ProviderInvoiceID      sql.NullString       `json:"provider_invoice_id"`
@@ -1405,7 +1406,7 @@ type PaymentAttempt struct {
 }
 
 type PaymentEvent struct {
-	ID                uint64                       `json:"id"`
+	ID                int64                        `json:"id"`
 	ProviderCode      string                       `json:"provider_code"`
 	AttemptID         sql.NullInt64                `json:"attempt_id"`
 	OrderID           sql.NullInt64                `json:"order_id"`
@@ -1422,9 +1423,9 @@ type PaymentEvent struct {
 }
 
 type PaymentFulfillment struct {
-	ID             uint64                   `json:"id"`
-	OrderID        uint64                   `json:"order_id"`
-	AttemptID      uint64                   `json:"attempt_id"`
+	ID             int64                    `json:"id"`
+	OrderID        int64                    `json:"order_id"`
+	AttemptID      int64                    `json:"attempt_id"`
 	InternalUserID sql.NullInt64            `json:"internal_user_id"`
 	Status         PaymentFulfillmentStatus `json:"status"`
 	Error          sql.NullString           `json:"error"`
@@ -1435,13 +1436,13 @@ type PaymentFulfillment struct {
 }
 
 type PaymentFulfillmentItem struct {
-	ID            uint64                                 `json:"id"`
-	FulfillmentID uint64                                 `json:"fulfillment_id"`
+	ID            int64                                  `json:"id"`
+	FulfillmentID int64                                  `json:"fulfillment_id"`
 	WorkspaceID   string                                 `json:"workspace_id"`
 	ItemID        string                                 `json:"item_id"`
 	RewardType    PaymentFulfillmentItemRewardType       `json:"reward_type"`
 	Quantity      int64                                  `json:"quantity"`
-	Scale         uint16                                 `json:"scale"`
+	Scale         int16                                  `json:"scale"`
 	DurationUnit  NullPaymentFulfillmentItemDurationUnit `json:"duration_unit"`
 	CreatedAt     time.Time                              `json:"created_at"`
 }
@@ -1459,7 +1460,7 @@ type PaymentItem struct {
 }
 
 type PaymentLocalization struct {
-	ID              uint64    `json:"id"`
+	ID              int64     `json:"id"`
 	WorkspaceID     string    `json:"workspace_id"`
 	Locale          string    `json:"locale"`
 	LocalizationKey string    `json:"localization_key"`
@@ -1469,7 +1470,7 @@ type PaymentLocalization struct {
 }
 
 type PaymentOrder struct {
-	ID                  uint64             `json:"id"`
+	ID                  int64              `json:"id"`
 	PublicID            string             `json:"public_id"`
 	WorkspaceID         string             `json:"workspace_id"`
 	AppID               int64              `json:"app_id"`
@@ -1481,13 +1482,13 @@ type PaymentOrder struct {
 	PayerInternalUserID sql.NullInt64      `json:"payer_internal_user_id"`
 	PurchaseKeyID       sql.NullInt64      `json:"purchase_key_id"`
 	ProductID           string             `json:"product_id"`
-	Quantity            uint64             `json:"quantity"`
-	PriceID             uint64             `json:"price_id"`
+	Quantity            int64              `json:"quantity"`
+	PriceID             int64              `json:"price_id"`
 	AssetCode           string             `json:"asset_code"`
 	Locale              string             `json:"locale"`
-	ListAmountMinor     uint64             `json:"list_amount_minor"`
-	DiscountAmountMinor uint64             `json:"discount_amount_minor"`
-	PayableAmountMinor  uint64             `json:"payable_amount_minor"`
+	ListAmountMinor     int64              `json:"list_amount_minor"`
+	DiscountAmountMinor int64              `json:"discount_amount_minor"`
+	PayableAmountMinor  int64              `json:"payable_amount_minor"`
 	Status              PaymentOrderStatus `json:"status"`
 	ReservedUntil       sql.NullTime       `json:"reserved_until"`
 	PaidAt              sql.NullTime       `json:"paid_at"`
@@ -1499,18 +1500,18 @@ type PaymentOrder struct {
 }
 
 type PaymentOrderItem struct {
-	OrderID      uint64                           `json:"order_id"`
+	OrderID      int64                            `json:"order_id"`
 	WorkspaceID  string                           `json:"workspace_id"`
 	ItemID       string                           `json:"item_id"`
 	RewardType   PaymentOrderItemRewardType       `json:"reward_type"`
 	Quantity     int64                            `json:"quantity"`
-	Scale        uint16                           `json:"scale"`
+	Scale        int16                            `json:"scale"`
 	DurationUnit NullPaymentOrderItemDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                        `json:"created_at"`
 }
 
 type PaymentPaidOrderIndex struct {
-	OrderID             uint64                      `json:"order_id"`
+	OrderID             int64                       `json:"order_id"`
 	WorkspaceID         string                      `json:"workspace_id"`
 	AppID               int64                       `json:"app_id"`
 	PlatformID          int64                       `json:"platform_id"`
@@ -1521,13 +1522,13 @@ type PaymentPaidOrderIndex struct {
 	PayerInternalUserID sql.NullInt64               `json:"payer_internal_user_id"`
 	PurchaseKeyID       sql.NullInt64               `json:"purchase_key_id"`
 	ProductID           string                      `json:"product_id"`
-	Quantity            uint64                      `json:"quantity"`
-	PriceID             uint64                      `json:"price_id"`
+	Quantity            int64                       `json:"quantity"`
+	PriceID             int64                       `json:"price_id"`
 	AssetCode           string                      `json:"asset_code"`
 	Locale              string                      `json:"locale"`
-	ListAmountMinor     uint64                      `json:"list_amount_minor"`
-	DiscountAmountMinor uint64                      `json:"discount_amount_minor"`
-	PayableAmountMinor  uint64                      `json:"payable_amount_minor"`
+	ListAmountMinor     int64                       `json:"list_amount_minor"`
+	DiscountAmountMinor int64                       `json:"discount_amount_minor"`
+	PayableAmountMinor  int64                       `json:"payable_amount_minor"`
 	Status              PaymentPaidOrderIndexStatus `json:"status"`
 	PaidAt              time.Time                   `json:"paid_at"`
 	FulfilledAt         sql.NullTime                `json:"fulfilled_at"`
@@ -1536,12 +1537,12 @@ type PaymentPaidOrderIndex struct {
 }
 
 type PaymentPrice struct {
-	ID                           uint64                  `json:"id"`
+	ID                           int64                   `json:"id"`
 	WorkspaceID                  string                  `json:"workspace_id"`
 	ProductID                    string                  `json:"product_id"`
 	AssetCode                    string                  `json:"asset_code"`
-	ListAmountMinor              uint64                  `json:"list_amount_minor"`
-	DiscountAmountMinor          uint64                  `json:"discount_amount_minor"`
+	ListAmountMinor              int64                   `json:"list_amount_minor"`
+	DiscountAmountMinor          int64                   `json:"discount_amount_minor"`
 	PricingMode                  PaymentPricePricingMode `json:"pricing_mode"`
 	ReferenceAssetCode           sql.NullString          `json:"reference_asset_code"`
 	ReferenceListAmountMinor     sql.NullInt64           `json:"reference_list_amount_minor"`
@@ -1560,7 +1561,7 @@ type PaymentProduct struct {
 	GroupCode            sql.NullString               `json:"group_code"`
 	TitleKey             string                       `json:"title_key"`
 	DescriptionKey       sql.NullString               `json:"description_key"`
-	Target               json.RawMessage              `json:"target"`
+	Target               pqtype.NullRawMessage        `json:"target"`
 	ImageUrl             sql.NullString               `json:"image_url"`
 	LinkUrl              sql.NullString               `json:"link_url"`
 	SizeLabel            sql.NullString               `json:"size_label"`
@@ -1587,12 +1588,12 @@ type PaymentProductCache struct {
 	ProductID            string                              `json:"product_id"`
 	AssetCode            string                              `json:"asset_code"`
 	Locale               string                              `json:"locale"`
-	PriceID              uint64                              `json:"price_id"`
+	PriceID              int64                               `json:"price_id"`
 	ItemID               string                              `json:"item_id"`
 	LinkUrl              sql.NullString                      `json:"link_url"`
 	SizeLabel            sql.NullString                      `json:"size_label"`
 	GroupCode            sql.NullString                      `json:"group_code"`
-	Target               json.RawMessage                     `json:"target"`
+	Target               pqtype.NullRawMessage               `json:"target"`
 	ProductTitle         string                              `json:"product_title"`
 	ProductDescription   string                              `json:"product_description"`
 	ImageUrl             sql.NullString                      `json:"image_url"`
@@ -1610,13 +1611,13 @@ type PaymentProductCache struct {
 	IsClosed             bool                                `json:"is_closed"`
 	AvailableFrom        time.Time                           `json:"available_from"`
 	AvailableUntil       time.Time                           `json:"available_until"`
-	ListAmountMinor      uint64                              `json:"list_amount_minor"`
-	DiscountAmountMinor  uint64                              `json:"discount_amount_minor"`
+	ListAmountMinor      int64                               `json:"list_amount_minor"`
+	DiscountAmountMinor  int64                               `json:"discount_amount_minor"`
 	IsPromotion          bool                                `json:"is_promotion"`
 	PriceStartsAt        time.Time                           `json:"price_starts_at"`
 	PriceEndsAt          time.Time                           `json:"price_ends_at"`
 	ItemQuantity         int64                               `json:"item_quantity"`
-	ItemScale            uint16                              `json:"item_scale"`
+	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
 	ItemType             sql.NullString                      `json:"item_type"`
@@ -1639,13 +1640,13 @@ type PaymentProductGroup struct {
 }
 
 type PaymentProductItem struct {
-	ID           uint64                             `json:"id"`
+	ID           int64                              `json:"id"`
 	WorkspaceID  string                             `json:"workspace_id"`
 	ProductID    string                             `json:"product_id"`
 	ItemID       string                             `json:"item_id"`
 	RewardType   PaymentProductItemRewardType       `json:"reward_type"`
 	Quantity     int64                              `json:"quantity"`
-	Scale        uint16                             `json:"scale"`
+	Scale        int16                              `json:"scale"`
 	DurationUnit NullPaymentProductItemDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time                          `json:"created_at"`
 	UpdatedAt    time.Time                          `json:"updated_at"`
@@ -1659,7 +1660,7 @@ type PaymentProductLimitCounter struct {
 	PlatformUserID string                                 `json:"platform_user_id"`
 	WindowStart    time.Time                              `json:"window_start"`
 	WindowEnd      time.Time                              `json:"window_end"`
-	PaidCount      uint64                                 `json:"paid_count"`
+	PaidCount      int64                                  `json:"paid_count"`
 	UpdatedAt      time.Time                              `json:"updated_at"`
 }
 
@@ -1693,22 +1694,22 @@ type PaymentProviderCursor struct {
 	Network        string    `json:"network"`
 	SourceKey      string    `json:"source_key"`
 	CursorValue    string    `json:"cursor_value"`
-	CursorSequence uint64    `json:"cursor_sequence"`
+	CursorSequence int64     `json:"cursor_sequence"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type PaymentProviderTransaction struct {
-	ID                    uint64                           `json:"id"`
+	ID                    int64                            `json:"id"`
 	WorkspaceID           string                           `json:"workspace_id"`
 	ProviderCode          string                           `json:"provider_code"`
 	Network               string                           `json:"network"`
 	SourceKey             string                           `json:"source_key"`
 	AssetCode             string                           `json:"asset_code"`
 	ExternalTransactionID string                           `json:"external_transaction_id"`
-	SequenceNumber        uint64                           `json:"sequence_number"`
+	SequenceNumber        int64                            `json:"sequence_number"`
 	SourceAddress         string                           `json:"source_address"`
 	DestinationAddress    string                           `json:"destination_address"`
-	AmountMinor           uint64                           `json:"amount_minor"`
+	AmountMinor           int64                            `json:"amount_minor"`
 	PaymentReference      string                           `json:"payment_reference"`
 	SenderReference       sql.NullString                   `json:"sender_reference"`
 	OrderID               sql.NullInt64                    `json:"order_id"`
@@ -1720,7 +1721,7 @@ type PaymentProviderTransaction struct {
 }
 
 type PaymentPurchaseKey struct {
-	ID             uint64                   `json:"id"`
+	ID             int64                    `json:"id"`
 	WorkspaceID    string                   `json:"workspace_id"`
 	KeyHash        string                   `json:"key_hash"`
 	AppID          int64                    `json:"app_id"`
@@ -1737,12 +1738,12 @@ type PaymentPurchaseKey struct {
 }
 
 type PaymentRefund struct {
-	ID               uint64              `json:"id"`
-	OrderID          uint64              `json:"order_id"`
-	AttemptID        uint64              `json:"attempt_id"`
+	ID               int64               `json:"id"`
+	OrderID          int64               `json:"order_id"`
+	AttemptID        int64               `json:"attempt_id"`
 	ProviderCode     string              `json:"provider_code"`
 	ProviderRefundID sql.NullString      `json:"provider_refund_id"`
-	AmountMinor      uint64              `json:"amount_minor"`
+	AmountMinor      int64               `json:"amount_minor"`
 	AssetCode        string              `json:"asset_code"`
 	Status           PaymentRefundStatus `json:"status"`
 	Reason           sql.NullString      `json:"reason"`
@@ -1755,12 +1756,12 @@ type PaymentStatsDaily struct {
 	ProductID         string    `json:"product_id"`
 	AssetCode         string    `json:"asset_code"`
 	StatsDate         time.Time `json:"stats_date"`
-	PurchaseCount     uint64    `json:"purchase_count"`
-	PurchaseQuantity  uint64    `json:"purchase_quantity"`
-	UniqueBuyers      uint64    `json:"unique_buyers"`
-	GrossAmountMinor  uint64    `json:"gross_amount_minor"`
-	RefundCount       uint64    `json:"refund_count"`
-	RefundAmountMinor uint64    `json:"refund_amount_minor"`
+	PurchaseCount     int64     `json:"purchase_count"`
+	PurchaseQuantity  int64     `json:"purchase_quantity"`
+	UniqueBuyers      int64     `json:"unique_buyers"`
+	GrossAmountMinor  int64     `json:"gross_amount_minor"`
+	RefundCount       int64     `json:"refund_count"`
+	RefundAmountMinor int64     `json:"refund_amount_minor"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
@@ -1776,45 +1777,45 @@ type PaymentStatsDailyBuyer struct {
 type PaymentStatsDailyOverview struct {
 	WorkspaceID          string    `json:"workspace_id"`
 	StatsDate            time.Time `json:"stats_date"`
-	ProductsTotal        uint64    `json:"products_total"`
-	ActiveProducts       uint64    `json:"active_products"`
-	VisibleProducts      uint64    `json:"visible_products"`
-	OrdersCreated        uint64    `json:"orders_created"`
-	DraftOrders          uint64    `json:"draft_orders"`
-	PendingPaymentOrders uint64    `json:"pending_payment_orders"`
-	PaidOrders           uint64    `json:"paid_orders"`
-	FulfilledOrders      uint64    `json:"fulfilled_orders"`
-	CanceledOrders       uint64    `json:"canceled_orders"`
-	ExpiredOrders        uint64    `json:"expired_orders"`
-	RefundedOrders       uint64    `json:"refunded_orders"`
-	ChargebackedOrders   uint64    `json:"chargebacked_orders"`
-	FailedOrders         uint64    `json:"failed_orders"`
-	PurchaseCount        uint64    `json:"purchase_count"`
-	PurchaseQuantity     uint64    `json:"purchase_quantity"`
-	UniqueBuyers         uint64    `json:"unique_buyers"`
-	RefundCount          uint64    `json:"refund_count"`
+	ProductsTotal        int64     `json:"products_total"`
+	ActiveProducts       int64     `json:"active_products"`
+	VisibleProducts      int64     `json:"visible_products"`
+	OrdersCreated        int64     `json:"orders_created"`
+	DraftOrders          int64     `json:"draft_orders"`
+	PendingPaymentOrders int64     `json:"pending_payment_orders"`
+	PaidOrders           int64     `json:"paid_orders"`
+	FulfilledOrders      int64     `json:"fulfilled_orders"`
+	CanceledOrders       int64     `json:"canceled_orders"`
+	ExpiredOrders        int64     `json:"expired_orders"`
+	RefundedOrders       int64     `json:"refunded_orders"`
+	ChargebackedOrders   int64     `json:"chargebacked_orders"`
+	FailedOrders         int64     `json:"failed_orders"`
+	PurchaseCount        int64     `json:"purchase_count"`
+	PurchaseQuantity     int64     `json:"purchase_quantity"`
+	UniqueBuyers         int64     `json:"unique_buyers"`
+	RefundCount          int64     `json:"refund_count"`
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 type PaymentStatsEvent struct {
-	ID             uint64                     `json:"id"`
+	ID             int64                      `json:"id"`
 	EventType      PaymentStatsEventEventType `json:"event_type"`
-	SourceID       uint64                     `json:"source_id"`
+	SourceID       int64                      `json:"source_id"`
 	WorkspaceID    string                     `json:"workspace_id"`
 	ProductID      string                     `json:"product_id"`
 	AppID          int64                      `json:"app_id"`
 	PlatformID     int64                      `json:"platform_id"`
 	PlatformUserID string                     `json:"platform_user_id"`
-	Quantity       uint64                     `json:"quantity"`
+	Quantity       int64                      `json:"quantity"`
 	AssetCode      string                     `json:"asset_code"`
-	AmountMinor    uint64                     `json:"amount_minor"`
+	AmountMinor    int64                      `json:"amount_minor"`
 	OccurredAt     time.Time                  `json:"occurred_at"`
 	CreatedAt      time.Time                  `json:"created_at"`
 }
 
 type PaymentStatsOrderEvent struct {
-	ID          uint64                            `json:"id"`
-	OrderID     uint64                            `json:"order_id"`
+	ID          int64                             `json:"id"`
+	OrderID     int64                             `json:"order_id"`
 	WorkspaceID string                            `json:"workspace_id"`
 	ProductID   string                            `json:"product_id"`
 	EventType   PaymentStatsOrderEventEventType   `json:"event_type"`
@@ -1824,7 +1825,7 @@ type PaymentStatsOrderEvent struct {
 }
 
 type PaymentSubscription struct {
-	ID                     uint64                    `json:"id"`
+	ID                     int64                     `json:"id"`
 	WorkspaceID            string                    `json:"workspace_id"`
 	ProviderCode           string                    `json:"provider_code"`
 	ProviderSubscriptionID string                    `json:"provider_subscription_id"`

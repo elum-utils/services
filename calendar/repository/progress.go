@@ -20,10 +20,10 @@ func (r *Repository) GetProgress(ctx context.Context, identity Identity, calenda
 		return nil, err
 	}
 	return &Progress{
-		CurrentPosition: row.CurrentPosition, ClaimCount: row.ClaimCount,
+		CurrentPosition: uint32(row.CurrentPosition), ClaimCount: uint64(row.ClaimCount),
 		LastClaimPosition: sqlNullUint32Ptr(row.LastClaimPosition),
 		LastClaimAt:       sqlNullTimePtr(row.LastClaimAt), NextClaimAt: sqlNullTimePtr(row.NextClaimAt),
-		IsCompleted: row.IsCompleted, ResetCount: row.ResetCount,
+		IsCompleted: row.IsCompleted, ResetCount: uint64(row.ResetCount),
 		LastWasReset: row.LastWasReset,
 	}, nil
 }

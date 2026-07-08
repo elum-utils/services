@@ -79,6 +79,13 @@ type PaymentDailyOverview struct {
 	RefundCount          uint64
 }
 
+func statUint64(value int64) uint64 {
+	if value < 0 {
+		return 0
+	}
+	return uint64(value)
+}
+
 func (r *PaymentRepository) GetPaymentStats(ctx context.Context, workspaceID string) (PaymentStats, error) {
 	row, err := r.q.AdminGetPaymentStats(ctx, sqlc.AdminGetPaymentStatsParams{
 		WorkspaceID: workspaceID, WorkspaceID_2: workspaceID, WorkspaceID_3: workspaceID,
@@ -158,9 +165,9 @@ func (r *PaymentRepository) ListPaymentDailyStats(ctx context.Context, workspace
 	for _, row := range rows {
 		result = append(result, PaymentDailyStats{
 			Date: row.StatsDate, ProductID: row.ProductID, AssetCode: row.AssetCode,
-			PurchaseCount: row.PurchaseCount, PurchaseQuantity: row.PurchaseQuantity,
-			UniqueBuyers: row.UniqueBuyers, GrossAmountMinor: row.GrossAmountMinor,
-			RefundCount: row.RefundCount, RefundAmountMinor: row.RefundAmountMinor,
+			PurchaseCount: statUint64(row.PurchaseCount), PurchaseQuantity: statUint64(row.PurchaseQuantity),
+			UniqueBuyers: statUint64(row.UniqueBuyers), GrossAmountMinor: statUint64(row.GrossAmountMinor),
+			RefundCount: statUint64(row.RefundCount), RefundAmountMinor: statUint64(row.RefundAmountMinor),
 		})
 	}
 	return result, nil
@@ -193,7 +200,7 @@ func (r *PaymentRepository) ListPaymentDailyOverview(
 
 func (r *PaymentRepository) RefreshPaymentDailyStats(ctx context.Context, from, until time.Time) error {
 	if err := r.q.RefreshPaymentDailyStats(ctx, sqlc.RefreshPaymentDailyStatsParams{
-		OccurredAt: from, OccurredAt_2: until, OccurredAt_3: from, OccurredAt_4: until,
+		OccurredAt: from, OccurredAt_2: until,
 	}); err != nil {
 		return err
 	}
@@ -208,14 +215,14 @@ func (r *PaymentRepository) RefreshPaymentDailyStats(ctx context.Context, from, 
 func mapStoredDailyOverview(row sqlc.PaymentStatsDailyOverview) PaymentDailyOverview {
 	return PaymentDailyOverview{
 		Date:          row.StatsDate,
-		ProductsTotal: row.ProductsTotal, ActiveProducts: row.ActiveProducts,
-		VisibleProducts: row.VisibleProducts, OrdersCreated: row.OrdersCreated,
-		DraftOrders: row.DraftOrders, PendingPaymentOrders: row.PendingPaymentOrders,
-		PaidOrders: row.PaidOrders, FulfilledOrders: row.FulfilledOrders,
-		CanceledOrders: row.CanceledOrders, ExpiredOrders: row.ExpiredOrders,
-		RefundedOrders: row.RefundedOrders, ChargebackedOrders: row.ChargebackedOrders,
-		FailedOrders: row.FailedOrders, PurchaseCount: row.PurchaseCount,
-		PurchaseQuantity: row.PurchaseQuantity, UniqueBuyers: row.UniqueBuyers,
-		RefundCount: row.RefundCount,
+		ProductsTotal: statUint64(row.ProductsTotal), ActiveProducts: statUint64(row.ActiveProducts),
+		VisibleProducts: statUint64(row.VisibleProducts), OrdersCreated: statUint64(row.OrdersCreated),
+		DraftOrders: statUint64(row.DraftOrders), PendingPaymentOrders: statUint64(row.PendingPaymentOrders),
+		PaidOrders: statUint64(row.PaidOrders), FulfilledOrders: statUint64(row.FulfilledOrders),
+		CanceledOrders: statUint64(row.CanceledOrders), ExpiredOrders: statUint64(row.ExpiredOrders),
+		RefundedOrders: statUint64(row.RefundedOrders), ChargebackedOrders: statUint64(row.ChargebackedOrders),
+		FailedOrders: statUint64(row.FailedOrders), PurchaseCount: statUint64(row.PurchaseCount),
+		PurchaseQuantity: statUint64(row.PurchaseQuantity), UniqueBuyers: statUint64(row.UniqueBuyers),
+		RefundCount: statUint64(row.RefundCount),
 	}
 }

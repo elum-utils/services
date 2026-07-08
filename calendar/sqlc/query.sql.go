@@ -17,24 +17,24 @@ INSERT INTO calendar_definition (
     id, workspace_id, type, mode, interval_type, interval_unit,
     interval_count, reset_after_intervals, end_behavior, timezone,
     hide_future_rewards, is_active, start_at, end_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `
 
 type AdminCreateCalendarParams struct {
-	ID                  string                         `json:"id"`
-	WorkspaceID         string                         `json:"workspace_id"`
-	Type                string                         `json:"type"`
-	Mode                CalendarDefinitionMode         `json:"mode"`
-	IntervalType        CalendarDefinitionIntervalType `json:"interval_type"`
-	IntervalUnit        CalendarDefinitionIntervalUnit `json:"interval_unit"`
-	IntervalCount       uint32                         `json:"interval_count"`
-	ResetAfterIntervals uint32                         `json:"reset_after_intervals"`
-	EndBehavior         CalendarDefinitionEndBehavior  `json:"end_behavior"`
-	Timezone            string                         `json:"timezone"`
-	HideFutureRewards   bool                           `json:"hide_future_rewards"`
-	IsActive            bool                           `json:"is_active"`
-	StartAt             sql.NullTime                   `json:"start_at"`
-	EndAt               sql.NullTime                   `json:"end_at"`
+	ID                  string       `json:"id"`
+	WorkspaceID         string       `json:"workspace_id"`
+	Type                string       `json:"type"`
+	Mode                string       `json:"mode"`
+	IntervalType        string       `json:"interval_type"`
+	IntervalUnit        string       `json:"interval_unit"`
+	IntervalCount       int32        `json:"interval_count"`
+	ResetAfterIntervals int32        `json:"reset_after_intervals"`
+	EndBehavior         string       `json:"end_behavior"`
+	Timezone            string       `json:"timezone"`
+	HideFutureRewards   bool         `json:"hide_future_rewards"`
+	IsActive            bool         `json:"is_active"`
+	StartAt             sql.NullTime `json:"start_at"`
+	EndAt               sql.NullTime `json:"end_at"`
 }
 
 func (q *Queries) AdminCreateCalendar(ctx context.Context, arg AdminCreateCalendarParams) error {
@@ -57,28 +57,28 @@ func (q *Queries) AdminCreateCalendar(ctx context.Context, arg AdminCreateCalend
 	return err
 }
 
-const adminCreateStep = `-- name: AdminCreateStep :execlastid
+const adminCreateStep = `-- name: AdminCreateStep :one
 INSERT INTO calendar_step (workspace_id, calendar_id, position)
-VALUES (?, ?, ?)
+VALUES ($1, $2, $3)
+RETURNING id
 `
 
 type AdminCreateStepParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	CalendarID  string `json:"calendar_id"`
-	Position    uint32 `json:"position"`
+	Position    int32  `json:"position"`
 }
 
 func (q *Queries) AdminCreateStep(ctx context.Context, arg AdminCreateStepParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminCreateStepStmt, adminCreateStep, arg.WorkspaceID, arg.CalendarID, arg.Position)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	row := q.queryRow(ctx, q.adminCreateStepStmt, adminCreateStep, arg.WorkspaceID, arg.CalendarID, arg.Position)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminDeleteLocalization = `-- name: AdminDeleteLocalization :execrows
 DELETE FROM calendar_localization
-WHERE workspace_id = ? AND calendar_id = ? AND locale = ?
+WHERE workspace_id = $1 AND calendar_id = $2 AND locale = $3
 `
 
 type AdminDeleteLocalizationParams struct {
@@ -97,13 +97,13 @@ func (q *Queries) AdminDeleteLocalization(ctx context.Context, arg AdminDeleteLo
 
 const adminDeleteReward = `-- name: AdminDeleteReward :execrows
 DELETE FROM calendar_reward
-WHERE workspace_id = ? AND calendar_id = ? AND id = ?
+WHERE workspace_id = $1 AND calendar_id = $2 AND id = $3
 `
 
 type AdminDeleteRewardParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	CalendarID  string `json:"calendar_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminDeleteReward(ctx context.Context, arg AdminDeleteRewardParams) (int64, error) {
@@ -116,13 +116,13 @@ func (q *Queries) AdminDeleteReward(ctx context.Context, arg AdminDeleteRewardPa
 
 const adminDeleteStep = `-- name: AdminDeleteStep :execrows
 DELETE FROM calendar_step
-WHERE workspace_id = ? AND calendar_id = ? AND id = ?
+WHERE workspace_id = $1 AND calendar_id = $2 AND id = $3
 `
 
 type AdminDeleteStepParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	CalendarID  string `json:"calendar_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminDeleteStep(ctx context.Context, arg AdminDeleteStepParams) (int64, error) {
@@ -136,7 +136,7 @@ func (q *Queries) AdminDeleteStep(ctx context.Context, arg AdminDeleteStepParams
 const adminGetCalendar = `-- name: AdminGetCalendar :one
 SELECT id, workspace_id, type, mode, interval_type, interval_unit, interval_count, reset_after_intervals, end_behavior, timezone, hide_future_rewards, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM calendar_definition
-WHERE workspace_id = ? AND id = ?
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1
 `
 
@@ -173,7 +173,7 @@ func (q *Queries) AdminGetCalendar(ctx context.Context, arg AdminGetCalendarPara
 const adminGetLocalization = `-- name: AdminGetLocalization :one
 SELECT workspace_id, calendar_id, locale, title, description, created_at, updated_at
 FROM calendar_localization
-WHERE workspace_id = ? AND calendar_id = ? AND locale = ?
+WHERE workspace_id = $1 AND calendar_id = $2 AND locale = $3
 LIMIT 1
 `
 
@@ -201,14 +201,14 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 const adminGetReward = `-- name: AdminGetReward :one
 SELECT id, workspace_id, calendar_id, step_id, item_key, reward_type, item_count, scale, duration_unit, position, created_at, updated_at
 FROM calendar_reward
-WHERE workspace_id = ? AND calendar_id = ? AND id = ?
+WHERE workspace_id = $1 AND calendar_id = $2 AND id = $3
 LIMIT 1
 `
 
 type AdminGetRewardParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	CalendarID  string `json:"calendar_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminGetReward(ctx context.Context, arg AdminGetRewardParams) (CalendarReward, error) {
@@ -233,11 +233,11 @@ func (q *Queries) AdminGetReward(ctx context.Context, arg AdminGetRewardParams) 
 
 const adminGetStats = `-- name: AdminGetStats :one
 SELECT
-    COUNT(*) AS operation_count,
-    COALESCE(SUM(granted), 0) AS grant_count,
-    COUNT(DISTINCT CONCAT_WS(':', app_id, platform_id, platform_user_id)) AS unique_users
+    COUNT(*)::bigint AS operation_count,
+    COUNT(*) FILTER (WHERE granted)::bigint AS grant_count,
+    COUNT(DISTINCT (app_id, platform_id, platform_user_id))::bigint AS unique_users
 FROM calendar_operation
-WHERE workspace_id = ? AND calendar_id = ?
+WHERE workspace_id = $1 AND calendar_id = $2
 `
 
 type AdminGetStatsParams struct {
@@ -246,9 +246,9 @@ type AdminGetStatsParams struct {
 }
 
 type AdminGetStatsRow struct {
-	OperationCount int64       `json:"operation_count"`
-	GrantCount     interface{} `json:"grant_count"`
-	UniqueUsers    int64       `json:"unique_users"`
+	OperationCount int64 `json:"operation_count"`
+	GrantCount     int64 `json:"grant_count"`
+	UniqueUsers    int64 `json:"unique_users"`
 }
 
 func (q *Queries) AdminGetStats(ctx context.Context, arg AdminGetStatsParams) (AdminGetStatsRow, error) {
@@ -261,9 +261,9 @@ func (q *Queries) AdminGetStats(ctx context.Context, arg AdminGetStatsParams) (A
 const adminListCalendars = `-- name: AdminListCalendars :many
 SELECT id, workspace_id, type, mode, interval_type, interval_unit, interval_count, reset_after_intervals, end_behavior, timezone, hide_future_rewards, is_active, start_at, end_at, deleted_at, created_at, updated_at
 FROM calendar_definition
-WHERE workspace_id = ?
+WHERE workspace_id = $1
 ORDER BY created_at DESC, id
-LIMIT ? OFFSET ?
+LIMIT $2 OFFSET $3
 `
 
 type AdminListCalendarsParams struct {
@@ -316,10 +316,10 @@ func (q *Queries) AdminListCalendars(ctx context.Context, arg AdminListCalendars
 const adminListDailyStats = `-- name: AdminListDailyStats :many
 SELECT workspace_id, calendar_id, stats_date, operation_count, grant_count, unique_users, updated_at
 FROM calendar_stats_daily
-WHERE workspace_id = ?
-  AND calendar_id = ?
-  AND stats_date >= ?
-  AND stats_date <= ?
+WHERE workspace_id = $1
+  AND calendar_id = $2
+  AND stats_date >= $3
+  AND stats_date <= $4
 ORDER BY stats_date
 `
 
@@ -369,7 +369,7 @@ func (q *Queries) AdminListDailyStats(ctx context.Context, arg AdminListDailySta
 const adminListLocalizations = `-- name: AdminListLocalizations :many
 SELECT workspace_id, calendar_id, locale, title, description, created_at, updated_at
 FROM calendar_localization
-WHERE workspace_id = ? AND calendar_id = ?
+WHERE workspace_id = $1 AND calendar_id = $2
 ORDER BY locale
 `
 
@@ -412,9 +412,9 @@ func (q *Queries) AdminListLocalizations(ctx context.Context, arg AdminListLocal
 const adminListOperations = `-- name: AdminListOperations :many
 SELECT id, workspace_id, calendar_id, app_id, platform_id, platform_user_id, operation_id, granted, status, position, rewards_snapshot, current_position, claim_count, last_claim_position, last_claim_at, next_claim_at, is_completed, reset_count, was_reset, occurred_at, created_at
 FROM calendar_operation
-WHERE workspace_id = ? AND calendar_id = ?
+WHERE workspace_id = $1 AND calendar_id = $2
 ORDER BY occurred_at DESC, id DESC
-LIMIT ? OFFSET ?
+LIMIT $3 OFFSET $4
 `
 
 type AdminListOperationsParams struct {
@@ -476,8 +476,9 @@ func (q *Queries) AdminListOperations(ctx context.Context, arg AdminListOperatio
 
 const adminSetCalendarActive = `-- name: AdminSetCalendarActive :execrows
 UPDATE calendar_definition
-SET is_active = ?
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+SET is_active = $1,
+    updated_at = now()
+WHERE workspace_id = $2 AND id = $3 AND deleted_at IS NULL
 `
 
 type AdminSetCalendarActiveParams struct {
@@ -496,8 +497,10 @@ func (q *Queries) AdminSetCalendarActive(ctx context.Context, arg AdminSetCalend
 
 const adminSoftDeleteCalendar = `-- name: AdminSoftDeleteCalendar :execrows
 UPDATE calendar_definition
-SET deleted_at = NOW(), is_active = FALSE
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+SET deleted_at = now(),
+    is_active = FALSE,
+    updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
 type AdminSoftDeleteCalendarParams struct {
@@ -515,36 +518,37 @@ func (q *Queries) AdminSoftDeleteCalendar(ctx context.Context, arg AdminSoftDele
 
 const adminUpdateCalendar = `-- name: AdminUpdateCalendar :execrows
 UPDATE calendar_definition
-SET type = ?,
-    mode = ?,
-    interval_type = ?,
-    interval_unit = ?,
-    interval_count = ?,
-    reset_after_intervals = ?,
-    end_behavior = ?,
-    timezone = ?,
-    hide_future_rewards = ?,
-    is_active = ?,
-    start_at = ?,
-    end_at = ?
-WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
+SET type = $1,
+    mode = $2,
+    interval_type = $3,
+    interval_unit = $4,
+    interval_count = $5,
+    reset_after_intervals = $6,
+    end_behavior = $7,
+    timezone = $8,
+    hide_future_rewards = $9,
+    is_active = $10,
+    start_at = $11,
+    end_at = $12,
+    updated_at = now()
+WHERE workspace_id = $13 AND id = $14 AND deleted_at IS NULL
 `
 
 type AdminUpdateCalendarParams struct {
-	Type                string                         `json:"type"`
-	Mode                CalendarDefinitionMode         `json:"mode"`
-	IntervalType        CalendarDefinitionIntervalType `json:"interval_type"`
-	IntervalUnit        CalendarDefinitionIntervalUnit `json:"interval_unit"`
-	IntervalCount       uint32                         `json:"interval_count"`
-	ResetAfterIntervals uint32                         `json:"reset_after_intervals"`
-	EndBehavior         CalendarDefinitionEndBehavior  `json:"end_behavior"`
-	Timezone            string                         `json:"timezone"`
-	HideFutureRewards   bool                           `json:"hide_future_rewards"`
-	IsActive            bool                           `json:"is_active"`
-	StartAt             sql.NullTime                   `json:"start_at"`
-	EndAt               sql.NullTime                   `json:"end_at"`
-	WorkspaceID         string                         `json:"workspace_id"`
-	ID                  string                         `json:"id"`
+	Type                string       `json:"type"`
+	Mode                string       `json:"mode"`
+	IntervalType        string       `json:"interval_type"`
+	IntervalUnit        string       `json:"interval_unit"`
+	IntervalCount       int32        `json:"interval_count"`
+	ResetAfterIntervals int32        `json:"reset_after_intervals"`
+	EndBehavior         string       `json:"end_behavior"`
+	Timezone            string       `json:"timezone"`
+	HideFutureRewards   bool         `json:"hide_future_rewards"`
+	IsActive            bool         `json:"is_active"`
+	StartAt             sql.NullTime `json:"start_at"`
+	EndAt               sql.NullTime `json:"end_at"`
+	WorkspaceID         string       `json:"workspace_id"`
+	ID                  string       `json:"id"`
 }
 
 func (q *Queries) AdminUpdateCalendar(ctx context.Context, arg AdminUpdateCalendarParams) (int64, error) {
@@ -572,27 +576,28 @@ func (q *Queries) AdminUpdateCalendar(ctx context.Context, arg AdminUpdateCalend
 
 const adminUpdateReward = `-- name: AdminUpdateReward :execrows
 UPDATE calendar_reward
-SET step_id = ?,
-    item_key = ?,
-    reward_type = ?,
-    item_count = ?,
-    scale = ?,
-    duration_unit = ?,
-    position = ?
-WHERE workspace_id = ? AND calendar_id = ? AND id = ?
+SET step_id = $1,
+    item_key = $2,
+    reward_type = $3,
+    item_count = $4,
+    scale = $5,
+    duration_unit = $6,
+    position = $7,
+    updated_at = now()
+WHERE workspace_id = $8 AND calendar_id = $9 AND id = $10
 `
 
 type AdminUpdateRewardParams struct {
-	StepID       uint64                         `json:"step_id"`
-	ItemKey      string                         `json:"item_key"`
-	RewardType   CalendarRewardRewardType       `json:"reward_type"`
-	ItemCount    int64                          `json:"item_count"`
-	Scale        uint16                         `json:"scale"`
-	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
-	Position     uint32                         `json:"position"`
-	WorkspaceID  string                         `json:"workspace_id"`
-	CalendarID   string                         `json:"calendar_id"`
-	ID           uint64                         `json:"id"`
+	StepID       int64          `json:"step_id"`
+	ItemKey      string         `json:"item_key"`
+	RewardType   string         `json:"reward_type"`
+	ItemCount    int64          `json:"item_count"`
+	Scale        int16          `json:"scale"`
+	DurationUnit sql.NullString `json:"duration_unit"`
+	Position     int32          `json:"position"`
+	WorkspaceID  string         `json:"workspace_id"`
+	CalendarID   string         `json:"calendar_id"`
+	ID           int64          `json:"id"`
 }
 
 func (q *Queries) AdminUpdateReward(ctx context.Context, arg AdminUpdateRewardParams) (int64, error) {
@@ -616,15 +621,16 @@ func (q *Queries) AdminUpdateReward(ctx context.Context, arg AdminUpdateRewardPa
 
 const adminUpdateStep = `-- name: AdminUpdateStep :execrows
 UPDATE calendar_step
-SET position = ?
-WHERE workspace_id = ? AND calendar_id = ? AND id = ?
+SET position = $1,
+    updated_at = now()
+WHERE workspace_id = $2 AND calendar_id = $3 AND id = $4
 `
 
 type AdminUpdateStepParams struct {
-	Position    uint32 `json:"position"`
+	Position    int32  `json:"position"`
 	WorkspaceID string `json:"workspace_id"`
 	CalendarID  string `json:"calendar_id"`
-	ID          uint64 `json:"id"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) AdminUpdateStep(ctx context.Context, arg AdminUpdateStepParams) (int64, error) {
@@ -643,10 +649,11 @@ func (q *Queries) AdminUpdateStep(ctx context.Context, arg AdminUpdateStepParams
 const adminUpsertLocalization = `-- name: AdminUpsertLocalization :exec
 INSERT INTO calendar_localization (
     workspace_id, calendar_id, locale, title, description
-) VALUES (?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    title = VALUES(title),
-    description = VALUES(description)
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, calendar_id, locale) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    updated_at = now()
 `
 
 type AdminUpsertLocalizationParams struct {
@@ -668,34 +675,35 @@ func (q *Queries) AdminUpsertLocalization(ctx context.Context, arg AdminUpsertLo
 	return err
 }
 
-const adminUpsertReward = `-- name: AdminUpsertReward :execlastid
+const adminUpsertReward = `-- name: AdminUpsertReward :one
 INSERT INTO calendar_reward (
     workspace_id, calendar_id, step_id, item_key,
     reward_type, item_count, scale, duration_unit, position
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    id = LAST_INSERT_ID(id),
-    reward_type = VALUES(reward_type),
-    item_count = VALUES(item_count),
-    scale = VALUES(scale),
-    duration_unit = VALUES(duration_unit),
-    position = VALUES(position)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (workspace_id, calendar_id, step_id, item_key) DO UPDATE SET
+    reward_type = EXCLUDED.reward_type,
+    item_count = EXCLUDED.item_count,
+    scale = EXCLUDED.scale,
+    duration_unit = EXCLUDED.duration_unit,
+    position = EXCLUDED.position,
+    updated_at = now()
+RETURNING id
 `
 
 type AdminUpsertRewardParams struct {
-	WorkspaceID  string                         `json:"workspace_id"`
-	CalendarID   string                         `json:"calendar_id"`
-	StepID       uint64                         `json:"step_id"`
-	ItemKey      string                         `json:"item_key"`
-	RewardType   CalendarRewardRewardType       `json:"reward_type"`
-	ItemCount    int64                          `json:"item_count"`
-	Scale        uint16                         `json:"scale"`
-	DurationUnit NullCalendarRewardDurationUnit `json:"duration_unit"`
-	Position     uint32                         `json:"position"`
+	WorkspaceID  string         `json:"workspace_id"`
+	CalendarID   string         `json:"calendar_id"`
+	StepID       int64          `json:"step_id"`
+	ItemKey      string         `json:"item_key"`
+	RewardType   string         `json:"reward_type"`
+	ItemCount    int64          `json:"item_count"`
+	Scale        int16          `json:"scale"`
+	DurationUnit sql.NullString `json:"duration_unit"`
+	Position     int32          `json:"position"`
 }
 
 func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminUpsertRewardStmt, adminUpsertReward,
+	row := q.queryRow(ctx, q.adminUpsertRewardStmt, adminUpsertReward,
 		arg.WorkspaceID,
 		arg.CalendarID,
 		arg.StepID,
@@ -706,19 +714,19 @@ func (q *Queries) AdminUpsertReward(ctx context.Context, arg AdminUpsertRewardPa
 		arg.DurationUnit,
 		arg.Position,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
-const createOperation = `-- name: CreateOperation :execlastid
+const createOperation = `-- name: CreateOperation :one
 INSERT INTO calendar_operation (
     workspace_id, calendar_id, app_id, platform_id, platform_user_id,
     operation_id, granted, status, position, rewards_snapshot,
     current_position, claim_count, last_claim_position, last_claim_at,
     next_claim_at, is_completed, reset_count, was_reset, occurred_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+RETURNING id
 `
 
 type CreateOperationParams struct {
@@ -732,19 +740,19 @@ type CreateOperationParams struct {
 	Status            string          `json:"status"`
 	Position          sql.NullInt32   `json:"position"`
 	RewardsSnapshot   json.RawMessage `json:"rewards_snapshot"`
-	CurrentPosition   uint32          `json:"current_position"`
-	ClaimCount        uint64          `json:"claim_count"`
+	CurrentPosition   int32           `json:"current_position"`
+	ClaimCount        int64           `json:"claim_count"`
 	LastClaimPosition sql.NullInt32   `json:"last_claim_position"`
 	LastClaimAt       sql.NullTime    `json:"last_claim_at"`
 	NextClaimAt       sql.NullTime    `json:"next_claim_at"`
 	IsCompleted       bool            `json:"is_completed"`
-	ResetCount        uint64          `json:"reset_count"`
+	ResetCount        int64           `json:"reset_count"`
 	WasReset          bool            `json:"was_reset"`
 	OccurredAt        time.Time       `json:"occurred_at"`
 }
 
 func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams) (int64, error) {
-	result, err := q.exec(ctx, q.createOperationStmt, createOperation,
+	row := q.queryRow(ctx, q.createOperationStmt, createOperation,
 		arg.WorkspaceID,
 		arg.CalendarID,
 		arg.AppID,
@@ -765,10 +773,9 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 		arg.WasReset,
 		arg.OccurredAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getCalendarBundle = `-- name: GetCalendarBundle :many
@@ -806,7 +813,7 @@ FROM calendar_definition c
 LEFT JOIN calendar_localization l
   ON l.workspace_id = c.workspace_id
  AND l.calendar_id = c.id
- AND l.locale = ?
+ AND l.locale = $1
 LEFT JOIN calendar_step s
   ON s.workspace_id = c.workspace_id
  AND s.calendar_id = c.id
@@ -814,8 +821,8 @@ LEFT JOIN calendar_reward r
   ON r.workspace_id = s.workspace_id
  AND r.calendar_id = s.calendar_id
  AND r.step_id = s.id
-WHERE c.workspace_id = ?
-  AND (c.id = ? OR c.type = ?)
+WHERE c.workspace_id = $2
+  AND (c.id = $3 OR c.type = $4)
 ORDER BY s.position, r.position, r.id
 `
 
@@ -827,35 +834,35 @@ type GetCalendarBundleParams struct {
 }
 
 type GetCalendarBundleRow struct {
-	ID                      string                         `json:"id"`
-	WorkspaceID             string                         `json:"workspace_id"`
-	Type                    string                         `json:"type"`
-	Mode                    CalendarDefinitionMode         `json:"mode"`
-	IntervalType            CalendarDefinitionIntervalType `json:"interval_type"`
-	IntervalUnit            CalendarDefinitionIntervalUnit `json:"interval_unit"`
-	IntervalCount           uint32                         `json:"interval_count"`
-	ResetAfterIntervals     uint32                         `json:"reset_after_intervals"`
-	EndBehavior             CalendarDefinitionEndBehavior  `json:"end_behavior"`
-	Timezone                string                         `json:"timezone"`
-	HideFutureRewards       bool                           `json:"hide_future_rewards"`
-	IsActive                bool                           `json:"is_active"`
-	StartAt                 sql.NullTime                   `json:"start_at"`
-	EndAt                   sql.NullTime                   `json:"end_at"`
-	DeletedAt               sql.NullTime                   `json:"deleted_at"`
-	CreatedAt               time.Time                      `json:"created_at"`
-	UpdatedAt               time.Time                      `json:"updated_at"`
-	LocalizationLocale      sql.NullString                 `json:"localization_locale"`
-	LocalizationTitle       sql.NullString                 `json:"localization_title"`
-	LocalizationDescription sql.NullString                 `json:"localization_description"`
-	StepID                  sql.NullInt64                  `json:"step_id"`
-	StepPosition            sql.NullInt32                  `json:"step_position"`
-	RewardID                sql.NullInt64                  `json:"reward_id"`
-	RewardItemKey           sql.NullString                 `json:"reward_item_key"`
-	RewardType              NullCalendarRewardRewardType   `json:"reward_type"`
-	RewardItemCount         sql.NullInt64                  `json:"reward_item_count"`
-	RewardScale             sql.NullInt16                  `json:"reward_scale"`
-	RewardDurationUnit      NullCalendarRewardDurationUnit `json:"reward_duration_unit"`
-	RewardPosition          sql.NullInt32                  `json:"reward_position"`
+	ID                      string         `json:"id"`
+	WorkspaceID             string         `json:"workspace_id"`
+	Type                    string         `json:"type"`
+	Mode                    string         `json:"mode"`
+	IntervalType            string         `json:"interval_type"`
+	IntervalUnit            string         `json:"interval_unit"`
+	IntervalCount           int32          `json:"interval_count"`
+	ResetAfterIntervals     int32          `json:"reset_after_intervals"`
+	EndBehavior             string         `json:"end_behavior"`
+	Timezone                string         `json:"timezone"`
+	HideFutureRewards       bool           `json:"hide_future_rewards"`
+	IsActive                bool           `json:"is_active"`
+	StartAt                 sql.NullTime   `json:"start_at"`
+	EndAt                   sql.NullTime   `json:"end_at"`
+	DeletedAt               sql.NullTime   `json:"deleted_at"`
+	CreatedAt               time.Time      `json:"created_at"`
+	UpdatedAt               time.Time      `json:"updated_at"`
+	LocalizationLocale      sql.NullString `json:"localization_locale"`
+	LocalizationTitle       sql.NullString `json:"localization_title"`
+	LocalizationDescription sql.NullString `json:"localization_description"`
+	StepID                  sql.NullInt64  `json:"step_id"`
+	StepPosition            sql.NullInt32  `json:"step_position"`
+	RewardID                sql.NullInt64  `json:"reward_id"`
+	RewardItemKey           sql.NullString `json:"reward_item_key"`
+	RewardType              sql.NullString `json:"reward_type"`
+	RewardItemCount         sql.NullInt64  `json:"reward_item_count"`
+	RewardScale             sql.NullInt16  `json:"reward_scale"`
+	RewardDurationUnit      sql.NullString `json:"reward_duration_unit"`
+	RewardPosition          sql.NullInt32  `json:"reward_position"`
 }
 
 func (q *Queries) GetCalendarBundle(ctx context.Context, arg GetCalendarBundleParams) ([]GetCalendarBundleRow, error) {
@@ -919,11 +926,11 @@ func (q *Queries) GetCalendarBundle(ctx context.Context, arg GetCalendarBundlePa
 const getProgress = `-- name: GetProgress :one
 SELECT workspace_id, calendar_id, app_id, platform_id, platform_user_id, current_position, claim_count, last_claim_position, last_claim_at, next_claim_at, is_completed, reset_count, last_was_reset, created_at, updated_at
 FROM calendar_progress
-WHERE workspace_id = ?
-  AND calendar_id = ?
-  AND app_id = ?
-  AND platform_id = ?
-  AND platform_user_id = ?
+WHERE workspace_id = $1
+  AND calendar_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
 LIMIT 1
 `
 
@@ -996,7 +1003,7 @@ SELECT
     o.granted AS operation_granted,
     o.status AS operation_status,
     o.position AS operation_position,
-    COALESCE(o.rewards_snapshot, JSON_ARRAY()) AS operation_rewards_snapshot,
+    COALESCE(o.rewards_snapshot, '[]'::jsonb) AS operation_rewards_snapshot,
     o.current_position AS operation_current_position,
     o.claim_count AS operation_claim_count,
     o.last_claim_position AS operation_last_claim_position,
@@ -1019,16 +1026,16 @@ FROM calendar_definition c
 LEFT JOIN calendar_progress p
   ON p.workspace_id = c.workspace_id
  AND p.calendar_id = c.id
- AND p.app_id = ?
- AND p.platform_id = ?
- AND p.platform_user_id = ?
+ AND p.app_id = $1
+ AND p.platform_id = $2
+ AND p.platform_user_id = $3
 LEFT JOIN calendar_operation o
   ON o.workspace_id = c.workspace_id
  AND o.calendar_id = c.id
- AND o.app_id = ?
- AND o.platform_id = ?
- AND o.platform_user_id = ?
- AND o.operation_id = ?
+ AND o.app_id = $4
+ AND o.platform_id = $5
+ AND o.platform_user_id = $6
+ AND o.operation_id = $7
 LEFT JOIN calendar_step s
   ON s.workspace_id = c.workspace_id
  AND s.calendar_id = c.id
@@ -1036,10 +1043,10 @@ LEFT JOIN calendar_reward r
   ON r.workspace_id = s.workspace_id
  AND r.calendar_id = s.calendar_id
  AND r.step_id = s.id
-WHERE c.workspace_id = ?
-  AND (c.id = ? OR c.type = ?)
+WHERE c.workspace_id = $8
+  AND (c.id = $9 OR c.type = $10)
 ORDER BY s.position, r.position, r.id
-FOR UPDATE
+FOR UPDATE OF c
 `
 
 type GetRecordBundleForUpdateParams struct {
@@ -1056,55 +1063,55 @@ type GetRecordBundleForUpdateParams struct {
 }
 
 type GetRecordBundleForUpdateRow struct {
-	ID                         string                         `json:"id"`
-	WorkspaceID                string                         `json:"workspace_id"`
-	Type                       string                         `json:"type"`
-	Mode                       CalendarDefinitionMode         `json:"mode"`
-	IntervalType               CalendarDefinitionIntervalType `json:"interval_type"`
-	IntervalUnit               CalendarDefinitionIntervalUnit `json:"interval_unit"`
-	IntervalCount              uint32                         `json:"interval_count"`
-	ResetAfterIntervals        uint32                         `json:"reset_after_intervals"`
-	EndBehavior                CalendarDefinitionEndBehavior  `json:"end_behavior"`
-	Timezone                   string                         `json:"timezone"`
-	HideFutureRewards          bool                           `json:"hide_future_rewards"`
-	IsActive                   bool                           `json:"is_active"`
-	StartAt                    sql.NullTime                   `json:"start_at"`
-	EndAt                      sql.NullTime                   `json:"end_at"`
-	DeletedAt                  sql.NullTime                   `json:"deleted_at"`
-	CreatedAt                  time.Time                      `json:"created_at"`
-	UpdatedAt                  time.Time                      `json:"updated_at"`
-	CurrentPosition            sql.NullInt32                  `json:"current_position"`
-	ClaimCount                 sql.NullInt64                  `json:"claim_count"`
-	LastClaimPosition          sql.NullInt32                  `json:"last_claim_position"`
-	LastClaimAt                sql.NullTime                   `json:"last_claim_at"`
-	NextClaimAt                sql.NullTime                   `json:"next_claim_at"`
-	IsCompleted                sql.NullBool                   `json:"is_completed"`
-	ResetCount                 sql.NullInt64                  `json:"reset_count"`
-	LastWasReset               sql.NullBool                   `json:"last_was_reset"`
-	OperationRowID             sql.NullInt64                  `json:"operation_row_id"`
-	ExistingOperationID        sql.NullString                 `json:"existing_operation_id"`
-	OperationGranted           sql.NullBool                   `json:"operation_granted"`
-	OperationStatus            sql.NullString                 `json:"operation_status"`
-	OperationPosition          sql.NullInt32                  `json:"operation_position"`
-	OperationRewardsSnapshot   json.RawMessage                `json:"operation_rewards_snapshot"`
-	OperationCurrentPosition   sql.NullInt32                  `json:"operation_current_position"`
-	OperationClaimCount        sql.NullInt64                  `json:"operation_claim_count"`
-	OperationLastClaimPosition sql.NullInt32                  `json:"operation_last_claim_position"`
-	OperationLastClaimAt       sql.NullTime                   `json:"operation_last_claim_at"`
-	OperationNextClaimAt       sql.NullTime                   `json:"operation_next_claim_at"`
-	OperationIsCompleted       sql.NullBool                   `json:"operation_is_completed"`
-	OperationResetCount        sql.NullInt64                  `json:"operation_reset_count"`
-	OperationWasReset          sql.NullBool                   `json:"operation_was_reset"`
-	OperationOccurredAt        sql.NullTime                   `json:"operation_occurred_at"`
-	StepID                     sql.NullInt64                  `json:"step_id"`
-	StepPosition               sql.NullInt32                  `json:"step_position"`
-	RewardID                   sql.NullInt64                  `json:"reward_id"`
-	RewardItemKey              sql.NullString                 `json:"reward_item_key"`
-	RewardType                 NullCalendarRewardRewardType   `json:"reward_type"`
-	RewardItemCount            sql.NullInt64                  `json:"reward_item_count"`
-	RewardScale                sql.NullInt16                  `json:"reward_scale"`
-	RewardDurationUnit         NullCalendarRewardDurationUnit `json:"reward_duration_unit"`
-	RewardPosition             sql.NullInt32                  `json:"reward_position"`
+	ID                         string          `json:"id"`
+	WorkspaceID                string          `json:"workspace_id"`
+	Type                       string          `json:"type"`
+	Mode                       string          `json:"mode"`
+	IntervalType               string          `json:"interval_type"`
+	IntervalUnit               string          `json:"interval_unit"`
+	IntervalCount              int32           `json:"interval_count"`
+	ResetAfterIntervals        int32           `json:"reset_after_intervals"`
+	EndBehavior                string          `json:"end_behavior"`
+	Timezone                   string          `json:"timezone"`
+	HideFutureRewards          bool            `json:"hide_future_rewards"`
+	IsActive                   bool            `json:"is_active"`
+	StartAt                    sql.NullTime    `json:"start_at"`
+	EndAt                      sql.NullTime    `json:"end_at"`
+	DeletedAt                  sql.NullTime    `json:"deleted_at"`
+	CreatedAt                  time.Time       `json:"created_at"`
+	UpdatedAt                  time.Time       `json:"updated_at"`
+	CurrentPosition            sql.NullInt32   `json:"current_position"`
+	ClaimCount                 sql.NullInt64   `json:"claim_count"`
+	LastClaimPosition          sql.NullInt32   `json:"last_claim_position"`
+	LastClaimAt                sql.NullTime    `json:"last_claim_at"`
+	NextClaimAt                sql.NullTime    `json:"next_claim_at"`
+	IsCompleted                sql.NullBool    `json:"is_completed"`
+	ResetCount                 sql.NullInt64   `json:"reset_count"`
+	LastWasReset               sql.NullBool    `json:"last_was_reset"`
+	OperationRowID             sql.NullInt64   `json:"operation_row_id"`
+	ExistingOperationID        sql.NullString  `json:"existing_operation_id"`
+	OperationGranted           sql.NullBool    `json:"operation_granted"`
+	OperationStatus            sql.NullString  `json:"operation_status"`
+	OperationPosition          sql.NullInt32   `json:"operation_position"`
+	OperationRewardsSnapshot   json.RawMessage `json:"operation_rewards_snapshot"`
+	OperationCurrentPosition   sql.NullInt32   `json:"operation_current_position"`
+	OperationClaimCount        sql.NullInt64   `json:"operation_claim_count"`
+	OperationLastClaimPosition sql.NullInt32   `json:"operation_last_claim_position"`
+	OperationLastClaimAt       sql.NullTime    `json:"operation_last_claim_at"`
+	OperationNextClaimAt       sql.NullTime    `json:"operation_next_claim_at"`
+	OperationIsCompleted       sql.NullBool    `json:"operation_is_completed"`
+	OperationResetCount        sql.NullInt64   `json:"operation_reset_count"`
+	OperationWasReset          sql.NullBool    `json:"operation_was_reset"`
+	OperationOccurredAt        sql.NullTime    `json:"operation_occurred_at"`
+	StepID                     sql.NullInt64   `json:"step_id"`
+	StepPosition               sql.NullInt32   `json:"step_position"`
+	RewardID                   sql.NullInt64   `json:"reward_id"`
+	RewardItemKey              sql.NullString  `json:"reward_item_key"`
+	RewardType                 sql.NullString  `json:"reward_type"`
+	RewardItemCount            sql.NullInt64   `json:"reward_item_count"`
+	RewardScale                sql.NullInt16   `json:"reward_scale"`
+	RewardDurationUnit         sql.NullString  `json:"reward_duration_unit"`
+	RewardPosition             sql.NullInt32   `json:"reward_position"`
 }
 
 func (q *Queries) GetRecordBundleForUpdate(ctx context.Context, arg GetRecordBundleForUpdateParams) ([]GetRecordBundleForUpdateRow, error) {
@@ -1200,6 +1207,7 @@ SELECT
     c.is_active,
     c.start_at,
     c.end_at,
+    c.deleted_at,
     l.locale,
     l.title,
     l.description
@@ -1207,42 +1215,32 @@ FROM calendar_definition c
 LEFT JOIN calendar_localization l
   ON l.workspace_id = c.workspace_id
  AND l.calendar_id = c.id
- AND l.locale = ?
-WHERE c.workspace_id = ?
-  AND c.is_active = TRUE
-  AND c.deleted_at IS NULL
-  AND (c.start_at IS NULL OR c.start_at <= ?)
-  AND (c.end_at IS NULL OR c.end_at > ?)
+ AND l.locale = $1
+WHERE c.workspace_id = $2
 ORDER BY c.created_at DESC, c.id
 `
 
 type ListActiveCalendarsParams struct {
-	Locale      string       `json:"locale"`
-	WorkspaceID string       `json:"workspace_id"`
-	StartAt     sql.NullTime `json:"start_at"`
-	EndAt       sql.NullTime `json:"end_at"`
+	Locale      string `json:"locale"`
+	WorkspaceID string `json:"workspace_id"`
 }
 
 type ListActiveCalendarsRow struct {
-	ID          string                 `json:"id"`
-	WorkspaceID string                 `json:"workspace_id"`
-	Type        string                 `json:"type"`
-	Mode        CalendarDefinitionMode `json:"mode"`
-	IsActive    bool                   `json:"is_active"`
-	StartAt     sql.NullTime           `json:"start_at"`
-	EndAt       sql.NullTime           `json:"end_at"`
-	Locale      sql.NullString         `json:"locale"`
-	Title       sql.NullString         `json:"title"`
-	Description sql.NullString         `json:"description"`
+	ID          string         `json:"id"`
+	WorkspaceID string         `json:"workspace_id"`
+	Type        string         `json:"type"`
+	Mode        string         `json:"mode"`
+	IsActive    bool           `json:"is_active"`
+	StartAt     sql.NullTime   `json:"start_at"`
+	EndAt       sql.NullTime   `json:"end_at"`
+	DeletedAt   sql.NullTime   `json:"deleted_at"`
+	Locale      sql.NullString `json:"locale"`
+	Title       sql.NullString `json:"title"`
+	Description sql.NullString `json:"description"`
 }
 
 func (q *Queries) ListActiveCalendars(ctx context.Context, arg ListActiveCalendarsParams) ([]ListActiveCalendarsRow, error) {
-	rows, err := q.query(ctx, q.listActiveCalendarsStmt, listActiveCalendars,
-		arg.Locale,
-		arg.WorkspaceID,
-		arg.StartAt,
-		arg.EndAt,
-	)
+	rows, err := q.query(ctx, q.listActiveCalendarsStmt, listActiveCalendars, arg.Locale, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1258,10 +1256,231 @@ func (q *Queries) ListActiveCalendars(ctx context.Context, arg ListActiveCalenda
 			&i.IsActive,
 			&i.StartAt,
 			&i.EndAt,
+			&i.DeletedAt,
 			&i.Locale,
 			&i.Title,
 			&i.Description,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportCalendars = `-- name: ListExportCalendars :many
+SELECT id, workspace_id, type, mode, interval_type, interval_unit, interval_count, reset_after_intervals, end_behavior, timezone, hide_future_rewards, is_active, start_at, end_at, deleted_at, created_at, updated_at
+FROM calendar_definition
+WHERE workspace_id = $1
+ORDER BY created_at DESC, id
+`
+
+func (q *Queries) ListExportCalendars(ctx context.Context, workspaceID string) ([]CalendarDefinition, error) {
+	rows, err := q.query(ctx, q.listExportCalendarsStmt, listExportCalendars, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarDefinition
+	for rows.Next() {
+		var i CalendarDefinition
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Type,
+			&i.Mode,
+			&i.IntervalType,
+			&i.IntervalUnit,
+			&i.IntervalCount,
+			&i.ResetAfterIntervals,
+			&i.EndBehavior,
+			&i.Timezone,
+			&i.HideFutureRewards,
+			&i.IsActive,
+			&i.StartAt,
+			&i.EndAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportLocalizations = `-- name: ListExportLocalizations :many
+SELECT workspace_id, calendar_id, locale, title, description, created_at, updated_at
+FROM calendar_localization
+WHERE workspace_id = $1
+ORDER BY calendar_id, locale
+`
+
+func (q *Queries) ListExportLocalizations(ctx context.Context, workspaceID string) ([]CalendarLocalization, error) {
+	rows, err := q.query(ctx, q.listExportLocalizationsStmt, listExportLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarLocalization
+	for rows.Next() {
+		var i CalendarLocalization
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.CalendarID,
+			&i.Locale,
+			&i.Title,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportStepsWithRewards = `-- name: ListExportStepsWithRewards :many
+SELECT
+    s.calendar_id,
+    s.id AS step_id,
+    s.position AS step_position,
+    r.item_key AS reward_item_key,
+    r.reward_type AS reward_type,
+    r.item_count AS reward_item_count,
+    r.scale AS reward_scale,
+    r.duration_unit AS reward_duration_unit,
+    r.position AS reward_position
+FROM calendar_step s
+LEFT JOIN calendar_reward r
+  ON r.workspace_id = s.workspace_id
+ AND r.calendar_id = s.calendar_id
+ AND r.step_id = s.id
+WHERE s.workspace_id = $1
+ORDER BY s.calendar_id, s.position, r.position, r.id
+`
+
+type ListExportStepsWithRewardsRow struct {
+	CalendarID         string         `json:"calendar_id"`
+	StepID             int64          `json:"step_id"`
+	StepPosition       int32          `json:"step_position"`
+	RewardItemKey      sql.NullString `json:"reward_item_key"`
+	RewardType         sql.NullString `json:"reward_type"`
+	RewardItemCount    sql.NullInt64  `json:"reward_item_count"`
+	RewardScale        sql.NullInt16  `json:"reward_scale"`
+	RewardDurationUnit sql.NullString `json:"reward_duration_unit"`
+	RewardPosition     sql.NullInt32  `json:"reward_position"`
+}
+
+func (q *Queries) ListExportStepsWithRewards(ctx context.Context, workspaceID string) ([]ListExportStepsWithRewardsRow, error) {
+	rows, err := q.query(ctx, q.listExportStepsWithRewardsStmt, listExportStepsWithRewards, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExportStepsWithRewardsRow
+	for rows.Next() {
+		var i ListExportStepsWithRewardsRow
+		if err := rows.Scan(
+			&i.CalendarID,
+			&i.StepID,
+			&i.StepPosition,
+			&i.RewardItemKey,
+			&i.RewardType,
+			&i.RewardItemCount,
+			&i.RewardScale,
+			&i.RewardDurationUnit,
+			&i.RewardPosition,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportCalendarTypes = `-- name: ListImportCalendarTypes :many
+SELECT type, id
+FROM calendar_definition
+WHERE workspace_id = $1
+`
+
+type ListImportCalendarTypesRow struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+func (q *Queries) ListImportCalendarTypes(ctx context.Context, workspaceID string) ([]ListImportCalendarTypesRow, error) {
+	rows, err := q.query(ctx, q.listImportCalendarTypesStmt, listImportCalendarTypes, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportCalendarTypesRow
+	for rows.Next() {
+		var i ListImportCalendarTypesRow
+		if err := rows.Scan(&i.Type, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportStepIDs = `-- name: ListImportStepIDs :many
+SELECT calendar_id, position, id
+FROM calendar_step
+WHERE workspace_id = $1
+`
+
+type ListImportStepIDsRow struct {
+	CalendarID string `json:"calendar_id"`
+	Position   int32  `json:"position"`
+	ID         int64  `json:"id"`
+}
+
+func (q *Queries) ListImportStepIDs(ctx context.Context, workspaceID string) ([]ListImportStepIDsRow, error) {
+	rows, err := q.query(ctx, q.listImportStepIDsStmt, listImportStepIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportStepIDsRow
+	for rows.Next() {
+		var i ListImportStepIDsRow
+		if err := rows.Scan(&i.CalendarID, &i.Position, &i.ID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1283,18 +1502,18 @@ INSERT INTO calendar_stats_daily (
 SELECT
     workspace_id,
     calendar_id,
-    DATE(occurred_at),
-    COUNT(*),
-    COALESCE(SUM(granted), 0),
-    COUNT(DISTINCT CONCAT_WS(':', app_id, platform_id, platform_user_id))
+    occurred_at::date,
+    COUNT(*)::bigint,
+    COUNT(*) FILTER (WHERE granted)::bigint,
+    COUNT(DISTINCT (app_id, platform_id, platform_user_id))::bigint
 FROM calendar_operation
-WHERE occurred_at >= ? AND occurred_at < ?
-GROUP BY workspace_id, calendar_id, DATE(occurred_at)
-ON DUPLICATE KEY UPDATE
-    operation_count = VALUES(operation_count),
-    grant_count = VALUES(grant_count),
-    unique_users = VALUES(unique_users),
-    updated_at = NOW()
+WHERE occurred_at >= $1 AND occurred_at < $2
+GROUP BY workspace_id, calendar_id, occurred_at::date
+ON CONFLICT (workspace_id, calendar_id, stats_date) DO UPDATE SET
+    operation_count = EXCLUDED.operation_count,
+    grant_count = EXCLUDED.grant_count,
+    unique_users = EXCLUDED.unique_users,
+    updated_at = now()
 `
 
 type RefreshDailyStatsParams struct {
@@ -1304,5 +1523,58 @@ type RefreshDailyStatsParams struct {
 
 func (q *Queries) RefreshDailyStats(ctx context.Context, arg RefreshDailyStatsParams) error {
 	_, err := q.exec(ctx, q.refreshDailyStatsStmt, refreshDailyStats, arg.OccurredAt, arg.OccurredAt_2)
+	return err
+}
+
+const upsertProgress = `-- name: UpsertProgress :exec
+INSERT INTO calendar_progress (
+    workspace_id, calendar_id, app_id, platform_id, platform_user_id,
+    current_position, claim_count, last_claim_position, last_claim_at,
+    next_claim_at, is_completed, reset_count, last_was_reset
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+ON CONFLICT (workspace_id, calendar_id, app_id, platform_id, platform_user_id) DO UPDATE SET
+    current_position = EXCLUDED.current_position,
+    claim_count = EXCLUDED.claim_count,
+    last_claim_position = EXCLUDED.last_claim_position,
+    last_claim_at = EXCLUDED.last_claim_at,
+    next_claim_at = EXCLUDED.next_claim_at,
+    is_completed = EXCLUDED.is_completed,
+    reset_count = EXCLUDED.reset_count,
+    last_was_reset = EXCLUDED.last_was_reset,
+    updated_at = now()
+`
+
+type UpsertProgressParams struct {
+	WorkspaceID       string        `json:"workspace_id"`
+	CalendarID        string        `json:"calendar_id"`
+	AppID             int64         `json:"app_id"`
+	PlatformID        int64         `json:"platform_id"`
+	PlatformUserID    string        `json:"platform_user_id"`
+	CurrentPosition   int32         `json:"current_position"`
+	ClaimCount        int64         `json:"claim_count"`
+	LastClaimPosition sql.NullInt32 `json:"last_claim_position"`
+	LastClaimAt       sql.NullTime  `json:"last_claim_at"`
+	NextClaimAt       sql.NullTime  `json:"next_claim_at"`
+	IsCompleted       bool          `json:"is_completed"`
+	ResetCount        int64         `json:"reset_count"`
+	LastWasReset      bool          `json:"last_was_reset"`
+}
+
+func (q *Queries) UpsertProgress(ctx context.Context, arg UpsertProgressParams) error {
+	_, err := q.exec(ctx, q.upsertProgressStmt, upsertProgress,
+		arg.WorkspaceID,
+		arg.CalendarID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+		arg.CurrentPosition,
+		arg.ClaimCount,
+		arg.LastClaimPosition,
+		arg.LastClaimAt,
+		arg.NextClaimAt,
+		arg.IsCompleted,
+		arg.ResetCount,
+		arg.LastWasReset,
+	)
 	return err
 }

@@ -78,6 +78,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getRedemptionStmt, err = db.PrepareContext(ctx, getRedemption); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRedemption: %w", err)
 	}
+	if q.listExportLocalizationsStmt, err = db.PrepareContext(ctx, listExportLocalizations); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportLocalizations: %w", err)
+	}
+	if q.listExportPromosStmt, err = db.PrepareContext(ctx, listExportPromos); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportPromos: %w", err)
+	}
+	if q.listExportRewardsStmt, err = db.PrepareContext(ctx, listExportRewards); err != nil {
+		return nil, fmt.Errorf("error preparing query ListExportRewards: %w", err)
+	}
 	if q.listRewardsStmt, err = db.PrepareContext(ctx, listRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRewards: %w", err)
 	}
@@ -179,6 +188,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getRedemptionStmt: %w", cerr)
 		}
 	}
+	if q.listExportLocalizationsStmt != nil {
+		if cerr := q.listExportLocalizationsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportLocalizationsStmt: %w", cerr)
+		}
+	}
+	if q.listExportPromosStmt != nil {
+		if cerr := q.listExportPromosStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportPromosStmt: %w", cerr)
+		}
+	}
+	if q.listExportRewardsStmt != nil {
+		if cerr := q.listExportRewardsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listExportRewardsStmt: %w", cerr)
+		}
+	}
 	if q.listRewardsStmt != nil {
 		if cerr := q.listRewardsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRewardsStmt: %w", cerr)
@@ -246,6 +270,9 @@ type Queries struct {
 	createRedemptionStmt        *sql.Stmt
 	getApplyBundleForUpdateStmt *sql.Stmt
 	getRedemptionStmt           *sql.Stmt
+	listExportLocalizationsStmt *sql.Stmt
+	listExportPromosStmt        *sql.Stmt
+	listExportRewardsStmt       *sql.Stmt
 	listRewardsStmt             *sql.Stmt
 	refreshDailyStatsStmt       *sql.Stmt
 }
@@ -272,6 +299,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createRedemptionStmt:        q.createRedemptionStmt,
 		getApplyBundleForUpdateStmt: q.getApplyBundleForUpdateStmt,
 		getRedemptionStmt:           q.getRedemptionStmt,
+		listExportLocalizationsStmt: q.listExportLocalizationsStmt,
+		listExportPromosStmt:        q.listExportPromosStmt,
+		listExportRewardsStmt:       q.listExportRewardsStmt,
 		listRewardsStmt:             q.listRewardsStmt,
 		refreshDailyStatsStmt:       q.refreshDailyStatsStmt,
 	}

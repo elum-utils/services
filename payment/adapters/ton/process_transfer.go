@@ -42,14 +42,14 @@ func (a *TON) ProcessTransfer(ctx context.Context, transfer IncomingTransfer) (*
 				Network:        transfer.Network,
 				SourceKey:      transfer.WalletAddress,
 				CursorValue:    strconv.FormatUint(transfer.LogicalTime, 10),
-				CursorSequence: transfer.LogicalTime,
+				CursorSequence: int64(transfer.LogicalTime),
 			}); cursorErr != nil {
 				return nil, cursorErr
 			}
 			return &ProcessResult{
 				OrderID:     uint64FromNull(existing.OrderID),
 				AttemptID:   uint64FromNull(existing.AttemptID),
-				Transaction: existing.ID,
+				Transaction: uint64(existing.ID),
 				AlreadyDone: true,
 				Ignored:     existing.Status == paymentsqlc.PaymentProviderTransactionStatusIgnored,
 			}, nil
@@ -96,7 +96,7 @@ func (a *TON) storeTransfer(ctx context.Context, transfer IncomingTransfer, orde
 		Network:        transfer.Network,
 		SourceKey:      transfer.WalletAddress,
 		CursorValue:    strconv.FormatUint(transfer.LogicalTime, 10),
-		CursorSequence: transfer.LogicalTime,
+		CursorSequence: int64(transfer.LogicalTime),
 	}
 	occurredAt := transfer.OccurredAt
 	if occurredAt.IsZero() {
@@ -109,10 +109,10 @@ func (a *TON) storeTransfer(ctx context.Context, transfer IncomingTransfer, orde
 		SourceKey:             transfer.WalletAddress,
 		AssetCode:             transfer.AssetCode,
 		ExternalTransactionID: transfer.TxHash,
-		SequenceNumber:        transfer.LogicalTime,
+		SequenceNumber:        int64(transfer.LogicalTime),
 		SourceAddress:         transfer.SourceAddress,
 		DestinationAddress:    transfer.DestinationAddress,
-		AmountMinor:           transfer.AmountMinor,
+		AmountMinor:           int64(transfer.AmountMinor),
 		PaymentReference:      transfer.Comment,
 		SenderReference:       nullString(transfer.JettonSender),
 		OrderID:               nullInt64FromUint64(orderID),
@@ -138,7 +138,7 @@ func (a *TON) storeTransfer(ctx context.Context, transfer IncomingTransfer, orde
 		return &ProcessResult{
 			OrderID:     uint64FromNull(existing.OrderID),
 			AttemptID:   uint64FromNull(existing.AttemptID),
-			Transaction: existing.ID,
+			Transaction: uint64(existing.ID),
 			AlreadyDone: true,
 			Ignored:     existing.Status == paymentsqlc.PaymentProviderTransactionStatusIgnored,
 		}, nil
