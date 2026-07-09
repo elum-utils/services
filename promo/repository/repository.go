@@ -11,6 +11,7 @@ import (
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Repository struct {
@@ -113,10 +114,20 @@ func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
 		}); err != nil {
+			if isCreateTypeAlreadyExists(statement, err) {
+				continue
+			}
 			return fmt.Errorf("promo %s SQL statement failed: %w\n%s", source, err, statement)
 		}
 	}
 	return nil
+}
+
+func isCreateTypeAlreadyExists(statement string, err error) bool {
+	var pgErr *pgconn.PgError
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(statement)), "CREATE TYPE ") &&
+		errors.As(err, &pgErr) &&
+		pgErr.Code == "42710"
 }
 
 func queryTimeout(value time.Duration) time.Duration {
