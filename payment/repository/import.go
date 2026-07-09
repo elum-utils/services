@@ -42,6 +42,9 @@ func (r *PaymentRepository) PreviewImport(ctx context.Context, workspaceID strin
 			preview.Conflicts = append(preview.Conflicts, ImportConflict{Type: "item", Key: item.ID})
 		}
 	}
+	if existing.tonWallet && len(pkg.TONWallets) > 0 {
+		preview.Conflicts = append(preview.Conflicts, ImportConflict{Type: "ton_wallet", Key: "default"})
+	}
 	return preview, nil
 }
 
@@ -98,7 +101,10 @@ func (r *PaymentRepository) importBulk(ctx context.Context, workspaceID string, 
 	if err := r.importProductItemsBulk(ctx, workspaceID, products, strategy, preview, result); err != nil {
 		return err
 	}
-	return r.importPricesBulk(ctx, workspaceID, products, strategy, preview, result)
+	if err := r.importPricesBulk(ctx, workspaceID, products, strategy, preview, result); err != nil {
+		return err
+	}
+	return r.importTONWalletsBulk(ctx, workspaceID, pkg.TONWallets, strategy, preview, result)
 }
 
 func (r *PaymentRepository) importGroupsBulk(ctx context.Context, workspaceID string, groups []ExportProductGroup, strategy string, preview ImportPreview, result *ImportResult) error {
@@ -282,6 +288,31 @@ func (r *PaymentRepository) importPricesBulk(ctx context.Context, workspaceID st
 	)
 }
 
+func (r *PaymentRepository) importTONWalletsBulk(ctx context.Context, workspaceID string, wallets []ExportTONWallet, strategy string, preview ImportPreview, result *ImportResult) error {
+	rows := make([][]any, 0, len(wallets))
+	for _, wallet := range wallets {
+		if previewHasConflict(preview, "ton_wallet", "default") && strategy == ImportConflictSkip {
+			result.Skipped.TONWallets++
+			continue
+		}
+		rows = append(rows, []any{
+			workspaceID,
+			defaultString(wallet.Network, "mainnet"),
+			wallet.WalletAddress,
+			nullableString(wallet.NetworkConfigURL),
+			wallet.IsEnabled,
+		})
+		result.Imported.TONWallets++
+	}
+	return r.execImportBulk(ctx, "payment_ton_wallet",
+		[]string{"workspace_id", "network", "wallet_address", "network_config_url", "is_enabled"},
+		rows,
+		"(workspace_id)",
+		"network = EXCLUDED.network, wallet_address = EXCLUDED.wallet_address, "+
+			"network_config_url = EXCLUDED.network_config_url, is_enabled = EXCLUDED.is_enabled, updated_at = now()",
+	)
+}
+
 func (r *PaymentRepository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) error {
 	if len(rows) == 0 {
 		return nil
@@ -336,6 +367,7 @@ func countPackage(pkg ExportPackage) ImportCounts {
 	var counts ImportCounts
 	counts.Groups = uint64(len(pkg.Groups))
 	counts.Items = uint64(len(pkg.Items))
+	counts.TONWallets = uint64(len(pkg.TONWallets))
 	for _, group := range pkg.Groups {
 		counts.Localizations += uint64(len(group.Localization))
 		countProducts(&counts, group.Products)
@@ -357,9 +389,10 @@ func countProducts(counts *ImportCounts, products []ExportProduct) {
 }
 
 type importExisting struct {
-	groups   map[string]bool
-	products map[string]bool
-	items    map[string]bool
+	groups    map[string]bool
+	products  map[string]bool
+	items     map[string]bool
+	tonWallet bool
 }
 
 func (r *PaymentRepository) importExistingKeys(ctx context.Context, workspaceID string) (importExisting, error) {
@@ -406,7 +439,13 @@ func (r *PaymentRepository) importExistingKeys(ctx context.Context, workspaceID 
 		}
 		existing.items[key] = true
 	}
-	return existing, itemRows.Err()
+	if err := itemRows.Err(); err != nil {
+		return existing, err
+	}
+	if err := r.executor.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM payment_ton_wallet WHERE workspace_id = $1)`, workspaceID).Scan(&existing.tonWallet); err != nil {
+		return existing, err
+	}
+	return existing, nil
 }
 
 func previewHasConflict(preview ImportPreview, kind, key string) bool {

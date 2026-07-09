@@ -18,6 +18,7 @@ type ExportProduct = repository.ExportProduct
 type ExportItem = repository.ExportItem
 type ExportProductItem = repository.ExportProductItem
 type ExportPrice = repository.ExportPrice
+type ExportTONWallet = repository.ExportTONWallet
 type ImportRequest = repository.ImportRequest
 type ImportPreview = repository.ImportPreview
 type ImportCounts = repository.ImportCounts

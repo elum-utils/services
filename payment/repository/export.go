@@ -39,6 +39,10 @@ func (r *PaymentRepository) Export(ctx context.Context, workspaceID string, req 
 	if err != nil {
 		return ExportPackage{}, err
 	}
+	tonWallets, err := r.exportTONWallets(ctx, workspaceID)
+	if err != nil {
+		return ExportPackage{}, err
+	}
 	groupIndex := make(map[string]int, len(groups))
 	for index := range groups {
 		groupIndex[groups[index].Code] = index
@@ -57,7 +61,7 @@ func (r *PaymentRepository) Export(ctx context.Context, workspaceID string, req 
 	}
 	return ExportPackage{
 		Format: ExportFormat, Service: "payment", CreatedAt: now.UTC(),
-		Groups: groups, Products: rootProducts, Items: items,
+		Groups: groups, Products: rootProducts, Items: items, TONWallets: tonWallets,
 	}, nil
 }
 
@@ -234,6 +238,29 @@ ORDER BY localization_key, locale`, workspaceID)
 			result[key] = make(map[string]string)
 		}
 		result[key][locale] = value
+	}
+	return result, rows.Err()
+}
+
+func (r *PaymentRepository) exportTONWallets(ctx context.Context, workspaceID string) ([]ExportTONWallet, error) {
+	rows, err := r.executor.QueryContext(ctx, `
+SELECT network, wallet_address, network_config_url, is_enabled
+FROM payment_ton_wallet
+WHERE workspace_id = $1
+ORDER BY network, wallet_address`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]ExportTONWallet, 0)
+	for rows.Next() {
+		var wallet ExportTONWallet
+		var networkConfigURL sql.NullString
+		if err := rows.Scan(&wallet.Network, &wallet.WalletAddress, &networkConfigURL, &wallet.IsEnabled); err != nil {
+			return nil, err
+		}
+		wallet.NetworkConfigURL = exportNullStringPtr(networkConfigURL)
+		result = append(result, wallet)
 	}
 	return result, rows.Err()
 }

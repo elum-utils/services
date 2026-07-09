@@ -17,12 +17,13 @@ type ExportRequest struct {
 }
 
 type ExportPackage struct {
-	Format    string               `json:"format"`
-	Service   string               `json:"service"`
-	CreatedAt time.Time            `json:"created_at"`
-	Groups    []ExportProductGroup `json:"groups,omitempty"`
-	Products  []ExportProduct      `json:"products,omitempty"`
-	Items     []ExportItem         `json:"items,omitempty"`
+	Format     string               `json:"format"`
+	Service    string               `json:"service"`
+	CreatedAt  time.Time            `json:"created_at"`
+	Groups     []ExportProductGroup `json:"groups,omitempty"`
+	Products   []ExportProduct      `json:"products,omitempty"`
+	Items      []ExportItem         `json:"items,omitempty"`
+	TONWallets []ExportTONWallet    `json:"ton_wallets,omitempty"`
 }
 
 type ExportProductGroup struct {
@@ -101,6 +102,13 @@ type ExportPrice struct {
 	EndsAt                       time.Time `json:"ends_at"`
 }
 
+type ExportTONWallet struct {
+	Network          string  `json:"network"`
+	WalletAddress    string  `json:"wallet_address"`
+	NetworkConfigURL *string `json:"network_config_url,omitempty"`
+	IsEnabled        bool    `json:"is_enabled"`
+}
+
 type ImportRequest struct {
 	Package          ExportPackage `json:"package"`
 	ConflictStrategy string        `json:"conflict_strategy,omitempty"`
@@ -120,6 +128,7 @@ type ImportCounts struct {
 	ProductItems  uint64 `json:"product_items"`
 	Prices        uint64 `json:"prices"`
 	Localizations uint64 `json:"localizations"`
+	TONWallets    uint64 `json:"ton_wallets"`
 }
 
 type ImportConflict struct {
