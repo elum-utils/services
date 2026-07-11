@@ -35,6 +35,39 @@ func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordRes
 			}
 			return nil
 		}
+		if err := txRepo.q.EnsureProgressForUpdate(ctx, calendarsqlc.EnsureProgressForUpdateParams{
+			WorkspaceID:    params.Identity.WorkspaceID,
+			CalendarID:     rows[0].ID,
+			AppID:          params.Identity.AppID,
+			PlatformID:     params.Identity.PlatformID,
+			PlatformUserID: params.Identity.PlatformUserID,
+		}); err != nil {
+			return err
+		}
+		if _, err := txRepo.q.LockProgressForUpdate(ctx, calendarsqlc.LockProgressForUpdateParams{
+			WorkspaceID:    params.Identity.WorkspaceID,
+			CalendarID:     rows[0].ID,
+			AppID:          params.Identity.AppID,
+			PlatformID:     params.Identity.PlatformID,
+			PlatformUserID: params.Identity.PlatformUserID,
+		}); err != nil {
+			return err
+		}
+		rows, err = txRepo.q.GetRecordBundleForUpdate(ctx, calendarsqlc.GetRecordBundleForUpdateParams{
+			AppID:            params.Identity.AppID,
+			PlatformID:       params.Identity.PlatformID,
+			PlatformUserID:   params.Identity.PlatformUserID,
+			AppID_2:          params.Identity.AppID,
+			PlatformID_2:     params.Identity.PlatformID,
+			PlatformUserID_2: params.Identity.PlatformUserID,
+			OperationID:      params.OperationID,
+			WorkspaceID:      params.Identity.WorkspaceID,
+			ID:               refID,
+			Type:             calendarType,
+		})
+		if err != nil {
+			return err
+		}
 		calendar, progress, repeated, err := mapRecordBundle(rows)
 		if err != nil {
 			return err

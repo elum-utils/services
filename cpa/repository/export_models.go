@@ -1,8 +1,9 @@
 package repository
 
 import (
-	json "github.com/goccy/go-json"
 	"time"
+
+	json "github.com/goccy/go-json"
 )
 
 const (
@@ -20,7 +21,6 @@ type ExportPackage struct {
 	Format    string        `json:"format"`
 	Service   string        `json:"service"`
 	CreatedAt time.Time     `json:"created_at"`
-	Items     []ExportItem  `json:"items,omitempty"`
 	Offers    []ExportOffer `json:"offers"`
 }
 
@@ -45,14 +45,6 @@ type ExportText struct {
 	Description string `json:"description"`
 }
 
-type ExportItem struct {
-	ID           string                `json:"id"`
-	ItemType     *string               `json:"item_type,omitempty"`
-	Rarity       string                `json:"rarity,omitempty"`
-	Position     int32                 `json:"position,omitempty"`
-	Localization map[string]ExportText `json:"localization,omitempty"`
-}
-
 type ExportReward struct {
 	Key      string  `json:"key"`
 	Type     string  `json:"type"`
@@ -74,7 +66,6 @@ type ImportPreview struct {
 }
 
 type ImportCounts struct {
-	Items         uint64 `json:"items"`
 	Offers        uint64 `json:"offers"`
 	Localizations uint64 `json:"localizations"`
 	Rewards       uint64 `json:"rewards"`

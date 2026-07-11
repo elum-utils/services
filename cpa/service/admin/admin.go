@@ -5,11 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/elum-utils/services/cpa/repository"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
-
-	"github.com/elum-utils/services/cpa/repository"
 )
 
 type Admin struct {
@@ -23,7 +22,9 @@ func New(ctx context.Context, db *sqlwrap.Client) *Admin {
 }
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, queryTimeout time.Duration) *Admin {
-	return NewWithRepositoryOptions(ctx, db, repository.Options{QueryTimeout: queryTimeout})
+	return NewWithRepositoryOptions(ctx, db, repository.Options{
+		QueryTimeout: queryTimeout,
+	})
 }
 
 func NewWithRepositoryOptions(ctx context.Context, db *sqlwrap.Client, options repository.Options) *Admin {

@@ -778,6 +778,36 @@ func (q *Queries) CreateOperation(ctx context.Context, arg CreateOperationParams
 	return id, err
 }
 
+const ensureProgressForUpdate = `-- name: EnsureProgressForUpdate :exec
+INSERT INTO calendar_progress (
+    workspace_id,
+    calendar_id,
+    app_id,
+    platform_id,
+    platform_user_id
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, calendar_id, app_id, platform_id, platform_user_id) DO NOTHING
+`
+
+type EnsureProgressForUpdateParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	CalendarID     string `json:"calendar_id"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
+	PlatformUserID string `json:"platform_user_id"`
+}
+
+func (q *Queries) EnsureProgressForUpdate(ctx context.Context, arg EnsureProgressForUpdateParams) error {
+	_, err := q.exec(ctx, q.ensureProgressForUpdateStmt, ensureProgressForUpdate,
+		arg.WorkspaceID,
+		arg.CalendarID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+	)
+	return err
+}
+
 const getCalendarBundle = `-- name: GetCalendarBundle :many
 SELECT
     c.id,
@@ -1492,6 +1522,38 @@ func (q *Queries) ListImportStepIDs(ctx context.Context, workspaceID string) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockProgressForUpdate = `-- name: LockProgressForUpdate :one
+SELECT 1::int
+FROM calendar_progress
+WHERE workspace_id = $1
+  AND calendar_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
+FOR UPDATE
+`
+
+type LockProgressForUpdateParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	CalendarID     string `json:"calendar_id"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
+	PlatformUserID string `json:"platform_user_id"`
+}
+
+func (q *Queries) LockProgressForUpdate(ctx context.Context, arg LockProgressForUpdateParams) (int32, error) {
+	row := q.queryRow(ctx, q.lockProgressForUpdateStmt, lockProgressForUpdate,
+		arg.WorkspaceID,
+		arg.CalendarID,
+		arg.AppID,
+		arg.PlatformID,
+		arg.PlatformUserID,
+	)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const refreshDailyStats = `-- name: RefreshDailyStats :exec

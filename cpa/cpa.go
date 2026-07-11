@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"sync"
 
-	serviceerrors "github.com/elum-utils/services/errors"
-	callbackutil "github.com/elum-utils/services/internal/utils/callback"
-	"github.com/elum-utils/services/internal/utils/contextutil"
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/admin"
 	"github.com/elum-utils/services/cpa/service/user"
+	serviceerrors "github.com/elum-utils/services/errors"
+	callbackutil "github.com/elum-utils/services/internal/utils/callback"
+	"github.com/elum-utils/services/internal/utils/contextutil"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type CPA struct {
@@ -40,6 +40,7 @@ func New(params DatabaseParams) *CPA {
 }
 
 func NewWithDatabase(ctx context.Context, db *sql.DB, options Options) (*CPA, error) {
+	options = normalizeOptions(options)
 	client, err := sqlwrap.New(db, toSQLWrapOptions(options))
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa sql client initialization failed", err)
@@ -100,6 +101,7 @@ func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 	if params.Database == "" {
 		return nil, ErrDatabaseNameRequired
 	}
+	options := normalizeOptions(params.Options)
 	db, err := openPostgres(ctx, params)
 	if err != nil {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeUnavailable, "cpa database connection failed", err)
@@ -110,9 +112,10 @@ func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
-		QueryTimeout: params.Options.QueryTimeout,
-		CacheL1Delay: params.Options.CacheL1Delay,
-		CacheL2Delay: params.Options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	})
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
@@ -123,7 +126,7 @@ func open(ctx context.Context, params DatabaseParams) (*CPA, error) {
 		_ = client.Close()
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "cpa bootstrap shutdown failed", err)
 	}
-	return newCPA(ctx, client, true, params.Options), nil
+	return newCPA(ctx, client, true, options), nil
 }
 
 func openPostgres(ctx context.Context, params DatabaseParams) (*sql.DB, error) {
@@ -156,11 +159,13 @@ func (c *CPA) adopt(running *CPA) {
 }
 
 func newCPA(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *CPA {
+	options = normalizeOptions(options)
 	rootCtx, rootCancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 	return &CPA{
 		Admin:      admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),

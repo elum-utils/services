@@ -4,10 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
-
-	"github.com/elum-utils/services/cpa/repository"
 )
 
 type User struct {
@@ -20,7 +19,9 @@ func New(ctx context.Context, db *sqlwrap.Client) *User {
 }
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, queryTimeout time.Duration) *User {
-	return NewWithRepositoryOptions(ctx, db, repository.Options{QueryTimeout: queryTimeout})
+	return NewWithRepositoryOptions(ctx, db, repository.Options{
+		QueryTimeout: queryTimeout,
+	})
 }
 
 func NewWithRepositoryOptions(ctx context.Context, db *sqlwrap.Client, options repository.Options) *User {

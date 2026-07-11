@@ -12,13 +12,19 @@ type ListActiveParams struct {
 }
 
 func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]OfferModel, error) {
+
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
 
-	bundles, err := u.repository.ListActiveOfferBundles(mergedCtx, scope(params.Identity, ""), params.Locale)
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
+	bundles, err := u.repository.ListActiveForUser(mergedCtx, scope(params.Identity, ""), params.Locale)
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]OfferModel, 0, len(bundles))
 	for _, bundle := range bundles {
 		offer := bundle.Offer
@@ -50,5 +56,7 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]Offer
 		}
 		result = append(result, model)
 	}
+
 	return result, nil
+
 }

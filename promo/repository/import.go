@@ -112,18 +112,27 @@ func (r *Repository) importPromoIDs(ctx context.Context, workspaceID string, pro
 		}
 		needed[normalizeCode(promo.Code)] = struct{}{}
 	}
-	values, err := r.ListPromos(ctx, workspaceID, 100000, 0)
+	rows, err := r.executor.QueryContext(ctx, `
+SELECT id, code_normalized
+FROM promo_offer
+WHERE workspace_id = $1 AND deleted_at IS NULL
+`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	ids := make(map[string]uint64, len(needed))
-	for _, promo := range values {
-		key := normalizeCode(promo.Code)
+	for rows.Next() {
+		var id uint64
+		var key string
+		if err := rows.Scan(&id, &key); err != nil {
+			return nil, err
+		}
 		if _, ok := needed[key]; ok {
-			ids[key] = promo.ID
+			ids[key] = id
 		}
 	}
-	return ids, nil
+	return ids, rows.Err()
 }
 
 func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID string, promos []ExportPromo, ids map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {

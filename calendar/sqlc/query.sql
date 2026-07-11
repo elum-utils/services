@@ -300,6 +300,26 @@ WHERE c.workspace_id = $8
 ORDER BY s.position, r.position, r.id
 FOR UPDATE OF c;
 
+-- name: EnsureProgressForUpdate :exec
+INSERT INTO calendar_progress (
+    workspace_id,
+    calendar_id,
+    app_id,
+    platform_id,
+    platform_user_id
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, calendar_id, app_id, platform_id, platform_user_id) DO NOTHING;
+
+-- name: LockProgressForUpdate :one
+SELECT 1::int
+FROM calendar_progress
+WHERE workspace_id = $1
+  AND calendar_id = $2
+  AND app_id = $3
+  AND platform_id = $4
+  AND platform_user_id = $5
+FOR UPDATE;
+
 -- name: CreateOperation :one
 INSERT INTO calendar_operation (
     workspace_id, calendar_id, app_id, platform_id, platform_user_id,

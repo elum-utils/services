@@ -1,41 +1,71 @@
 package repository
 
 import (
-	"sync"
+	"errors"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
-var cpaCacheKeys sync.Map
+const (
+	cpaCacheScopeOffer     = "offer"
+	cpaCacheScopeAdminList = "admin_list"
+	cpaCacheScopeUserList  = "user_list"
+)
 
 func cpaCacheKey(parts ...any) string {
 	args := append([]any{"cpa"}, parts...)
 	return sqlwrap.CreateKey(args...)
 }
 
-func rememberCPACacheKey(workspaceID, key string) {
-	if workspaceID == "" || key == "" {
-		return
+func cpaCacheVersionScope(workspaceID, scope string, values ...string) []any {
+	parts := make([]any, 0, 4+len(values))
+	parts = append(parts, "cpa", "cache", workspaceID, scope)
+	for _, value := range values {
+		parts = append(parts, value)
 	}
-	cpaCacheKeys.Store(key, workspaceID)
+	return parts
 }
 
-func (r *Repository) invalidateCPACache(workspaceID string) error {
+func cpaOfferCacheVersionScope(workspaceID, cpaID string) []any {
+	return cpaCacheVersionScope(workspaceID, cpaCacheScopeOffer, cpaID)
+}
+
+func cpaAdminListCacheVersionScope(workspaceID string) []any {
+	return cpaCacheVersionScope(workspaceID, cpaCacheScopeAdminList)
+}
+
+func cpaUserListCacheVersionScope(workspaceID string) []any {
+	return cpaCacheVersionScope(workspaceID, cpaCacheScopeUserList)
+}
+
+func (r *Repository) invalidateCPACache(workspaceID string, cpaIDs ...string) {
 	if r == nil || r.db == nil || workspaceID == "" {
-		return nil
+		return
 	}
-	outErr := r.db.BumpCacheVersion("cpa", "user", "list_active_catalog", workspaceID)
-	cpaCacheKeys.Range(func(rawKey, rawWorkspaceID any) bool {
-		key, keyOK := rawKey.(string)
-		cachedWorkspaceID, workspaceOK := rawWorkspaceID.(string)
-		if !keyOK || !workspaceOK || cachedWorkspaceID != workspaceID {
-			return true
+	err := errors.Join(
+		r.db.BumpCacheVersion(cpaAdminListCacheVersionScope(workspaceID)...),
+		r.db.BumpCacheVersion(cpaUserListCacheVersionScope(workspaceID)...),
+	)
+	seen := make(map[string]struct{}, len(cpaIDs))
+	for _, cpaID := range cpaIDs {
+		if cpaID == "" {
+			continue
 		}
-		if err := r.db.DeleteCache(key); err != nil && outErr == nil {
-			outErr = err
+		if _, exists := seen[cpaID]; exists {
+			continue
 		}
-		cpaCacheKeys.Delete(rawKey)
-		return true
-	})
-	return outErr
+		seen[cpaID] = struct{}{}
+		err = errors.Join(err, r.db.BumpCacheVersion(cpaOfferCacheVersionScope(workspaceID, cpaID)...))
+	}
+	r.reportCacheInvalidationError(err)
+}
+
+func (r *Repository) reportCacheInvalidationError(err error) {
+	if err == nil || r == nil || r.onCacheInvalidationError == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	r.onCacheInvalidationError(err)
 }

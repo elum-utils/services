@@ -19,8 +19,10 @@ type CompleteResult struct {
 }
 
 func (a *Admin) Complete(ctx context.Context, params CompleteParams) (CompleteResult, error) {
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+
 	result, err := a.repository.Complete(mergedCtx, repository.UserScope{
 		WorkspaceID:    params.Identity.WorkspaceID,
 		CPAID:          params.CPAID,
@@ -31,6 +33,7 @@ func (a *Admin) Complete(ctx context.Context, params CompleteParams) (CompleteRe
 	if err != nil {
 		return CompleteResult{}, err
 	}
+
 	assignment := user.AssignmentModel{
 		ID:          result.Assignment.ID,
 		CPAID:       result.Assignment.CPAID,
@@ -40,10 +43,12 @@ func (a *Admin) Complete(ctx context.Context, params CompleteParams) (CompleteRe
 		IssuedAt:    result.Assignment.IssuedAt,
 		CompletedAt: result.Assignment.CompletedAt,
 	}
+
 	rewards := mapOffer(repository.Offer{}, nil, result.Rewards).Rewards
 	return CompleteResult{
 		Assignment:  assignment,
 		Rewards:     rewards,
 		AlreadyDone: result.AlreadyDone,
 	}, nil
+
 }

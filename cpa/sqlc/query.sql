@@ -40,6 +40,11 @@ WHERE workspace_id = $1
 ORDER BY created_at DESC, id
 LIMIT $2 OFFSET $3;
 
+-- name: AdminListOfferIDs :many
+SELECT id
+FROM cpa_offer
+WHERE workspace_id = $1;
+
 -- name: AdminListOfferBundles :many
 SELECT
     o.*,
@@ -51,7 +56,7 @@ FROM (
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT $2 OFFSET $3
+    LIMIT NULLIF(sqlc.arg(page_limit)::integer, 0) OFFSET sqlc.arg(page_offset)::integer
 ) o
 LEFT JOIN cpa_localization l
     ON l.workspace_id = o.workspace_id
@@ -72,124 +77,9 @@ FROM (
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT $2 OFFSET $3
+    LIMIT NULLIF(sqlc.arg(page_limit)::integer, 0) OFFSET sqlc.arg(page_offset)::integer
 ) o
 JOIN cpa_reward r
-    ON r.workspace_id = o.workspace_id
-   AND r.cpa_id = o.id
-ORDER BY o.created_at DESC, o.id, r.id;
-
--- name: ListActiveOffers :many
-SELECT *
-FROM cpa_offer
-WHERE workspace_id = $1
-  AND is_active = TRUE
-  AND (start_at IS NULL OR start_at <= now())
-  AND (end_at IS NULL OR end_at > now())
-ORDER BY created_at DESC, id;
-
--- name: ListActiveOfferBundles :many
-SELECT
-    o.workspace_id,
-    o.id,
-    o.payload,
-    o.target,
-    o.code_mode,
-    o.code_source,
-    o.shared_code,
-    o.generated_length,
-    o.generated_alphabet,
-    o.is_active,
-    o.start_at,
-    o.end_at,
-    o.created_at,
-    o.updated_at,
-    l.locale AS localized_locale,
-    l.title AS localized_title,
-    l.description AS localized_description,
-    a.id AS assignment_id,
-    a.code AS assignment_code,
-    a.code_mode AS assignment_code_mode,
-    a.status AS assignment_status,
-    a.issued_at AS assignment_issued_at,
-    a.completed_at AS assignment_completed_at,
-    r.reward_key,
-    r.reward_type,
-    r.quantity AS reward_quantity,
-    r.scale AS reward_scale,
-    r.duration_unit
-FROM cpa_offer o
-LEFT JOIN cpa_localization l
-    ON l.workspace_id = o.workspace_id
-   AND l.cpa_id = o.id
-   AND l.locale = $1
-LEFT JOIN cpa_assignment a
-    ON a.workspace_id = o.workspace_id
-   AND a.cpa_id = o.id
-   AND a.app_id = $2
-   AND a.platform_id = $3
-   AND a.platform_user_id = $4
-   AND a.deleted_at IS NULL
-LEFT JOIN cpa_reward r
-    ON r.workspace_id = o.workspace_id
-   AND r.cpa_id = o.id
-WHERE o.workspace_id = $5
-  AND o.is_active = TRUE
-  AND (o.start_at IS NULL OR o.start_at <= now())
-  AND (o.end_at IS NULL OR o.end_at > now())
-ORDER BY o.created_at DESC, o.id, r.id;
-
--- name: ListActiveOfferBundlesCTE :many
-WITH active AS MATERIALIZED (
-    SELECT o.*
-    FROM cpa_offer o
-    WHERE o.workspace_id = $5
-      AND is_active = TRUE
-      AND (start_at IS NULL OR start_at <= now())
-      AND (end_at IS NULL OR end_at > now())
-)
-SELECT
-    o.workspace_id,
-    o.id,
-    o.payload,
-    o.target,
-    o.code_mode,
-    o.code_source,
-    o.shared_code,
-    o.generated_length,
-    o.generated_alphabet,
-    o.is_active,
-    o.start_at,
-    o.end_at,
-    o.created_at,
-    o.updated_at,
-    l.locale AS localized_locale,
-    l.title AS localized_title,
-    l.description AS localized_description,
-    a.id AS assignment_id,
-    a.code AS assignment_code,
-    a.code_mode AS assignment_code_mode,
-    a.status AS assignment_status,
-    a.issued_at AS assignment_issued_at,
-    a.completed_at AS assignment_completed_at,
-    r.reward_key,
-    r.reward_type,
-    r.quantity AS reward_quantity,
-    r.scale AS reward_scale,
-    r.duration_unit
-FROM active o
-LEFT JOIN cpa_localization l
-    ON l.workspace_id = o.workspace_id
-   AND l.cpa_id = o.id
-   AND l.locale = $1
-LEFT JOIN cpa_assignment a
-    ON a.workspace_id = o.workspace_id
-   AND a.cpa_id = o.id
-   AND a.app_id = $2
-   AND a.platform_id = $3
-   AND a.platform_user_id = $4
-   AND a.deleted_at IS NULL
-LEFT JOIN cpa_reward r
     ON r.workspace_id = o.workspace_id
    AND r.cpa_id = o.id
 ORDER BY o.created_at DESC, o.id, r.id;
@@ -235,32 +125,6 @@ LEFT JOIN cpa_reward r
     ON r.workspace_id = o.workspace_id
    AND r.cpa_id = o.id
 ORDER BY o.created_at DESC, o.id, r.id;
-
--- name: ListLocalizationsForOffers :many
-SELECT *
-FROM cpa_localization
-WHERE workspace_id = $1
-  AND locale = $2
-  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
-ORDER BY cpa_id;
-
--- name: ListRewardsForOffers :many
-SELECT *
-FROM cpa_reward
-WHERE workspace_id = $1
-  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
-ORDER BY cpa_id, id;
-
--- name: ListAssignmentsForOffers :many
-SELECT *
-FROM cpa_assignment
-WHERE workspace_id = $1
-  AND app_id = $2
-  AND platform_id = $3
-  AND platform_user_id = $4
-  AND cpa_id = ANY(sqlc.arg(cpa_ids)::text[])
-  AND deleted_at IS NULL
-ORDER BY cpa_id;
 
 -- name: AdminDeleteOffer :execrows
 DELETE FROM cpa_offer
@@ -357,7 +221,6 @@ WHERE workspace_id = $1
   AND app_id = $3
   AND platform_id = $4
   AND platform_user_id = $5
-  AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: GetAssignmentForUpdate :one
@@ -368,7 +231,6 @@ WHERE workspace_id = $1
   AND app_id = $3
   AND platform_id = $4
   AND platform_user_id = $5
-  AND deleted_at IS NULL
 LIMIT 1
 FOR UPDATE;
 
@@ -382,7 +244,7 @@ RETURNING id;
 -- name: GetAssignmentByID :one
 SELECT *
 FROM cpa_assignment
-WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1;
 
 -- name: CompleteAssignment :execrows
@@ -390,8 +252,7 @@ UPDATE cpa_assignment
 SET status = 'completed', completed_at = now(), updated_at = now()
 WHERE workspace_id = $1
   AND id = $2
-  AND status = 'issued'
-  AND deleted_at IS NULL;
+  AND status = 'issued';
 
 -- name: ListUserAssignments :many
 SELECT *
@@ -400,7 +261,6 @@ WHERE workspace_id = $1
   AND app_id = $2
   AND platform_id = $3
   AND platform_user_id = $4
-  AND deleted_at IS NULL
 ORDER BY issued_at DESC, id DESC;
 
 -- name: AdminListAssignments :many
@@ -446,14 +306,6 @@ WHERE workspace_id = $1
   AND status = 'available';
 
 -- name: AdminDeleteIssuedCodes :execrows
-UPDATE cpa_assignment
-SET deleted_at = now(), updated_at = now()
-WHERE workspace_id = $1
-  AND cpa_id = $2
-  AND status = 'issued'
-  AND deleted_at IS NULL;
-
--- name: AdminDeleteIssuedCodeRows :execrows
 UPDATE cpa_code c
 SET status = 'deleted', deleted_at = now(), updated_at = now()
 FROM cpa_assignment a
@@ -461,17 +313,9 @@ WHERE a.code_id = c.id
   AND a.workspace_id = $1
   AND a.cpa_id = $2
   AND a.status = 'issued'
-  AND a.deleted_at IS NOT NULL;
+  AND c.status = 'issued';
 
 -- name: AdminDeleteCompletedCodes :execrows
-UPDATE cpa_assignment
-SET deleted_at = now(), updated_at = now()
-WHERE workspace_id = $1
-  AND cpa_id = $2
-  AND status = 'completed'
-  AND deleted_at IS NULL;
-
--- name: AdminDeleteCompletedCodeRows :execrows
 UPDATE cpa_code c
 SET status = 'deleted', deleted_at = now(), updated_at = now()
 FROM cpa_assignment a
@@ -479,7 +323,7 @@ WHERE a.code_id = c.id
   AND a.workspace_id = $1
   AND a.cpa_id = $2
   AND a.status = 'completed'
-  AND a.deleted_at IS NOT NULL;
+  AND c.status = 'completed';
 
 -- name: AdminGetOfferStats :one
 SELECT

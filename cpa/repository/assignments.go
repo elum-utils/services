@@ -6,15 +6,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	json "github.com/goccy/go-json"
 	"math/big"
+	"strings"
 	"time"
 
-	callbackutil "github.com/elum-utils/services/internal/utils/callback"
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	json "github.com/goccy/go-json"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	services "github.com/elum-utils/services"
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
+	callbackutil "github.com/elum-utils/services/internal/utils/callback"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type UserScope struct {
@@ -38,6 +40,9 @@ type CompleteResult struct {
 }
 
 func (r *Repository) GetAssignment(ctx context.Context, scope UserScope) (Assignment, error) {
+	if err := requireUserScope(scope, true); err != nil {
+		return Assignment{}, err
+	}
 	row, err := r.q.GetAssignment(ctx, assignmentParams(scope))
 	if err != nil {
 		return Assignment{}, err
@@ -57,6 +62,9 @@ func (r *Repository) FindAssignment(ctx context.Context, scope UserScope) (*Assi
 }
 
 func (r *Repository) ListUserAssignments(ctx context.Context, scope UserScope) ([]Assignment, error) {
+	if err := requireUserScope(scope, false); err != nil {
+		return nil, err
+	}
 	rows, err := r.q.ListUserAssignments(ctx, cpasqlc.ListUserAssignmentsParams{
 		WorkspaceID:    scope.WorkspaceID,
 		AppID:          scope.AppID,
@@ -74,6 +82,10 @@ func (r *Repository) ListUserAssignments(ctx context.Context, scope UserScope) (
 }
 
 func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, status string, limit, offset int32) ([]Assignment, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListAssignments(ctx, cpasqlc.AdminListAssignmentsParams{
 		WorkspaceID: workspaceID,
@@ -93,6 +105,10 @@ func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, st
 }
 
 func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status string, limit, offset int32) ([]Code, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListCodes(ctx, cpasqlc.AdminListCodesParams{
 		WorkspaceID: workspaceID,
@@ -122,6 +138,10 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 }
 
 func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaID, eventType string, limit, offset int32) ([]AssignmentEvent, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListAssignmentEvents(ctx, cpasqlc.AdminListAssignmentEventsParams{
 		WorkspaceID: workspaceID,
@@ -148,7 +168,7 @@ func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaI
 }
 
 func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, error) {
-	if err := requireScope(scope.WorkspaceID, scope.CPAID); err != nil {
+	if err := requireUserScope(scope, true); err != nil {
 		return IssueResult{}, err
 	}
 	var result IssueResult
@@ -228,7 +248,7 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 }
 
 func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteResult, error) {
-	if err := requireScope(scope.WorkspaceID, scope.CPAID); err != nil {
+	if err := requireUserScope(scope, true); err != nil {
 		return CompleteResult{}, err
 	}
 	existing, err := r.q.GetAssignment(ctx, assignmentParams(scope))
@@ -284,16 +304,37 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 	return result, err
 }
 
+func requireUserScope(scope UserScope, requireOffer bool) error {
+	if err := (services.Identity{
+		WorkspaceID:    scope.WorkspaceID,
+		AppID:          scope.AppID,
+		PlatformID:     scope.PlatformID,
+		PlatformUserID: scope.PlatformUserID,
+	}).Validate(); err != nil {
+		return err
+	}
+	if requireOffer && strings.TrimSpace(scope.CPAID) == "" {
+		return ErrOfferRequired
+	}
+	return nil
+}
+
 func (r *Repository) AddCodes(ctx context.Context, workspaceID, cpaID string, codes []string) (int, error) {
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return 0, err
 	}
+	if len(codes) == 0 {
+		return 0, ErrCodeRequired
+	}
+	for _, code := range codes {
+		if strings.TrimSpace(code) == "" {
+			return 0, ErrCodeRequired
+		}
+	}
+
 	added := 0
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
 		for _, code := range codes {
-			if code == "" {
-				continue
-			}
 			affected, err := txRepo.q.AdminAddCode(ctx, cpasqlc.AdminAddCodeParams{
 				WorkspaceID: workspaceID,
 				CpaID:       cpaID,
@@ -311,6 +352,10 @@ func (r *Repository) AddCodes(ctx context.Context, workspaceID, cpaID string, co
 }
 
 func (r *Repository) DeleteAvailableCodes(ctx context.Context, workspaceID, cpaID string) (int64, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return 0, err
+	}
+
 	return r.q.AdminDeleteAvailableCodes(ctx, cpasqlc.AdminDeleteAvailableCodesParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
@@ -318,43 +363,25 @@ func (r *Repository) DeleteAvailableCodes(ctx context.Context, workspaceID, cpaI
 }
 
 func (r *Repository) DeleteIssuedCodes(ctx context.Context, workspaceID, cpaID string) (int64, error) {
-	var affected int64
-	err := r.WithTx(ctx, func(txRepo *Repository) error {
-		var err error
-		affected, err = txRepo.q.AdminDeleteIssuedCodes(ctx, cpasqlc.AdminDeleteIssuedCodesParams{
-			WorkspaceID: workspaceID,
-			CpaID:       cpaID,
-		})
-		if err != nil {
-			return err
-		}
-		_, err = txRepo.q.AdminDeleteIssuedCodeRows(ctx, cpasqlc.AdminDeleteIssuedCodeRowsParams{
-			WorkspaceID: workspaceID,
-			CpaID:       cpaID,
-		})
-		return err
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return 0, err
+	}
+
+	return r.q.AdminDeleteIssuedCodes(ctx, cpasqlc.AdminDeleteIssuedCodesParams{
+		WorkspaceID: workspaceID,
+		CpaID:       cpaID,
 	})
-	return affected, err
 }
 
 func (r *Repository) DeleteCompletedCodes(ctx context.Context, workspaceID, cpaID string) (int64, error) {
-	var affected int64
-	err := r.WithTx(ctx, func(txRepo *Repository) error {
-		var err error
-		affected, err = txRepo.q.AdminDeleteCompletedCodes(ctx, cpasqlc.AdminDeleteCompletedCodesParams{
-			WorkspaceID: workspaceID,
-			CpaID:       cpaID,
-		})
-		if err != nil {
-			return err
-		}
-		_, err = txRepo.q.AdminDeleteCompletedCodeRows(ctx, cpasqlc.AdminDeleteCompletedCodeRowsParams{
-			WorkspaceID: workspaceID,
-			CpaID:       cpaID,
-		})
-		return err
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return 0, err
+	}
+
+	return r.q.AdminDeleteCompletedCodes(ctx, cpasqlc.AdminDeleteCompletedCodesParams{
+		WorkspaceID: workspaceID,
+		CpaID:       cpaID,
 	})
-	return affected, err
 }
 
 func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (string, *uint64, error) {

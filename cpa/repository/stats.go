@@ -8,6 +8,10 @@ import (
 )
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID, cpaID string) (Stats, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return Stats{}, err
+	}
+
 	assignmentStats, err := r.q.AdminGetOfferStats(ctx, cpasqlc.AdminGetOfferStatsParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
@@ -36,6 +40,13 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID, cpaID string) (S
 }
 
 func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, cpaID string, from, until time.Time) ([]DailyStats, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
+		return nil, ErrInvalidDateRange
+	}
+
 	rows, err := r.q.AdminListDailyStats(ctx, cpasqlc.AdminListDailyStatsParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
@@ -58,6 +69,10 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, cpaID stri
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
+	if from.IsZero() || until.IsZero() || from.After(until) {
+		return ErrInvalidDateRange
+	}
+
 	return r.q.RefreshDailyStats(ctx, cpasqlc.RefreshDailyStatsParams{
 		OccurredAt:   from,
 		OccurredAt_2: until,

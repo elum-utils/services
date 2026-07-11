@@ -1,8 +1,9 @@
 package admin
 
 import (
-	json "github.com/goccy/go-json"
 	"time"
+
+	json "github.com/goccy/go-json"
 
 	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/user"
@@ -88,7 +89,6 @@ type AssignmentEventModel struct {
 
 type ExportRequest = repository.ExportRequest
 type ExportPackage = repository.ExportPackage
-type ExportItem = repository.ExportItem
 type ExportOffer = repository.ExportOffer
 type ExportText = repository.ExportText
 type ExportReward = repository.ExportReward

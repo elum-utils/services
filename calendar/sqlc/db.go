@@ -87,6 +87,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createOperationStmt, err = db.PrepareContext(ctx, createOperation); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateOperation: %w", err)
 	}
+	if q.ensureProgressForUpdateStmt, err = db.PrepareContext(ctx, ensureProgressForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query EnsureProgressForUpdate: %w", err)
+	}
 	if q.getCalendarBundleStmt, err = db.PrepareContext(ctx, getCalendarBundle); err != nil {
 		return nil, fmt.Errorf("error preparing query GetCalendarBundle: %w", err)
 	}
@@ -113,6 +116,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.listImportStepIDsStmt, err = db.PrepareContext(ctx, listImportStepIDs); err != nil {
 		return nil, fmt.Errorf("error preparing query ListImportStepIDs: %w", err)
+	}
+	if q.lockProgressForUpdateStmt, err = db.PrepareContext(ctx, lockProgressForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query LockProgressForUpdate: %w", err)
 	}
 	if q.refreshDailyStatsStmt, err = db.PrepareContext(ctx, refreshDailyStats); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshDailyStats: %w", err)
@@ -230,6 +236,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createOperationStmt: %w", cerr)
 		}
 	}
+	if q.ensureProgressForUpdateStmt != nil {
+		if cerr := q.ensureProgressForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing ensureProgressForUpdateStmt: %w", cerr)
+		}
+	}
 	if q.getCalendarBundleStmt != nil {
 		if cerr := q.getCalendarBundleStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getCalendarBundleStmt: %w", cerr)
@@ -273,6 +284,11 @@ func (q *Queries) Close() error {
 	if q.listImportStepIDsStmt != nil {
 		if cerr := q.listImportStepIDsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listImportStepIDsStmt: %w", cerr)
+		}
+	}
+	if q.lockProgressForUpdateStmt != nil {
+		if cerr := q.lockProgressForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockProgressForUpdateStmt: %w", cerr)
 		}
 	}
 	if q.refreshDailyStatsStmt != nil {
@@ -345,6 +361,7 @@ type Queries struct {
 	adminUpsertLocalizationStmt    *sql.Stmt
 	adminUpsertRewardStmt          *sql.Stmt
 	createOperationStmt            *sql.Stmt
+	ensureProgressForUpdateStmt    *sql.Stmt
 	getCalendarBundleStmt          *sql.Stmt
 	getProgressStmt                *sql.Stmt
 	getRecordBundleForUpdateStmt   *sql.Stmt
@@ -354,6 +371,7 @@ type Queries struct {
 	listExportStepsWithRewardsStmt *sql.Stmt
 	listImportCalendarTypesStmt    *sql.Stmt
 	listImportStepIDsStmt          *sql.Stmt
+	lockProgressForUpdateStmt      *sql.Stmt
 	refreshDailyStatsStmt          *sql.Stmt
 	upsertProgressStmt             *sql.Stmt
 }
@@ -383,6 +401,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpsertLocalizationStmt:    q.adminUpsertLocalizationStmt,
 		adminUpsertRewardStmt:          q.adminUpsertRewardStmt,
 		createOperationStmt:            q.createOperationStmt,
+		ensureProgressForUpdateStmt:    q.ensureProgressForUpdateStmt,
 		getCalendarBundleStmt:          q.getCalendarBundleStmt,
 		getProgressStmt:                q.getProgressStmt,
 		getRecordBundleForUpdateStmt:   q.getRecordBundleForUpdateStmt,
@@ -392,6 +411,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listExportStepsWithRewardsStmt: q.listExportStepsWithRewardsStmt,
 		listImportCalendarTypesStmt:    q.listImportCalendarTypesStmt,
 		listImportStepIDsStmt:          q.listImportStepIDsStmt,
+		lockProgressForUpdateStmt:      q.lockProgressForUpdateStmt,
 		refreshDailyStatsStmt:          q.refreshDailyStatsStmt,
 		upsertProgressStmt:             q.upsertProgressStmt,
 	}

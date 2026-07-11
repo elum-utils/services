@@ -2,8 +2,9 @@ package cpa
 
 import (
 	"context"
-	json "github.com/goccy/go-json"
 	"time"
+
+	json "github.com/goccy/go-json"
 
 	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
@@ -50,12 +51,15 @@ var ErrCallbackAlreadyMarked = callbackutil.ErrAlreadyMarked
 func WithCallbackWorkerID(workerID string) CallbackOption {
 	return callbackutil.WithWorkerID(workerID)
 }
+
 func WithCallbackBatchSize(batchSize int32) CallbackOption {
 	return callbackutil.WithBatchSize(batchSize)
 }
+
 func WithCallbackLeaseTimeout(timeout time.Duration) CallbackOption {
 	return callbackutil.WithLeaseTimeout(timeout)
 }
+
 func WithCallbackIdleDelay(delay time.Duration) CallbackOption {
 	return callbackutil.WithIdleDelay(delay)
 }
@@ -77,7 +81,9 @@ func (c *CPA) OnCallback(ctx context.Context, handler CallbackHandler, opts ...C
 		return c.runCallback(ctx, handler, opts...)
 	}
 	c.callbacksToRun = append(c.callbacksToRun, callbackRegistration{
-		ctx: ctx, handler: handler, options: append([]CallbackOption(nil), opts...),
+		ctx:     ctx,
+		handler: handler,
+		options: append([]CallbackOption(nil), opts...),
 	})
 	c.lifecycleMu.Unlock()
 	return nil
@@ -98,8 +104,9 @@ func (c *CPA) runCallback(ctx context.Context, handler CallbackHandler, opts ...
 		}
 		value.Payload = &services.RewardPayload{
 			Identity: services.Identity{
-				WorkspaceID: payload.WorkspaceID,
-				AppID:       payload.AppID, PlatformID: payload.PlatformID,
+				WorkspaceID:    payload.WorkspaceID,
+				AppID:          payload.AppID,
+				PlatformID:     payload.PlatformID,
 				PlatformUserID: payload.PlatformUserID,
 			},
 			Rewards: payload.Rewards,

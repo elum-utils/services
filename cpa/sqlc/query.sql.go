@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -62,7 +61,7 @@ func (q *Queries) AdminDeleteAvailableCodes(ctx context.Context, arg AdminDelete
 	return result.RowsAffected()
 }
 
-const adminDeleteCompletedCodeRows = `-- name: AdminDeleteCompletedCodeRows :execrows
+const adminDeleteCompletedCodes = `-- name: AdminDeleteCompletedCodes :execrows
 UPDATE cpa_code c
 SET status = 'deleted', deleted_at = now(), updated_at = now()
 FROM cpa_assignment a
@@ -70,29 +69,7 @@ WHERE a.code_id = c.id
   AND a.workspace_id = $1
   AND a.cpa_id = $2
   AND a.status = 'completed'
-  AND a.deleted_at IS NOT NULL
-`
-
-type AdminDeleteCompletedCodeRowsParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	CpaID       string `json:"cpa_id"`
-}
-
-func (q *Queries) AdminDeleteCompletedCodeRows(ctx context.Context, arg AdminDeleteCompletedCodeRowsParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminDeleteCompletedCodeRowsStmt, adminDeleteCompletedCodeRows, arg.WorkspaceID, arg.CpaID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const adminDeleteCompletedCodes = `-- name: AdminDeleteCompletedCodes :execrows
-UPDATE cpa_assignment
-SET deleted_at = now(), updated_at = now()
-WHERE workspace_id = $1
-  AND cpa_id = $2
-  AND status = 'completed'
-  AND deleted_at IS NULL
+  AND c.status = 'completed'
 `
 
 type AdminDeleteCompletedCodesParams struct {
@@ -108,7 +85,7 @@ func (q *Queries) AdminDeleteCompletedCodes(ctx context.Context, arg AdminDelete
 	return result.RowsAffected()
 }
 
-const adminDeleteIssuedCodeRows = `-- name: AdminDeleteIssuedCodeRows :execrows
+const adminDeleteIssuedCodes = `-- name: AdminDeleteIssuedCodes :execrows
 UPDATE cpa_code c
 SET status = 'deleted', deleted_at = now(), updated_at = now()
 FROM cpa_assignment a
@@ -116,29 +93,7 @@ WHERE a.code_id = c.id
   AND a.workspace_id = $1
   AND a.cpa_id = $2
   AND a.status = 'issued'
-  AND a.deleted_at IS NOT NULL
-`
-
-type AdminDeleteIssuedCodeRowsParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	CpaID       string `json:"cpa_id"`
-}
-
-func (q *Queries) AdminDeleteIssuedCodeRows(ctx context.Context, arg AdminDeleteIssuedCodeRowsParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminDeleteIssuedCodeRowsStmt, adminDeleteIssuedCodeRows, arg.WorkspaceID, arg.CpaID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const adminDeleteIssuedCodes = `-- name: AdminDeleteIssuedCodes :execrows
-UPDATE cpa_assignment
-SET deleted_at = now(), updated_at = now()
-WHERE workspace_id = $1
-  AND cpa_id = $2
-  AND status = 'issued'
-  AND deleted_at IS NULL
+  AND c.status = 'issued'
 `
 
 type AdminDeleteIssuedCodesParams struct {
@@ -556,7 +511,7 @@ FROM (
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT $2 OFFSET $3
+    LIMIT NULLIF($3::integer, 0) OFFSET $2::integer
 ) o
 JOIN cpa_reward r
     ON r.workspace_id = o.workspace_id
@@ -566,8 +521,8 @@ ORDER BY o.created_at DESC, o.id, r.id
 
 type AdminListOfferBundleRewardsParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	Limit       int32  `json:"limit"`
-	Offset      int32  `json:"offset"`
+	PageOffset  int32  `json:"page_offset"`
+	PageLimit   int32  `json:"page_limit"`
 }
 
 type AdminListOfferBundleRewardsRow struct {
@@ -581,7 +536,7 @@ type AdminListOfferBundleRewardsRow struct {
 }
 
 func (q *Queries) AdminListOfferBundleRewards(ctx context.Context, arg AdminListOfferBundleRewardsParams) ([]AdminListOfferBundleRewardsRow, error) {
-	rows, err := q.query(ctx, q.adminListOfferBundleRewardsStmt, adminListOfferBundleRewards, arg.WorkspaceID, arg.Limit, arg.Offset)
+	rows, err := q.query(ctx, q.adminListOfferBundleRewardsStmt, adminListOfferBundleRewards, arg.WorkspaceID, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -622,7 +577,7 @@ FROM (
     FROM cpa_offer
     WHERE cpa_offer.workspace_id = $1
     ORDER BY cpa_offer.created_at DESC, cpa_offer.id
-    LIMIT $2 OFFSET $3
+    LIMIT NULLIF($3::integer, 0) OFFSET $2::integer
 ) o
 LEFT JOIN cpa_localization l
     ON l.workspace_id = o.workspace_id
@@ -632,8 +587,8 @@ ORDER BY o.created_at DESC, o.id, l.locale
 
 type AdminListOfferBundlesParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	Limit       int32  `json:"limit"`
-	Offset      int32  `json:"offset"`
+	PageOffset  int32  `json:"page_offset"`
+	PageLimit   int32  `json:"page_limit"`
 }
 
 type AdminListOfferBundlesRow struct {
@@ -657,7 +612,7 @@ type AdminListOfferBundlesRow struct {
 }
 
 func (q *Queries) AdminListOfferBundles(ctx context.Context, arg AdminListOfferBundlesParams) ([]AdminListOfferBundlesRow, error) {
-	rows, err := q.query(ctx, q.adminListOfferBundlesStmt, adminListOfferBundles, arg.WorkspaceID, arg.Limit, arg.Offset)
+	rows, err := q.query(ctx, q.adminListOfferBundlesStmt, adminListOfferBundles, arg.WorkspaceID, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -687,6 +642,35 @@ func (q *Queries) AdminListOfferBundles(ctx context.Context, arg AdminListOfferB
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOfferIDs = `-- name: AdminListOfferIDs :many
+SELECT id
+FROM cpa_offer
+WHERE workspace_id = $1
+`
+
+func (q *Queries) AdminListOfferIDs(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.query(ctx, q.adminListOfferIDsStmt, adminListOfferIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -871,7 +855,6 @@ SET status = 'completed', completed_at = now(), updated_at = now()
 WHERE workspace_id = $1
   AND id = $2
   AND status = 'issued'
-  AND deleted_at IS NULL
 `
 
 type CompleteAssignmentParams struct {
@@ -1016,7 +999,6 @@ WHERE workspace_id = $1
   AND app_id = $3
   AND platform_id = $4
   AND platform_user_id = $5
-  AND deleted_at IS NULL
 LIMIT 1
 `
 
@@ -1059,7 +1041,7 @@ func (q *Queries) GetAssignment(ctx context.Context, arg GetAssignmentParams) (C
 const getAssignmentByID = `-- name: GetAssignmentByID :one
 SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
-WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL
+WHERE workspace_id = $1 AND id = $2
 LIMIT 1
 `
 
@@ -1098,7 +1080,6 @@ WHERE workspace_id = $1
   AND app_id = $3
   AND platform_id = $4
   AND platform_user_id = $5
-  AND deleted_at IS NULL
 LIMIT 1
 FOR UPDATE
 `
@@ -1231,308 +1212,6 @@ func (q *Queries) GetLocalization(ctx context.Context, arg GetLocalizationParams
 	return i, err
 }
 
-const listActiveOfferBundles = `-- name: ListActiveOfferBundles :many
-SELECT
-    o.workspace_id,
-    o.id,
-    o.payload,
-    o.target,
-    o.code_mode,
-    o.code_source,
-    o.shared_code,
-    o.generated_length,
-    o.generated_alphabet,
-    o.is_active,
-    o.start_at,
-    o.end_at,
-    o.created_at,
-    o.updated_at,
-    l.locale AS localized_locale,
-    l.title AS localized_title,
-    l.description AS localized_description,
-    a.id AS assignment_id,
-    a.code AS assignment_code,
-    a.code_mode AS assignment_code_mode,
-    a.status AS assignment_status,
-    a.issued_at AS assignment_issued_at,
-    a.completed_at AS assignment_completed_at,
-    r.reward_key,
-    r.reward_type,
-    r.quantity AS reward_quantity,
-    r.scale AS reward_scale,
-    r.duration_unit
-FROM cpa_offer o
-LEFT JOIN cpa_localization l
-    ON l.workspace_id = o.workspace_id
-   AND l.cpa_id = o.id
-   AND l.locale = $1
-LEFT JOIN cpa_assignment a
-    ON a.workspace_id = o.workspace_id
-   AND a.cpa_id = o.id
-   AND a.app_id = $2
-   AND a.platform_id = $3
-   AND a.platform_user_id = $4
-   AND a.deleted_at IS NULL
-LEFT JOIN cpa_reward r
-    ON r.workspace_id = o.workspace_id
-   AND r.cpa_id = o.id
-WHERE o.workspace_id = $5
-  AND o.is_active = TRUE
-  AND (o.start_at IS NULL OR o.start_at <= now())
-  AND (o.end_at IS NULL OR o.end_at > now())
-ORDER BY o.created_at DESC, o.id, r.id
-`
-
-type ListActiveOfferBundlesParams struct {
-	Locale         string `json:"locale"`
-	AppID          int64  `json:"app_id"`
-	PlatformID     int64  `json:"platform_id"`
-	PlatformUserID string `json:"platform_user_id"`
-	WorkspaceID    string `json:"workspace_id"`
-}
-
-type ListActiveOfferBundlesRow struct {
-	WorkspaceID           string                  `json:"workspace_id"`
-	ID                    string                  `json:"id"`
-	Payload               json.RawMessage         `json:"payload"`
-	Target                pqtype.NullRawMessage   `json:"target"`
-	CodeMode              CpaCodeMode             `json:"code_mode"`
-	CodeSource            NullCpaCodeSource       `json:"code_source"`
-	SharedCode            sql.NullString          `json:"shared_code"`
-	GeneratedLength       sql.NullInt16           `json:"generated_length"`
-	GeneratedAlphabet     sql.NullString          `json:"generated_alphabet"`
-	IsActive              bool                    `json:"is_active"`
-	StartAt               sql.NullTime            `json:"start_at"`
-	EndAt                 sql.NullTime            `json:"end_at"`
-	CreatedAt             time.Time               `json:"created_at"`
-	UpdatedAt             time.Time               `json:"updated_at"`
-	LocalizedLocale       sql.NullString          `json:"localized_locale"`
-	LocalizedTitle        sql.NullString          `json:"localized_title"`
-	LocalizedDescription  sql.NullString          `json:"localized_description"`
-	AssignmentID          sql.NullInt64           `json:"assignment_id"`
-	AssignmentCode        sql.NullString          `json:"assignment_code"`
-	AssignmentCodeMode    NullCpaCodeMode         `json:"assignment_code_mode"`
-	AssignmentStatus      NullCpaAssignmentStatus `json:"assignment_status"`
-	AssignmentIssuedAt    sql.NullTime            `json:"assignment_issued_at"`
-	AssignmentCompletedAt sql.NullTime            `json:"assignment_completed_at"`
-	RewardKey             sql.NullString          `json:"reward_key"`
-	RewardType            NullCpaRewardType       `json:"reward_type"`
-	RewardQuantity        sql.NullInt64           `json:"reward_quantity"`
-	RewardScale           sql.NullInt16           `json:"reward_scale"`
-	DurationUnit          NullCpaDurationUnit     `json:"duration_unit"`
-}
-
-func (q *Queries) ListActiveOfferBundles(ctx context.Context, arg ListActiveOfferBundlesParams) ([]ListActiveOfferBundlesRow, error) {
-	rows, err := q.query(ctx, q.listActiveOfferBundlesStmt, listActiveOfferBundles,
-		arg.Locale,
-		arg.AppID,
-		arg.PlatformID,
-		arg.PlatformUserID,
-		arg.WorkspaceID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListActiveOfferBundlesRow
-	for rows.Next() {
-		var i ListActiveOfferBundlesRow
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.ID,
-			&i.Payload,
-			&i.Target,
-			&i.CodeMode,
-			&i.CodeSource,
-			&i.SharedCode,
-			&i.GeneratedLength,
-			&i.GeneratedAlphabet,
-			&i.IsActive,
-			&i.StartAt,
-			&i.EndAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LocalizedLocale,
-			&i.LocalizedTitle,
-			&i.LocalizedDescription,
-			&i.AssignmentID,
-			&i.AssignmentCode,
-			&i.AssignmentCodeMode,
-			&i.AssignmentStatus,
-			&i.AssignmentIssuedAt,
-			&i.AssignmentCompletedAt,
-			&i.RewardKey,
-			&i.RewardType,
-			&i.RewardQuantity,
-			&i.RewardScale,
-			&i.DurationUnit,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listActiveOfferBundlesCTE = `-- name: ListActiveOfferBundlesCTE :many
-WITH active AS MATERIALIZED (
-    SELECT o.workspace_id, o.id, o.payload, o.target, o.code_mode, o.code_source, o.shared_code, o.generated_length, o.generated_alphabet, o.is_active, o.start_at, o.end_at, o.created_at, o.updated_at
-    FROM cpa_offer o
-    WHERE o.workspace_id = $5
-      AND is_active = TRUE
-      AND (start_at IS NULL OR start_at <= now())
-      AND (end_at IS NULL OR end_at > now())
-)
-SELECT
-    o.workspace_id,
-    o.id,
-    o.payload,
-    o.target,
-    o.code_mode,
-    o.code_source,
-    o.shared_code,
-    o.generated_length,
-    o.generated_alphabet,
-    o.is_active,
-    o.start_at,
-    o.end_at,
-    o.created_at,
-    o.updated_at,
-    l.locale AS localized_locale,
-    l.title AS localized_title,
-    l.description AS localized_description,
-    a.id AS assignment_id,
-    a.code AS assignment_code,
-    a.code_mode AS assignment_code_mode,
-    a.status AS assignment_status,
-    a.issued_at AS assignment_issued_at,
-    a.completed_at AS assignment_completed_at,
-    r.reward_key,
-    r.reward_type,
-    r.quantity AS reward_quantity,
-    r.scale AS reward_scale,
-    r.duration_unit
-FROM active o
-LEFT JOIN cpa_localization l
-    ON l.workspace_id = o.workspace_id
-   AND l.cpa_id = o.id
-   AND l.locale = $1
-LEFT JOIN cpa_assignment a
-    ON a.workspace_id = o.workspace_id
-   AND a.cpa_id = o.id
-   AND a.app_id = $2
-   AND a.platform_id = $3
-   AND a.platform_user_id = $4
-   AND a.deleted_at IS NULL
-LEFT JOIN cpa_reward r
-    ON r.workspace_id = o.workspace_id
-   AND r.cpa_id = o.id
-ORDER BY o.created_at DESC, o.id, r.id
-`
-
-type ListActiveOfferBundlesCTEParams struct {
-	Locale         string `json:"locale"`
-	AppID          int64  `json:"app_id"`
-	PlatformID     int64  `json:"platform_id"`
-	PlatformUserID string `json:"platform_user_id"`
-	WorkspaceID    string `json:"workspace_id"`
-}
-
-type ListActiveOfferBundlesCTERow struct {
-	WorkspaceID           string                  `json:"workspace_id"`
-	ID                    string                  `json:"id"`
-	Payload               json.RawMessage         `json:"payload"`
-	Target                pqtype.NullRawMessage   `json:"target"`
-	CodeMode              CpaCodeMode             `json:"code_mode"`
-	CodeSource            NullCpaCodeSource       `json:"code_source"`
-	SharedCode            sql.NullString          `json:"shared_code"`
-	GeneratedLength       sql.NullInt16           `json:"generated_length"`
-	GeneratedAlphabet     sql.NullString          `json:"generated_alphabet"`
-	IsActive              bool                    `json:"is_active"`
-	StartAt               sql.NullTime            `json:"start_at"`
-	EndAt                 sql.NullTime            `json:"end_at"`
-	CreatedAt             time.Time               `json:"created_at"`
-	UpdatedAt             time.Time               `json:"updated_at"`
-	LocalizedLocale       sql.NullString          `json:"localized_locale"`
-	LocalizedTitle        sql.NullString          `json:"localized_title"`
-	LocalizedDescription  sql.NullString          `json:"localized_description"`
-	AssignmentID          sql.NullInt64           `json:"assignment_id"`
-	AssignmentCode        sql.NullString          `json:"assignment_code"`
-	AssignmentCodeMode    NullCpaCodeMode         `json:"assignment_code_mode"`
-	AssignmentStatus      NullCpaAssignmentStatus `json:"assignment_status"`
-	AssignmentIssuedAt    sql.NullTime            `json:"assignment_issued_at"`
-	AssignmentCompletedAt sql.NullTime            `json:"assignment_completed_at"`
-	RewardKey             sql.NullString          `json:"reward_key"`
-	RewardType            NullCpaRewardType       `json:"reward_type"`
-	RewardQuantity        sql.NullInt64           `json:"reward_quantity"`
-	RewardScale           sql.NullInt16           `json:"reward_scale"`
-	DurationUnit          NullCpaDurationUnit     `json:"duration_unit"`
-}
-
-func (q *Queries) ListActiveOfferBundlesCTE(ctx context.Context, arg ListActiveOfferBundlesCTEParams) ([]ListActiveOfferBundlesCTERow, error) {
-	rows, err := q.query(ctx, q.listActiveOfferBundlesCTEStmt, listActiveOfferBundlesCTE,
-		arg.Locale,
-		arg.AppID,
-		arg.PlatformID,
-		arg.PlatformUserID,
-		arg.WorkspaceID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListActiveOfferBundlesCTERow
-	for rows.Next() {
-		var i ListActiveOfferBundlesCTERow
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.ID,
-			&i.Payload,
-			&i.Target,
-			&i.CodeMode,
-			&i.CodeSource,
-			&i.SharedCode,
-			&i.GeneratedLength,
-			&i.GeneratedAlphabet,
-			&i.IsActive,
-			&i.StartAt,
-			&i.EndAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LocalizedLocale,
-			&i.LocalizedTitle,
-			&i.LocalizedDescription,
-			&i.AssignmentID,
-			&i.AssignmentCode,
-			&i.AssignmentCodeMode,
-			&i.AssignmentStatus,
-			&i.AssignmentIssuedAt,
-			&i.AssignmentCompletedAt,
-			&i.RewardKey,
-			&i.RewardType,
-			&i.RewardQuantity,
-			&i.RewardScale,
-			&i.DurationUnit,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listActiveOfferCatalog = `-- name: ListActiveOfferCatalog :many
 WITH active AS MATERIALIZED (
     SELECT o.workspace_id, o.id, o.payload, o.target, o.code_mode, o.code_source, o.shared_code, o.generated_length, o.generated_alphabet, o.is_active, o.start_at, o.end_at, o.created_at, o.updated_at
@@ -1652,118 +1331,6 @@ func (q *Queries) ListActiveOfferCatalog(ctx context.Context, arg ListActiveOffe
 	return items, nil
 }
 
-const listActiveOffers = `-- name: ListActiveOffers :many
-SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
-FROM cpa_offer
-WHERE workspace_id = $1
-  AND is_active = TRUE
-  AND (start_at IS NULL OR start_at <= now())
-  AND (end_at IS NULL OR end_at > now())
-ORDER BY created_at DESC, id
-`
-
-func (q *Queries) ListActiveOffers(ctx context.Context, workspaceID string) ([]CpaOffer, error) {
-	rows, err := q.query(ctx, q.listActiveOffersStmt, listActiveOffers, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CpaOffer
-	for rows.Next() {
-		var i CpaOffer
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.ID,
-			&i.Payload,
-			&i.Target,
-			&i.CodeMode,
-			&i.CodeSource,
-			&i.SharedCode,
-			&i.GeneratedLength,
-			&i.GeneratedAlphabet,
-			&i.IsActive,
-			&i.StartAt,
-			&i.EndAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAssignmentsForOffers = `-- name: ListAssignmentsForOffers :many
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
-FROM cpa_assignment
-WHERE workspace_id = $1
-  AND app_id = $2
-  AND platform_id = $3
-  AND platform_user_id = $4
-  AND cpa_id = ANY($5::text[])
-  AND deleted_at IS NULL
-ORDER BY cpa_id
-`
-
-type ListAssignmentsForOffersParams struct {
-	WorkspaceID    string   `json:"workspace_id"`
-	AppID          int64    `json:"app_id"`
-	PlatformID     int64    `json:"platform_id"`
-	PlatformUserID string   `json:"platform_user_id"`
-	CpaIds         []string `json:"cpa_ids"`
-}
-
-func (q *Queries) ListAssignmentsForOffers(ctx context.Context, arg ListAssignmentsForOffersParams) ([]CpaAssignment, error) {
-	rows, err := q.query(ctx, q.listAssignmentsForOffersStmt, listAssignmentsForOffers,
-		arg.WorkspaceID,
-		arg.AppID,
-		arg.PlatformID,
-		arg.PlatformUserID,
-		pq.Array(arg.CpaIds),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CpaAssignment
-	for rows.Next() {
-		var i CpaAssignment
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.CpaID,
-			&i.AppID,
-			&i.PlatformID,
-			&i.PlatformUserID,
-			&i.CodeID,
-			&i.Code,
-			&i.CodeMode,
-			&i.Status,
-			&i.IssuedAt,
-			&i.CompletedAt,
-			&i.DeletedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLocalizations = `-- name: ListLocalizations :many
 SELECT workspace_id, cpa_id, locale, title, description, created_at, updated_at
 FROM cpa_localization
@@ -1778,52 +1345,6 @@ type ListLocalizationsParams struct {
 
 func (q *Queries) ListLocalizations(ctx context.Context, arg ListLocalizationsParams) ([]CpaLocalization, error) {
 	rows, err := q.query(ctx, q.listLocalizationsStmt, listLocalizations, arg.WorkspaceID, arg.CpaID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CpaLocalization
-	for rows.Next() {
-		var i CpaLocalization
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.CpaID,
-			&i.Locale,
-			&i.Title,
-			&i.Description,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLocalizationsForOffers = `-- name: ListLocalizationsForOffers :many
-SELECT workspace_id, cpa_id, locale, title, description, created_at, updated_at
-FROM cpa_localization
-WHERE workspace_id = $1
-  AND locale = $2
-  AND cpa_id = ANY($3::text[])
-ORDER BY cpa_id
-`
-
-type ListLocalizationsForOffersParams struct {
-	WorkspaceID string   `json:"workspace_id"`
-	Locale      string   `json:"locale"`
-	CpaIds      []string `json:"cpa_ids"`
-}
-
-func (q *Queries) ListLocalizationsForOffers(ctx context.Context, arg ListLocalizationsForOffersParams) ([]CpaLocalization, error) {
-	rows, err := q.query(ctx, q.listLocalizationsForOffersStmt, listLocalizationsForOffers, arg.WorkspaceID, arg.Locale, pq.Array(arg.CpaIds))
 	if err != nil {
 		return nil, err
 	}
@@ -1899,53 +1420,6 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Cpa
 	return items, nil
 }
 
-const listRewardsForOffers = `-- name: ListRewardsForOffers :many
-SELECT id, workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
-FROM cpa_reward
-WHERE workspace_id = $1
-  AND cpa_id = ANY($2::text[])
-ORDER BY cpa_id, id
-`
-
-type ListRewardsForOffersParams struct {
-	WorkspaceID string   `json:"workspace_id"`
-	CpaIds      []string `json:"cpa_ids"`
-}
-
-func (q *Queries) ListRewardsForOffers(ctx context.Context, arg ListRewardsForOffersParams) ([]CpaReward, error) {
-	rows, err := q.query(ctx, q.listRewardsForOffersStmt, listRewardsForOffers, arg.WorkspaceID, pq.Array(arg.CpaIds))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CpaReward
-	for rows.Next() {
-		var i CpaReward
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.CpaID,
-			&i.RewardKey,
-			&i.RewardType,
-			&i.Quantity,
-			&i.Scale,
-			&i.DurationUnit,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUserAssignments = `-- name: ListUserAssignments :many
 SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
@@ -1953,7 +1427,6 @@ WHERE workspace_id = $1
   AND app_id = $2
   AND platform_id = $3
   AND platform_user_id = $4
-  AND deleted_at IS NULL
 ORDER BY issued_at DESC, id DESC
 `
 

@@ -26,17 +26,20 @@ type Codec interface {
 	Unmarshal(data []byte, v any) error
 }
 
+type CacheInvalidationErrorHandler func(error)
+
 type Options struct {
-	MaxConnections int
-	QueryTimeout   time.Duration
-	CacheL1Delay   time.Duration
-	CacheL2Delay   time.Duration
-	Cache          Storage
-	CacheEnabled   bool
-	CacheSize      int
-	CacheTTLCheck  time.Duration
-	Codec          Codec
-	Mutex          Mutex
+	MaxConnections           int
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	Cache                    Storage
+	CacheEnabled             bool
+	CacheSize                int
+	CacheTTLCheck            time.Duration
+	Codec                    Codec
+	Mutex                    Mutex
+	OnCacheInvalidationError CacheInvalidationErrorHandler
 }
 
 type DatabaseParams struct {
@@ -48,7 +51,21 @@ type DatabaseParams struct {
 	Options  Options
 }
 
+func normalizeOptions(options Options) Options {
+	if !options.CacheEnabled {
+		return options
+	}
+	if options.CacheL1Delay <= 0 {
+		options.CacheL1Delay = defaultCacheDelay
+	}
+	if options.CacheL2Delay <= 0 {
+		options.CacheL2Delay = defaultCacheDelay
+	}
+	return options
+}
+
 func toSQLWrapOptions(options Options) sqlwrap.Options {
+	options = normalizeOptions(options)
 	result := sqlwrap.Options{
 		MaxConnections: options.MaxConnections,
 		QueryTimeout:   options.QueryTimeout,
@@ -76,18 +93,33 @@ func (a storageAdapter) GetWithTTL(key string) ([]byte, time.Duration, error) {
 func (a storageAdapter) Set(key string, value []byte, expiration time.Duration) error {
 	return a.value.Set(key, value, expiration)
 }
-func (a storageAdapter) Delete(key string) error { return a.value.Delete(key) }
-func (a storageAdapter) Reset() error            { return a.value.Reset() }
-func (a storageAdapter) Close() error            { return a.value.Close() }
+func (a storageAdapter) Delete(key string) error {
+	return a.value.Delete(key)
+}
+
+func (a storageAdapter) Reset() error {
+	return a.value.Reset()
+}
+
+func (a storageAdapter) Close() error {
+	return a.value.Close()
+}
 
 type mutexAdapter struct{ value Mutex }
 
-func (a mutexAdapter) Lock(key string) error   { return a.value.Lock(key) }
-func (a mutexAdapter) Unlock(key string) error { return a.value.Unlock(key) }
+func (a mutexAdapter) Lock(key string) error {
+	return a.value.Lock(key)
+}
+
+func (a mutexAdapter) Unlock(key string) error {
+	return a.value.Unlock(key)
+}
 
 type codecAdapter struct{ value Codec }
 
-func (a codecAdapter) Marshal(value any) ([]byte, error) { return a.value.Marshal(value) }
+func (a codecAdapter) Marshal(value any) ([]byte, error) {
+	return a.value.Marshal(value)
+}
 func (a codecAdapter) Unmarshal(data []byte, value any) error {
 	return a.value.Unmarshal(data, value)
 }

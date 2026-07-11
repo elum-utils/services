@@ -3,14 +3,17 @@ package repository
 import (
 	"context"
 	"database/sql"
-	json "github.com/goccy/go-json"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	json "github.com/goccy/go-json"
+	"github.com/sqlc-dev/pqtype"
 
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
-	"github.com/sqlc-dev/pqtype"
+	serviceerrors "github.com/elum-utils/services/errors"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
 type UpsertOfferParams struct {
@@ -28,10 +31,179 @@ type UpsertOfferParams struct {
 	EndAt             *time.Time
 }
 
-func (r *Repository) UpsertOffer(ctx context.Context, params UpsertOfferParams) error {
-	if err := requireScope(params.WorkspaceID, params.ID); err != nil {
+type FieldValidationError struct {
+	Field  string `json:"field"`
+	Detail string
+}
+
+func (e *FieldValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Detail
+}
+
+func (e *FieldValidationError) Code() string {
+	return serviceerrors.CodeInvalidFields
+}
+
+func (e *FieldValidationError) Message() string {
+	if e == nil {
+		return ""
+	}
+	return e.Detail
+}
+
+type OfferValidationError = FieldValidationError
+
+func ValidateOffer(params UpsertOfferParams) error {
+	if strings.TrimSpace(params.WorkspaceID) == "" {
+		return invalidOfferField("workspace_id", "workspace id is required")
+	}
+	if strings.TrimSpace(params.ID) == "" {
+		return invalidOfferField("id", "offer id is required")
+	}
+	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
+		return invalidOfferField("payload", "payload must be valid JSON")
+	}
+	if len(params.Target) > 0 && !json.Valid(params.Target) {
+		return invalidOfferField("target", "target must be valid JSON")
+	}
+	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
+		return invalidOfferField("start_at", "start_at must be before end_at")
+	}
+	switch params.CodeMode {
+	case CodeModeShared:
+		if params.SharedCode == nil || strings.TrimSpace(*params.SharedCode) == "" {
+			return invalidOfferField("shared_code", "shared code is required")
+		}
+	case CodeModePersonal:
+		if params.CodeSource == nil {
+			return invalidOfferField("code_source", "personal code source is required")
+		}
+		switch *params.CodeSource {
+		case CodeSourcePool:
+		case CodeSourceGenerated:
+			if params.GeneratedLength == nil || *params.GeneratedLength <= 0 {
+				return invalidOfferField("generated_length", "generated code length must be positive")
+			}
+			if params.GeneratedAlphabet == nil || len([]rune(*params.GeneratedAlphabet)) < 2 {
+				return invalidOfferField("generated_alphabet", "generated alphabet needs at least two symbols")
+			}
+		default:
+			return invalidOfferField("code_source", "unsupported personal code source")
+		}
+	default:
+		return invalidOfferField("code_mode", "unsupported code mode")
+	}
+	return nil
+}
+
+func NormalizeOffer(params *UpsertOfferParams) {
+	if params == nil {
+		return
+	}
+	if params.CodeMode == CodeModeShared {
+		params.CodeSource = nil
+		params.GeneratedLength = nil
+		params.GeneratedAlphabet = nil
+		return
+	}
+	params.SharedCode = nil
+	if params.CodeSource != nil && *params.CodeSource == CodeSourcePool {
+		params.GeneratedLength = nil
+		params.GeneratedAlphabet = nil
+	}
+}
+
+func invalidOfferField(field, message string) *FieldValidationError {
+	return &FieldValidationError{
+		Field:  field,
+		Detail: fmt.Sprintf("cpa offer %s: %s", field, message),
+	}
+}
+
+func ValidateLocalization(value Localization) error {
+	if err := requireScope(value.WorkspaceID, value.CPAID); err != nil {
 		return err
 	}
+	if strings.TrimSpace(value.Locale) == "" {
+		return &FieldValidationError{
+			Field:  "locale",
+			Detail: "cpa localization locale is required",
+		}
+	}
+	if strings.TrimSpace(value.Title) == "" {
+		return &FieldValidationError{
+			Field:  "title",
+			Detail: "cpa localization title is required",
+		}
+	}
+	return nil
+}
+
+func NormalizeAndValidateReward(value Reward) (Reward, error) {
+	if err := requireScope(value.WorkspaceID, value.CPAID); err != nil {
+		return Reward{}, err
+	}
+	if strings.TrimSpace(value.Key) == "" {
+		return Reward{}, &FieldValidationError{
+			Field:  "key",
+			Detail: "cpa reward key is required",
+		}
+	}
+	if value.Quantity <= 0 {
+		return Reward{}, &FieldValidationError{
+			Field:  "quantity",
+			Detail: "cpa reward quantity must be positive",
+		}
+	}
+	if value.Type == "" {
+		value.Type = "quantity"
+	}
+	switch value.Type {
+	case "quantity":
+		if value.Unit != nil {
+			return Reward{}, &FieldValidationError{
+				Field:  "unit",
+				Detail: "cpa quantity reward must not have duration unit",
+			}
+		}
+	case "duration":
+		if value.Unit == nil || !validDurationUnit(*value.Unit) {
+			return Reward{}, &FieldValidationError{
+				Field:  "unit",
+				Detail: "cpa duration reward requires a valid duration unit",
+			}
+		}
+	default:
+		return Reward{}, &FieldValidationError{
+			Field:  "type",
+			Detail: "cpa reward type must be quantity or duration",
+		}
+	}
+	return value, nil
+}
+
+func ValidateReward(value Reward) error {
+	_, err := NormalizeAndValidateReward(value)
+	return err
+}
+
+func validDurationUnit(unit string) bool {
+	switch unit {
+	case "second", "minute", "hour", "day", "week", "month", "year":
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Repository) UpsertOffer(ctx context.Context, params UpsertOfferParams) error {
+	if err := ValidateOffer(params); err != nil {
+		return err
+	}
+	NormalizeOffer(&params)
 	target := params.Target
 	if len(target) == 0 {
 		target = []byte("null")
@@ -67,7 +239,8 @@ func (r *Repository) UpsertOffer(ctx context.Context, params UpsertOfferParams) 
 	}); err != nil {
 		return err
 	}
-	return r.invalidateCPACache(params.WorkspaceID)
+	r.invalidateCPACache(params.WorkspaceID, params.ID)
+	return nil
 }
 
 func (r *Repository) GetOffer(ctx context.Context, workspaceID, cpaID string) (Offer, error) {
@@ -75,14 +248,17 @@ func (r *Repository) GetOffer(ctx context.Context, workspaceID, cpaID string) (O
 		return Offer{}, err
 	}
 	key := cpaCacheKey("admin_get_offer", workspaceID, cpaID)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaOfferCacheVersionScope(workspaceID, cpaID),
 	}, func(ctx context.Context) (Offer, error) {
-		row, err := r.q.AdminGetOffer(ctx, cpasqlc.AdminGetOfferParams{WorkspaceID: workspaceID, ID: cpaID})
+		row, err := r.q.AdminGetOffer(ctx, cpasqlc.AdminGetOfferParams{
+			WorkspaceID: workspaceID,
+			ID:          cpaID,
+		})
 		if err != nil {
 			return Offer{}, err
 		}
@@ -96,12 +272,12 @@ func (r *Repository) ListOffers(ctx context.Context, workspaceID string, limit, 
 	}
 	limit, offset = normalizePage(limit, offset)
 	key := cpaCacheKey("admin_list_offers", workspaceID, limit, offset)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaAdminListCacheVersionScope(workspaceID),
 	}, func(ctx context.Context) ([]Offer, error) {
 		rows, err := r.q.AdminListOffers(ctx, cpasqlc.AdminListOffersParams{
 			WorkspaceID: workspaceID,
@@ -115,101 +291,63 @@ func (r *Repository) ListOffers(ctx context.Context, workspaceID string, limit, 
 	})
 }
 
-func (r *Repository) ListActiveOffers(ctx context.Context, workspaceID string) ([]Offer, error) {
-	if workspaceID == "" {
-		return nil, ErrWorkspaceRequired
-	}
-	rows, err := r.q.ListActiveOffers(ctx, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	return mapOffers(rows), nil
-}
-
-func (r *Repository) ListActiveOfferCatalog(ctx context.Context, workspaceID, locale string) ([]OfferBundle, error) {
-	if workspaceID == "" {
-		return nil, ErrWorkspaceRequired
-	}
-	return r.listActiveOfferCatalog(ctx, workspaceID, locale)
-}
-
 func (r *Repository) ListOfferBundles(ctx context.Context, workspaceID string, limit, offset int32) ([]OfferBundle, error) {
 	if workspaceID == "" {
 		return nil, ErrWorkspaceRequired
 	}
 	limit, offset = normalizePage(limit, offset)
 	key := cpaCacheKey("admin_list_offer_bundles", workspaceID, limit, offset)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaAdminListCacheVersionScope(workspaceID),
 	}, func(ctx context.Context) ([]OfferBundle, error) {
 		rows, err := r.q.AdminListOfferBundles(ctx, cpasqlc.AdminListOfferBundlesParams{
 			WorkspaceID: workspaceID,
-			Limit:       limit,
-			Offset:      offset,
+			PageLimit:   limit,
+			PageOffset:  offset,
 		})
 		if err != nil {
 			return nil, err
 		}
 		rewardRows, err := r.q.AdminListOfferBundleRewards(ctx, cpasqlc.AdminListOfferBundleRewardsParams{
 			WorkspaceID: workspaceID,
-			Limit:       limit,
-			Offset:      offset,
+			PageLimit:   limit,
+			PageOffset:  offset,
 		})
 		if err != nil {
 			return nil, err
 		}
-		result := make([]OfferBundle, 0, int(limit))
-		indexByID := make(map[string]int, int(limit))
-		for _, row := range rows {
-			index, exists := indexByID[row.ID]
-			if !exists {
-				index = len(result)
-				indexByID[row.ID] = index
-				result = append(result, OfferBundle{
-					Offer:         mapBundleOffer(row.WorkspaceID, row.ID, row.Payload, row.Target, row.CodeMode, row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet, row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt),
-					Localizations: make([]Localization, 0),
-					Rewards:       make([]Reward, 0),
-				})
-			}
-			if row.Locale.Valid {
-				result[index].Localizations = append(result[index].Localizations, Localization{
-					WorkspaceID: row.WorkspaceID,
-					CPAID:       row.ID,
-					Locale:      row.Locale.String,
-					Title:       row.LocalizationTitle.String,
-					Description: row.LocalizationDescription.String,
-				})
-			}
-		}
-		for _, row := range rewardRows {
-			index, exists := indexByID[row.CpaID]
-			if !exists {
-				continue
-			}
-			result[index].Rewards = append(result[index].Rewards, Reward{
-				WorkspaceID: row.WorkspaceID,
-				CPAID:       row.CpaID,
-				Key:         row.RewardKey,
-				Type:        string(row.RewardType),
-				Quantity:    row.RewardQuantity,
-				Scale:       uint16(row.RewardScale),
-				Unit:        cpaDurationUnitPtr(row.DurationUnit),
-			})
-		}
-		for index := range result {
-			sort.Slice(result[index].Localizations, func(i, j int) bool {
-				return result[index].Localizations[i].Locale < result[index].Localizations[j].Locale
-			})
-		}
-		return result, nil
+		return mapAdminOfferBundles(rows, rewardRows, int(limit)), nil
 	})
 }
 
-func (r *Repository) ListActiveOfferBundles(ctx context.Context, scope UserScope, locale string) ([]OfferBundle, error) {
+func (r *Repository) ListAllOfferBundles(ctx context.Context, workspaceID string) ([]OfferBundle, error) {
+	if workspaceID == "" {
+		return nil, ErrWorkspaceRequired
+	}
+	rows, err := r.q.AdminListOfferBundles(ctx, cpasqlc.AdminListOfferBundlesParams{
+		WorkspaceID: workspaceID,
+		PageLimit:   0,
+		PageOffset:  0,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rewardRows, err := r.q.AdminListOfferBundleRewards(ctx, cpasqlc.AdminListOfferBundleRewardsParams{
+		WorkspaceID: workspaceID,
+		PageLimit:   0,
+		PageOffset:  0,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapAdminOfferBundles(rows, rewardRows, len(rows)), nil
+}
+
+func (r *Repository) ListActiveForUser(ctx context.Context, scope UserScope, locale string) ([]OfferBundle, error) {
 	if scope.WorkspaceID == "" {
 		return nil, ErrWorkspaceRequired
 	}
@@ -241,13 +379,12 @@ func (r *Repository) ListActiveOfferBundles(ctx context.Context, scope UserScope
 
 func (r *Repository) listActiveOfferCatalog(ctx context.Context, workspaceID, locale string) ([]OfferBundle, error) {
 	key := cpaCacheKey("user_list_active_catalog", workspaceID, locale)
-	scope := []any{"cpa", "user", "list_active_catalog", workspaceID}
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
 		Timeout:           r.timeout,
 		CacheL1Delay:      r.cacheL1,
 		CacheL2Delay:      r.cacheL2,
-		CacheVersionScope: scope,
+		CacheVersionScope: cpaUserListCacheVersionScope(workspaceID),
 	}, func(ctx context.Context) ([]OfferBundle, error) {
 		rows, err := r.q.ListActiveOfferCatalog(ctx, cpasqlc.ListActiveOfferCatalogParams{
 			Locale:      locale,
@@ -264,15 +401,19 @@ func (r *Repository) DeleteOffer(ctx context.Context, workspaceID, cpaID string)
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.AdminDeleteOffer(ctx, cpasqlc.AdminDeleteOfferParams{WorkspaceID: workspaceID, ID: cpaID})
+	rows, err := r.q.AdminDeleteOffer(ctx, cpasqlc.AdminDeleteOfferParams{
+		WorkspaceID: workspaceID,
+		ID:          cpaID,
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateCPACache(workspaceID)
+	r.invalidateCPACache(workspaceID, cpaID)
+	return rows, nil
 }
 
 func (r *Repository) UpsertLocalization(ctx context.Context, value Localization) error {
-	if err := requireScope(value.WorkspaceID, value.CPAID); err != nil {
+	if err := ValidateLocalization(value); err != nil {
 		return err
 	}
 	if err := r.q.AdminUpsertLocalization(ctx, cpasqlc.AdminUpsertLocalizationParams{
@@ -284,17 +425,25 @@ func (r *Repository) UpsertLocalization(ctx context.Context, value Localization)
 	}); err != nil {
 		return err
 	}
-	return r.invalidateCPACache(value.WorkspaceID)
+	r.invalidateCPACache(value.WorkspaceID, value.CPAID)
+	return nil
 }
 
 func (r *Repository) GetLocalization(ctx context.Context, workspaceID, cpaID, locale string) (Localization, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return Localization{}, err
+	}
+	if err := requireLocale(locale); err != nil {
+		return Localization{}, err
+	}
+
 	key := cpaCacheKey("get_localization", workspaceID, cpaID, locale)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaOfferCacheVersionScope(workspaceID, cpaID),
 	}, func(ctx context.Context) (Localization, error) {
 		row, err := r.q.GetLocalization(ctx, cpasqlc.GetLocalizationParams{
 			WorkspaceID: workspaceID,
@@ -326,13 +475,17 @@ func (r *Repository) ResolveLocalization(ctx context.Context, workspaceID, cpaID
 }
 
 func (r *Repository) ListLocalizations(ctx context.Context, workspaceID, cpaID string) ([]Localization, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+
 	key := cpaCacheKey("list_localizations", workspaceID, cpaID)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaOfferCacheVersionScope(workspaceID, cpaID),
 	}, func(ctx context.Context) ([]Localization, error) {
 		rows, err := r.q.ListLocalizations(ctx, cpasqlc.ListLocalizationsParams{
 			WorkspaceID: workspaceID,
@@ -350,6 +503,13 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID, cpaID s
 }
 
 func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID, cpaID, locale string) (int64, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return 0, err
+	}
+	if err := requireLocale(locale); err != nil {
+		return 0, err
+	}
+
 	rows, err := r.q.AdminDeleteLocalization(ctx, cpasqlc.AdminDeleteLocalizationParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
@@ -358,10 +518,15 @@ func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID, cpaID,
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateCPACache(workspaceID)
+	r.invalidateCPACache(workspaceID, cpaID)
+	return rows, nil
 }
 
 func (r *Repository) UpsertReward(ctx context.Context, value Reward) error {
+	value, err := NormalizeAndValidateReward(value)
+	if err != nil {
+		return err
+	}
 	if err := r.q.AdminUpsertReward(ctx, cpasqlc.AdminUpsertRewardParams{
 		WorkspaceID: value.WorkspaceID,
 		CpaID:       value.CPAID,
@@ -376,17 +541,22 @@ func (r *Repository) UpsertReward(ctx context.Context, value Reward) error {
 	}); err != nil {
 		return err
 	}
-	return r.invalidateCPACache(value.WorkspaceID)
+	r.invalidateCPACache(value.WorkspaceID, value.CPAID)
+	return nil
 }
 
 func (r *Repository) ListRewards(ctx context.Context, workspaceID, cpaID string) ([]Reward, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return nil, err
+	}
+
 	key := cpaCacheKey("list_rewards", workspaceID, cpaID)
-	rememberCPACacheKey(workspaceID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: cpaOfferCacheVersionScope(workspaceID, cpaID),
 	}, func(ctx context.Context) ([]Reward, error) {
 		rows, err := r.q.ListRewards(ctx, cpasqlc.ListRewardsParams{
 			WorkspaceID: workspaceID,
@@ -404,6 +574,13 @@ func (r *Repository) ListRewards(ctx context.Context, workspaceID, cpaID string)
 }
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID, cpaID, rewardKey string) (int64, error) {
+	if err := requireScope(workspaceID, cpaID); err != nil {
+		return 0, err
+	}
+	if err := requireRewardKey(rewardKey); err != nil {
+		return 0, err
+	}
+
 	rows, err := r.q.AdminDeleteReward(ctx, cpasqlc.AdminDeleteRewardParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
@@ -412,7 +589,74 @@ func (r *Repository) DeleteReward(ctx context.Context, workspaceID, cpaID, rewar
 	if err != nil || rows == 0 {
 		return rows, err
 	}
-	return rows, r.invalidateCPACache(workspaceID)
+	r.invalidateCPACache(workspaceID, cpaID)
+	return rows, nil
+}
+
+func mapAdminOfferBundles(
+	rows []cpasqlc.AdminListOfferBundlesRow,
+	rewardRows []cpasqlc.AdminListOfferBundleRewardsRow,
+	capacity int,
+) []OfferBundle {
+	result := make([]OfferBundle, 0, capacity)
+	indexByID := make(map[string]int, capacity)
+	for _, row := range rows {
+		index, exists := indexByID[row.ID]
+		if !exists {
+			index = len(result)
+			indexByID[row.ID] = index
+			result = append(result, OfferBundle{
+				Offer: mapBundleOffer(
+					row.WorkspaceID,
+					row.ID,
+					row.Payload,
+					row.Target,
+					row.CodeMode,
+					row.CodeSource,
+					row.SharedCode,
+					row.GeneratedLength,
+					row.GeneratedAlphabet,
+					row.IsActive,
+					row.StartAt,
+					row.EndAt,
+					row.CreatedAt,
+					row.UpdatedAt,
+				),
+				Localizations: make([]Localization, 0),
+				Rewards:       make([]Reward, 0),
+			})
+		}
+		if row.Locale.Valid {
+			result[index].Localizations = append(result[index].Localizations, Localization{
+				WorkspaceID: row.WorkspaceID,
+				CPAID:       row.ID,
+				Locale:      row.Locale.String,
+				Title:       row.LocalizationTitle.String,
+				Description: row.LocalizationDescription.String,
+			})
+		}
+	}
+	for _, row := range rewardRows {
+		index, exists := indexByID[row.CpaID]
+		if !exists {
+			continue
+		}
+		result[index].Rewards = append(result[index].Rewards, Reward{
+			WorkspaceID: row.WorkspaceID,
+			CPAID:       row.CpaID,
+			Key:         row.RewardKey,
+			Type:        string(row.RewardType),
+			Quantity:    row.RewardQuantity,
+			Scale:       uint16(row.RewardScale),
+			Unit:        cpaDurationUnitPtr(row.DurationUnit),
+		})
+	}
+	for index := range result {
+		sort.Slice(result[index].Localizations, func(i, j int) bool {
+			return result[index].Localizations[i].Locale < result[index].Localizations[j].Locale
+		})
+	}
+	return result
 }
 
 func mapOffer(row cpasqlc.CpaOffer) Offer {
@@ -466,63 +710,6 @@ func mapReward(row cpasqlc.CpaReward) Reward {
 	}
 }
 
-func mapActiveOfferBundleRows(rows []cpasqlc.ListActiveOfferBundlesCTERow, scope UserScope) []OfferBundle {
-	result := make([]OfferBundle, 0, len(rows))
-	indexByID := make(map[string]int, len(rows))
-	for _, row := range rows {
-		index, exists := indexByID[row.ID]
-		if !exists {
-			bundle := OfferBundle{
-				Offer: mapBundleOffer(
-					row.WorkspaceID, row.ID, row.Payload, row.Target, row.CodeMode,
-					row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet,
-					row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt,
-				),
-				Rewards: make([]Reward, 0),
-			}
-			if row.LocalizedLocale.Valid {
-				bundle.Localization = &Localization{
-					WorkspaceID: row.WorkspaceID,
-					CPAID:       row.ID,
-					Locale:      row.LocalizedLocale.String,
-					Title:       row.LocalizedTitle.String,
-					Description: row.LocalizedDescription.String,
-				}
-			}
-			if row.AssignmentID.Valid {
-				bundle.Assignment = &Assignment{
-					ID:             uint64(row.AssignmentID.Int64),
-					WorkspaceID:    row.WorkspaceID,
-					CPAID:          row.ID,
-					AppID:          scope.AppID,
-					PlatformID:     scope.PlatformID,
-					PlatformUserID: scope.PlatformUserID,
-					Code:           row.AssignmentCode.String,
-					CodeMode:       string(row.AssignmentCodeMode.CpaCodeMode),
-					Status:         string(row.AssignmentStatus.CpaAssignmentStatus),
-					IssuedAt:       row.AssignmentIssuedAt.Time,
-					CompletedAt:    sqlwrap.NullTimePtr(row.AssignmentCompletedAt),
-				}
-			}
-			index = len(result)
-			indexByID[row.ID] = index
-			result = append(result, bundle)
-		}
-		if row.RewardKey.Valid {
-			result[index].Rewards = append(result[index].Rewards, Reward{
-				WorkspaceID: row.WorkspaceID,
-				CPAID:       row.ID,
-				Key:         row.RewardKey.String,
-				Type:        string(row.RewardType.CpaRewardType),
-				Quantity:    row.RewardQuantity.Int64,
-				Scale:       uint16FromNull(row.RewardScale),
-				Unit:        cpaDurationUnitPtr(row.DurationUnit),
-			})
-		}
-	}
-	return result
-}
-
 func mapActiveOfferCatalogRows(rows []cpasqlc.ListActiveOfferCatalogRow) []OfferBundle {
 	result := make([]OfferBundle, 0, len(rows))
 	indexByID := make(map[string]int, len(rows))
@@ -531,9 +718,20 @@ func mapActiveOfferCatalogRows(rows []cpasqlc.ListActiveOfferCatalogRow) []Offer
 		if !exists {
 			bundle := OfferBundle{
 				Offer: mapBundleOffer(
-					row.WorkspaceID, row.ID, row.Payload, row.Target, row.CodeMode,
-					row.CodeSource, row.SharedCode, row.GeneratedLength, row.GeneratedAlphabet,
-					row.IsActive, row.StartAt, row.EndAt, row.CreatedAt, row.UpdatedAt,
+					row.WorkspaceID,
+					row.ID,
+					row.Payload,
+					row.Target,
+					row.CodeMode,
+					row.CodeSource,
+					row.SharedCode,
+					row.GeneratedLength,
+					row.GeneratedAlphabet,
+					row.IsActive,
+					row.StartAt,
+					row.EndAt,
+					row.CreatedAt,
+					row.UpdatedAt,
 				),
 				Rewards: make([]Reward, 0),
 			}

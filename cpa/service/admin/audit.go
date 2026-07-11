@@ -14,9 +14,18 @@ type AuditListParams struct {
 	Page        Page
 }
 
+type AssignmentEventListParams struct {
+	WorkspaceID string
+	CPAID       string
+	EventType   string
+	Page        Page
+}
+
 func (a *Admin) GetUserAssignment(ctx context.Context, params user.GetStatusParams) (*AssignmentModel, error) {
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+
 	value, err := a.repository.FindAssignment(mergedCtx, repository.UserScope{
 		WorkspaceID:    params.Identity.WorkspaceID,
 		CPAID:          params.CPAID,
@@ -27,33 +36,57 @@ func (a *Admin) GetUserAssignment(ctx context.Context, params user.GetStatusPara
 	if err != nil || value == nil {
 		return nil, err
 	}
+
 	result := mapAssignment(*value)
 	return &result, nil
+
 }
 
 func (a *Admin) ListAssignments(ctx context.Context, params AuditListParams) ([]AssignmentModel, error) {
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+
 	limit, offset := normalizePage(params.Page)
-	values, err := a.repository.ListAssignments(mergedCtx, params.WorkspaceID, params.CPAID, params.Status, limit, offset)
+	values, err := a.repository.ListAssignments(
+		mergedCtx,
+		params.WorkspaceID,
+		params.CPAID,
+		params.Status,
+		limit,
+		offset,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]AssignmentModel, 0, len(values))
 	for _, value := range values {
 		result = append(result, mapAssignment(value))
 	}
+
 	return result, nil
+
 }
 
 func (a *Admin) ListCodes(ctx context.Context, params AuditListParams) ([]CodeModel, error) {
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+
 	limit, offset := normalizePage(params.Page)
-	values, err := a.repository.ListCodes(mergedCtx, params.WorkspaceID, params.CPAID, params.Status, limit, offset)
+	values, err := a.repository.ListCodes(
+		mergedCtx,
+		params.WorkspaceID,
+		params.CPAID,
+		params.Status,
+		limit,
+		offset,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]CodeModel, 0, len(values))
 	for _, value := range values {
 		result = append(result, CodeModel{
@@ -66,17 +99,29 @@ func (a *Admin) ListCodes(ctx context.Context, params AuditListParams) ([]CodeMo
 			DeletedAt: value.DeletedAt,
 		})
 	}
+
 	return result, nil
+
 }
 
-func (a *Admin) ListAssignmentEvents(ctx context.Context, params AuditListParams) ([]AssignmentEventModel, error) {
+func (a *Admin) ListAssignmentEvents(ctx context.Context, params AssignmentEventListParams) ([]AssignmentEventModel, error) {
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+
 	limit, offset := normalizePage(params.Page)
-	values, err := a.repository.ListAssignmentEvents(mergedCtx, params.WorkspaceID, params.CPAID, params.Status, limit, offset)
+	values, err := a.repository.ListAssignmentEvents(
+		mergedCtx,
+		params.WorkspaceID,
+		params.CPAID,
+		params.EventType,
+		limit,
+		offset,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]AssignmentEventModel, 0, len(values))
 	for _, value := range values {
 		result = append(result, AssignmentEventModel{
@@ -86,7 +131,9 @@ func (a *Admin) ListAssignmentEvents(ctx context.Context, params AuditListParams
 			OccurredAt:   value.OccurredAt,
 		})
 	}
+
 	return result, nil
+
 }
 
 func mapAssignment(value repository.Assignment) AssignmentModel {
