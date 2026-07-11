@@ -1,12 +1,12 @@
 package integration
 
 import (
-	"maps"
 	"bytes"
 	"context"
 	"fmt"
 	json "github.com/goccy/go-json"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"

@@ -124,19 +124,19 @@ func (r *PaymentRepository) resolveProductPriceAmounts(
 		return resolvedProductPrice{}, err
 	}
 
-		list, err := convertReferenceAmount(
-			*input.ReferenceListAmountMinor,
-			uint16(rate.TargetScale),
-			uint64(rate.ReferencePerAssetMinor),
+	list, err := convertReferenceAmount(
+		*input.ReferenceListAmountMinor,
+		uint16(rate.TargetScale),
+		uint64(rate.ReferencePerAssetMinor),
 		coefficient,
 	)
 	if err != nil {
 		return resolvedProductPrice{}, err
 	}
-		discount, err := convertReferenceAmount(
-			*input.ReferenceDiscountAmountMinor,
-			uint16(rate.TargetScale),
-			uint64(rate.ReferencePerAssetMinor),
+	discount, err := convertReferenceAmount(
+		*input.ReferenceDiscountAmountMinor,
+		uint16(rate.TargetScale),
+		uint64(rate.ReferencePerAssetMinor),
 		coefficient,
 	)
 	if err != nil {
