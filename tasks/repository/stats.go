@@ -90,7 +90,11 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID string) (Stats, e
 	}, nil
 }
 
-func (r *Repository) GetSingleTaskStats(ctx context.Context, workspaceID string, taskID uint64) (SingleTaskStats, error) {
+func (r *Repository) GetSingleTaskStats(
+	ctx context.Context,
+	workspaceID string,
+	taskID uint64,
+) (SingleTaskStats, error) {
 	row, err := r.q.AdminGetSingleTaskStats(ctx, tasksqlc.AdminGetSingleTaskStatsParams{
 		WorkspaceID: workspaceID, TaskID: int64(taskID),
 		WorkspaceID_2: workspaceID, TaskID_2: int64(taskID),

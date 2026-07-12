@@ -75,15 +75,21 @@ func (i *Integration) Check(ctx context.Context, params CheckParams) (Result, er
 	return i.checkLoadedAndRecord(mergedCtx, checkParams, task, now)
 }
 
-func (i *Integration) CheckChannelSubscription(ctx context.Context, params CheckChannelSubscriptionParams) (Result, error) {
+func (i *Integration) CheckChannelSubscription(
+	ctx context.Context,
+	params CheckChannelSubscriptionParams,
+) (Result, error) {
 	return i.checkAndRecord(ctx, checkAndRecordParams{
 		taskRef: params.TaskRefParams, provider: params.Provider,
 		variables: params.Variables, expectedActionKind: repository.ActionKindChannelSubscribe,
 		check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-			return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(checkCtx, ChannelSubscriptionCheckParams{
-				Identity: params.Identity, Task: taskContext(task), Provider: provider,
-				Variables: params.Variables, OccurredAt: now,
-			})
+			return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(
+				checkCtx,
+				ChannelSubscriptionCheckParams{
+					Identity: params.Identity, Task: taskContext(task), Provider: provider,
+					Variables: params.Variables, OccurredAt: now,
+				},
+			)
 		},
 		checker: func(provider string) any {
 			return i.channelCheckers[provider]
@@ -144,7 +150,11 @@ func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordP
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	task, found, err := i.repository.IntegrationCheckTask(mergedCtx, params.taskRef.Identity.WorkspaceID, params.taskRef.TaskRef)
+	task, found, err := i.repository.IntegrationCheckTask(
+		mergedCtx,
+		params.taskRef.Identity.WorkspaceID,
+		params.taskRef.TaskRef,
+	)
 	if err != nil {
 		return Result{}, err
 	}
@@ -154,7 +164,12 @@ func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordP
 	return i.checkLoadedAndRecord(mergedCtx, params, task, now)
 }
 
-func (i *Integration) checkLoadedAndRecord(ctx context.Context, params checkAndRecordParams, task repository.Task, now time.Time) (Result, error) {
+func (i *Integration) checkLoadedAndRecord(
+	ctx context.Context,
+	params checkAndRecordParams,
+	task repository.Task,
+	now time.Time,
+) (Result, error) {
 	publicTask := activeTask(task)
 	if task.ActionKind != params.expectedActionKind {
 		return Result{Status: StatusInvalidTask, Task: &publicTask}, nil
@@ -202,10 +217,13 @@ func (i *Integration) checkParamsForTask(params CheckParams, actionKind string) 
 			taskRef: params.TaskRefParams, provider: params.Provider,
 			variables: params.Variables, expectedActionKind: repository.ActionKindChannelSubscribe,
 			check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-				return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(checkCtx, ChannelSubscriptionCheckParams{
-					Identity: params.Identity, Task: taskContext(task), Provider: provider,
-					Variables: params.Variables, OccurredAt: now,
-				})
+				return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(
+					checkCtx,
+					ChannelSubscriptionCheckParams{
+						Identity: params.Identity, Task: taskContext(task), Provider: provider,
+						Variables: params.Variables, OccurredAt: now,
+					},
+				)
 			},
 			checker: func(provider string) any {
 				return i.channelCheckers[provider]
@@ -244,7 +262,10 @@ func (i *Integration) checkParamsForTask(params CheckParams, actionKind string) 
 	}
 }
 
-func (i *Integration) ConfirmCompletion(ctx context.Context, params ConfirmCompletionParams) (ConfirmCompletionResult, error) {
+func (i *Integration) ConfirmCompletion(
+	ctx context.Context,
+	params ConfirmCompletionParams,
+) (ConfirmCompletionResult, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
 
@@ -315,10 +336,20 @@ func integrationSource(provider string) string {
 }
 
 func integrationEventKey(task repository.Task, identity repository.Identity) string {
-	return fmt.Sprintf("integration:%d:%s:%d:%d:%s", task.ID, identity.WorkspaceID, identity.AppID, identity.PlatformID, identity.PlatformUserID)
+	return fmt.Sprintf(
+		"integration:%d:%s:%d:%d:%s",
+		task.ID,
+		identity.WorkspaceID,
+		identity.AppID,
+		identity.PlatformID,
+		identity.PlatformUserID,
+	)
 }
 
-func defaultChannelCheckers(checker ChannelSubscriptionChecker, overrides map[string]ChannelSubscriptionChecker) map[string]ChannelSubscriptionChecker {
+func defaultChannelCheckers(
+	checker ChannelSubscriptionChecker,
+	overrides map[string]ChannelSubscriptionChecker,
+) map[string]ChannelSubscriptionChecker {
 	result := map[string]ChannelSubscriptionChecker{
 		"telegram": checker,
 		"tg":       checker,
@@ -334,7 +365,10 @@ func defaultChannelCheckers(checker ChannelSubscriptionChecker, overrides map[st
 	return result
 }
 
-func defaultChannelBoostCheckers(checker ChannelBoostChecker, overrides map[string]ChannelBoostChecker) map[string]ChannelBoostChecker {
+func defaultChannelBoostCheckers(
+	checker ChannelBoostChecker,
+	overrides map[string]ChannelBoostChecker,
+) map[string]ChannelBoostChecker {
 	result := map[string]ChannelBoostChecker{
 		"telegram": checker,
 		"tg":       checker,

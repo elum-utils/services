@@ -27,7 +27,11 @@ func (a *Admin) GetProductStats(ctx context.Context, workspaceID, productID stri
 	return mapProductStats(value), nil
 }
 
-func (a *Admin) ListDailyStats(ctx context.Context, workspaceID, productID string, from, until time.Time) ([]DailyStatsModel, error) {
+func (a *Admin) ListDailyStats(
+	ctx context.Context,
+	workspaceID, productID string,
+	from, until time.Time,
+) ([]DailyStatsModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListPaymentDailyStats(mergedCtx, workspaceID, productID, from, until)

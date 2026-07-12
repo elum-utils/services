@@ -23,7 +23,11 @@ type OperationModel struct {
 	OccurredAt      time.Time          `json:"occurred_at"`
 }
 
-func (a *Admin) ListOperations(ctx context.Context, workspaceID, calendarID string, page Page) ([]OperationModel, error) {
+func (a *Admin) ListOperations(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	page Page,
+) ([]OperationModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(page)
@@ -58,7 +62,11 @@ func (a *Admin) GetStats(ctx context.Context, workspaceID, calendarID string) (S
 	return StatsModel(value), nil
 }
 
-func (a *Admin) ListDailyStats(ctx context.Context, workspaceID, calendarID string, from, until time.Time) ([]DailyStatsModel, error) {
+func (a *Admin) ListDailyStats(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	from, until time.Time,
+) ([]DailyStatsModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListDailyStats(mergedCtx, workspaceID, calendarID, from, until)

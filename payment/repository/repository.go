@@ -74,7 +74,11 @@ func NewPreparedPaymentRepository(ctx context.Context, db *sqlwrap.Client) (*Pay
 	return NewPreparedPaymentRepositoryWithOptions(ctx, db, Options{})
 }
 
-func NewPreparedPaymentRepositoryWithOptions(_ context.Context, db *sqlwrap.Client, options Options) (*PaymentRepository, error) {
+func NewPreparedPaymentRepositoryWithOptions(
+	_ context.Context,
+	db *sqlwrap.Client,
+	options Options,
+) (*PaymentRepository, error) {
 	return NewPaymentRepositoryWithOptions(db, options), nil
 }
 
@@ -92,23 +96,28 @@ func (r *PaymentRepository) Close() error {
 func (r *PaymentRepository) WithTx(ctx context.Context, fn func(*PaymentRepository) error) error {
 	pendingWorkspaces := make(map[string]struct{})
 	pendingInvalidateAll := false
-	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
-		txRepo := &PaymentRepository{
-			db:                            r.db,
-			q:                             r.q.WithTx(tx),
-			callbacks:                     r.callbacks.WithTx(tx),
-			executor:                      tx,
-			inTx:                          true,
-			timeout:                       r.timeout,
-			cacheL1:                       r.cacheL1,
-			cacheL2:                       r.cacheL2,
-			pendingWorkspaceInvalidations: pendingWorkspaces,
-			onCacheInvalidationError:      r.onCacheInvalidationError,
-		}
-		callbackErr := fn(txRepo)
-		pendingInvalidateAll = txRepo.pendingInvalidateAll
-		return struct{}{}, callbackErr
-	})
+	_, err := sqlwrap.Transaction(
+		ctx,
+		r.db,
+		sqlwrap.Params{Timeout: r.timeout},
+		func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
+			txRepo := &PaymentRepository{
+				db:                            r.db,
+				q:                             r.q.WithTx(tx),
+				callbacks:                     r.callbacks.WithTx(tx),
+				executor:                      tx,
+				inTx:                          true,
+				timeout:                       r.timeout,
+				cacheL1:                       r.cacheL1,
+				cacheL2:                       r.cacheL2,
+				pendingWorkspaceInvalidations: pendingWorkspaces,
+				onCacheInvalidationError:      r.onCacheInvalidationError,
+			}
+			callbackErr := fn(txRepo)
+			pendingInvalidateAll = txRepo.pendingInvalidateAll
+			return struct{}{}, callbackErr
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -210,9 +219,15 @@ func queryTimeout(value time.Duration) time.Duration {
 
 func (r *PaymentRepository) ListProviders(ctx context.Context) ([]paymentsqlc.PaymentProvider, error) {
 	key := paymentCacheKey("providers")
-	providers, err := queryPaymentCache(ctx, r, paymentGlobalCacheScope, key, func(ctx context.Context) ([]paymentsqlc.PaymentProvider, error) {
-		return r.q.ListProviders(ctx)
-	})
+	providers, err := queryPaymentCache(
+		ctx,
+		r,
+		paymentGlobalCacheScope,
+		key,
+		func(ctx context.Context) ([]paymentsqlc.PaymentProvider, error) {
+			return r.q.ListProviders(ctx)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -221,9 +236,15 @@ func (r *PaymentRepository) ListProviders(ctx context.Context) ([]paymentsqlc.Pa
 
 func (r *PaymentRepository) ListAssets(ctx context.Context) ([]paymentsqlc.PaymentAsset, error) {
 	key := paymentCacheKey("assets")
-	assets, err := queryPaymentCache(ctx, r, paymentGlobalCacheScope, key, func(ctx context.Context) ([]paymentsqlc.PaymentAsset, error) {
-		return r.q.ListAssets(ctx)
-	})
+	assets, err := queryPaymentCache(
+		ctx,
+		r,
+		paymentGlobalCacheScope,
+		key,
+		func(ctx context.Context) ([]paymentsqlc.PaymentAsset, error) {
+			return r.q.ListAssets(ctx)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -275,14 +296,24 @@ func (r *PaymentRepository) DeleteAsset(ctx context.Context, code string) (int64
 	return rows, r.invalidateAllCache()
 }
 
-func (r *PaymentRepository) GetProviderAsset(ctx context.Context, providerCode string, assetCode string) (paymentsqlc.PaymentProviderAsset, error) {
+func (r *PaymentRepository) GetProviderAsset(
+	ctx context.Context,
+	providerCode string,
+	assetCode string,
+) (paymentsqlc.PaymentProviderAsset, error) {
 	key := paymentCacheKey("provider_asset", providerCode, assetCode)
-	return queryPaymentCache(ctx, r, paymentGlobalCacheScope, key, func(ctx context.Context) (paymentsqlc.PaymentProviderAsset, error) {
-		return r.q.GetProviderAsset(ctx, paymentsqlc.GetProviderAssetParams{
-			ProviderCode: providerCode,
-			AssetCode:    assetCode,
-		})
-	})
+	return queryPaymentCache(
+		ctx,
+		r,
+		paymentGlobalCacheScope,
+		key,
+		func(ctx context.Context) (paymentsqlc.PaymentProviderAsset, error) {
+			return r.q.GetProviderAsset(ctx, paymentsqlc.GetProviderAssetParams{
+				ProviderCode: providerCode,
+				AssetCode:    assetCode,
+			})
+		},
+	)
 }
 
 type ProviderAssetUpsertParams struct {
@@ -320,7 +351,11 @@ func (r *PaymentRepository) UpsertProviderAsset(ctx context.Context, params Prov
 	return r.invalidateAllCache()
 }
 
-func (r *PaymentRepository) DeleteProviderAsset(ctx context.Context, providerCode string, assetCode string) (int64, error) {
+func (r *PaymentRepository) DeleteProviderAsset(
+	ctx context.Context,
+	providerCode string,
+	assetCode string,
+) (int64, error) {
 	rows, err := r.q.DeleteProviderAsset(ctx, paymentsqlc.DeleteProviderAssetParams{
 		ProviderCode: providerCode,
 		AssetCode:    assetCode,

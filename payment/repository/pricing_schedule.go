@@ -15,8 +15,14 @@ const (
 )
 
 var (
-	ErrInvalidAutoUpdateConfig   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment asset rate auto-update configuration is invalid")
-	ErrAssetRateScheduleNotFound = serviceerrors.New(serviceerrors.CodeNotFound, "payment asset rate schedule not found")
+	ErrInvalidAutoUpdateConfig = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"payment asset rate auto-update configuration is invalid",
+	)
+	ErrAssetRateScheduleNotFound = serviceerrors.New(
+		serviceerrors.CodeNotFound,
+		"payment asset rate schedule not found",
+	)
 )
 
 type AssetRateAutoUpdateParams struct {

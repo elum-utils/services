@@ -12,5 +12,5 @@
 
 - [x] Собрать тесты в `tasks_test.go` и `tasks_bench_test.go`, удалить
   `tasks/tests`.
-- [ ] Разделить плотные literals/mappers и длинные partner/runtime функции на
+- [x] Разделить плотные literals/mappers и длинные partner/runtime функции на
   читаемые логические блоки без изменения поведения.

@@ -18,7 +18,11 @@ func (a *Admin) GetStats(ctx context.Context, workspaceID string, promoID uint64
 	return StatsModel(value), nil
 }
 
-func (a *Admin) GetUserRedemption(ctx context.Context, identity user.Identity, promoID uint64) (*RedemptionModel, error) {
+func (a *Admin) GetUserRedemption(
+	ctx context.Context,
+	identity user.Identity,
+	promoID uint64,
+) (*RedemptionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetRedemption(mergedCtx, repository.Identity{
@@ -38,7 +42,12 @@ func (a *Admin) GetUserRedemption(ctx context.Context, identity user.Identity, p
 	return &result, nil
 }
 
-func (a *Admin) ListRedemptions(ctx context.Context, workspaceID string, promoID uint64, page Page) ([]RedemptionModel, error) {
+func (a *Admin) ListRedemptions(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	page Page,
+) ([]RedemptionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(page)
@@ -53,7 +62,12 @@ func (a *Admin) ListRedemptions(ctx context.Context, workspaceID string, promoID
 	return result, nil
 }
 
-func (a *Admin) ListDailyStats(ctx context.Context, workspaceID string, promoID uint64, from, until time.Time) ([]DailyStatsModel, error) {
+func (a *Admin) ListDailyStats(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	from, until time.Time,
+) ([]DailyStatsModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListDailyStats(mergedCtx, workspaceID, promoID, from, until)

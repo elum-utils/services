@@ -12,7 +12,10 @@ func (a *Admin) UpsertGroup(ctx context.Context, workspaceID, key string, positi
 	return a.repository.UpsertGroup(mergedCtx, workspaceID, key, position, active)
 }
 
-func (a *Admin) UpsertGroupLocalization(ctx context.Context, workspaceID, key, locale, title, description string) error {
+func (a *Admin) UpsertGroupLocalization(
+	ctx context.Context,
+	workspaceID, key, locale, title, description string,
+) error {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.UpsertGroupLocalization(mergedCtx, workspaceID, key, locale, title, description)
@@ -60,13 +63,24 @@ func (a *Admin) ListTasks(ctx context.Context, workspaceID, groupKey string, lim
 	return result, nil
 }
 
-func (a *Admin) UpsertTaskLocalization(ctx context.Context, workspaceID string, taskID uint64, locale, title, description string) error {
+func (a *Admin) UpsertTaskLocalization(
+	ctx context.Context,
+	workspaceID string,
+	taskID uint64,
+	locale, title, description string,
+) error {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.UpsertTaskLocalization(mergedCtx, workspaceID, taskID, locale, title, description)
 }
 
-func (a *Admin) UpsertReward(ctx context.Context, workspaceID string, taskID uint64, reward RewardModel, position int32) error {
+func (a *Admin) UpsertReward(
+	ctx context.Context,
+	workspaceID string,
+	taskID uint64,
+	reward RewardModel,
+	position int32,
+) error {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	rewardType, err := validateReward(reward)
@@ -122,7 +136,12 @@ func (a *Admin) UpsertComplexCondition(ctx context.Context, params SaveComplexCo
 	return a.repository.UpsertComplexCondition(mergedCtx, repository.SaveComplexConditionParams(params))
 }
 
-func (a *Admin) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
+func (a *Admin) DeleteComplexCondition(
+	ctx context.Context,
+	workspaceID string,
+	parentTaskID uint64,
+	conditionTaskID uint64,
+) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.DeleteComplexCondition(mergedCtx, workspaceID, parentTaskID, conditionTaskID)

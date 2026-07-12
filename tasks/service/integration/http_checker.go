@@ -45,11 +45,21 @@ func (h HTTPChecker) CheckExternalTask(ctx context.Context, params ExternalTaskC
 	return h.check(ctx, params.Identity, params.Task, params.Provider, params.Variables, params.OccurredAt)
 }
 
-func (h HTTPChecker) CheckChannelSubscription(ctx context.Context, params ChannelSubscriptionCheckParams) (CheckResult, error) {
+func (h HTTPChecker) CheckChannelSubscription(
+	ctx context.Context,
+	params ChannelSubscriptionCheckParams,
+) (CheckResult, error) {
 	return h.check(ctx, params.Identity, params.Task, params.Provider, params.Variables, params.OccurredAt)
 }
 
-func (h HTTPChecker) check(ctx context.Context, identity Identity, task TaskContext, provider string, variables map[string]string, now time.Time) (CheckResult, error) {
+func (h HTTPChecker) check(
+	ctx context.Context,
+	identity Identity,
+	task TaskContext,
+	provider string,
+	variables map[string]string,
+	now time.Time,
+) (CheckResult, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -90,7 +100,11 @@ func (h HTTPChecker) check(ctx context.Context, identity Identity, task TaskCont
 	return CheckResult{Completed: completed, Reason: reason, Payload: payload}, nil
 }
 
-func buildHTTPCheckRequest(ctx context.Context, config HTTPCheckRequest, values map[string]string) (*http.Request, error) {
+func buildHTTPCheckRequest(
+	ctx context.Context,
+	config HTTPCheckRequest,
+	values map[string]string,
+) (*http.Request, error) {
 	method := strings.TrimSpace(config.Method)
 	if method == "" {
 		method = http.MethodGet
@@ -158,7 +172,13 @@ func matchHTTPCheckSuccess(statusCode int, body []byte, success HTTPCheckSuccess
 	return true, ""
 }
 
-func templateValues(identity Identity, task TaskContext, provider string, variables map[string]string, now time.Time) map[string]string {
+func templateValues(
+	identity Identity,
+	task TaskContext,
+	provider string,
+	variables map[string]string,
+	now time.Time,
+) map[string]string {
 	values := map[string]string{
 		"workspace":    identity.WorkspaceID,
 		"workspace_id": identity.WorkspaceID,

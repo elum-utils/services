@@ -95,19 +95,24 @@ func (r *Repository) Close() error {
 }
 
 func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
-	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.queryTimeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
-		txRepo := &Repository{
-			db:                       r.db,
-			q:                        r.q.WithTx(tx),
-			callbacks:                r.callbacks.WithTx(tx),
-			executor:                 tx,
-			queryTimeout:             r.queryTimeout,
-			cacheL1Delay:             r.cacheL1Delay,
-			cacheL2Delay:             r.cacheL2Delay,
-			onCacheInvalidationError: r.onCacheInvalidationError,
-		}
-		return struct{}{}, fn(txRepo)
-	})
+	_, err := sqlwrap.Transaction(
+		ctx,
+		r.db,
+		sqlwrap.Params{Timeout: r.queryTimeout},
+		func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
+			txRepo := &Repository{
+				db:                       r.db,
+				q:                        r.q.WithTx(tx),
+				callbacks:                r.callbacks.WithTx(tx),
+				executor:                 tx,
+				queryTimeout:             r.queryTimeout,
+				cacheL1Delay:             r.cacheL1Delay,
+				cacheL2Delay:             r.cacheL2Delay,
+				onCacheInvalidationError: r.onCacheInvalidationError,
+			}
+			return struct{}{}, fn(txRepo)
+		},
+	)
 	return err
 }
 

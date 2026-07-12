@@ -37,14 +37,25 @@ func (a *Admin) UpsertReward(ctx context.Context, params SaveRewardParams) error
 	})
 }
 
-func (a *Admin) GetReward(ctx context.Context, workspaceID string, promoID uint64, key string) (user.RewardModel, error) {
+func (a *Admin) GetReward(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	key string,
+) (user.RewardModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetReward(mergedCtx, workspaceID, promoID, key)
 	if err != nil {
 		return user.RewardModel{}, err
 	}
-	return user.RewardModel{Key: value.Key, Type: value.Type, Quantity: value.Quantity, Scale: value.Scale, Unit: value.Unit}, nil
+	return user.RewardModel{
+		Key:      value.Key,
+		Type:     value.Type,
+		Quantity: value.Quantity,
+		Scale:    value.Scale,
+		Unit:     value.Unit,
+	}, nil
 }
 
 func (a *Admin) ListRewards(ctx context.Context, workspaceID string, promoID uint64) ([]user.RewardModel, error) {

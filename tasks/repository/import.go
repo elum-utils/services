@@ -60,14 +60,26 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 				continue
 			}
 			if _, ok := seenSequences[*task.SequenceKey]; !ok && !existing.sequences[*task.SequenceKey] {
-				preview.Warnings = append(preview.Warnings, "sequence is referenced but not present: "+*task.SequenceKey)
+				preview.Warnings = append(
+					preview.Warnings,
+					"sequence is referenced but not present: "+*task.SequenceKey,
+				)
 			}
 			if task.SequencePosition != nil {
 				if positions[*task.SequenceKey] == nil {
 					positions[*task.SequenceKey] = make(map[uint32]string)
 				}
 				if prev := positions[*task.SequenceKey][*task.SequencePosition]; prev != "" {
-					preview.Warnings = append(preview.Warnings, fmt.Sprintf("duplicate sequence position %s:%d used by %s and %s", *task.SequenceKey, *task.SequencePosition, prev, task.Key))
+					preview.Warnings = append(
+						preview.Warnings,
+						fmt.Sprintf(
+							"duplicate sequence position %s:%d used by %s and %s",
+							*task.SequenceKey,
+							*task.SequencePosition,
+							prev,
+							task.Key,
+						),
+					)
 				}
 				positions[*task.SequenceKey][*task.SequencePosition] = task.Key
 			}
@@ -184,7 +196,9 @@ func (r *Repository) importSequencesBulk(
 		rows = append(rows, []any{workspaceID, sequence.Key, sequence.Position, sequence.IsActive})
 		result.Imported.Sequences++
 	}
-	return r.execImportBulk(ctx, "task_sequence",
+	return r.execImportBulk(
+		ctx,
+		"task_sequence",
 		[]string{"workspace_id", "key", "position", "is_active"},
 		rows,
 		"ON CONFLICT (workspace_id, key) DO UPDATE SET position = EXCLUDED.position, is_active = EXCLUDED.is_active, deleted_at = NULL, updated_at = now()",
@@ -211,7 +225,10 @@ func (r *Repository) importGroupsBulk(
 		groupRows = append(groupRows, []any{workspaceID, group.Key, group.Position, group.IsActive})
 		result.Imported.Groups++
 		for locale, text := range group.Localization {
-			localizationRows = append(localizationRows, []any{workspaceID, group.Key, locale, text.Title, text.Description})
+			localizationRows = append(
+				localizationRows,
+				[]any{workspaceID, group.Key, locale, text.Title, text.Description},
+			)
 			result.Imported.GroupLocalizations++
 		}
 	}
@@ -223,7 +240,9 @@ func (r *Repository) importGroupsBulk(
 	); err != nil {
 		return err
 	}
-	return r.execImportBulk(ctx, "task_group_localization",
+	return r.execImportBulk(
+		ctx,
+		"task_group_localization",
 		[]string{"workspace_id", "group_key", "locale", "title", "description"},
 		localizationRows,
 		"ON CONFLICT (workspace_id, group_key, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
@@ -340,7 +359,9 @@ func (r *Repository) importTaskLocalizationsBulk(
 			}
 		}
 	}
-	return r.execImportBulk(ctx, "task_localization",
+	return r.execImportBulk(
+		ctx,
+		"task_localization",
 		[]string{"workspace_id", "task_id", "locale", "title", "description"},
 		rows,
 		"ON CONFLICT (workspace_id, task_id, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
@@ -376,8 +397,19 @@ func (r *Repository) importRewardsBulk(
 			}
 		}
 	}
-	return r.execImportBulk(ctx, "task_reward",
-		[]string{"workspace_id", "task_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit", "position"},
+	return r.execImportBulk(
+		ctx,
+		"task_reward",
+		[]string{
+			"workspace_id",
+			"task_id",
+			"reward_key",
+			"reward_type",
+			"quantity",
+			"scale",
+			"duration_unit",
+			"position",
+		},
 		rows,
 		"ON CONFLICT (workspace_id, task_id, reward_key) DO UPDATE SET "+
 			"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
@@ -459,8 +491,20 @@ func (r *Repository) importPartnerConfigsBulk(
 			result.Imported.PartnerConfigs++
 		}
 	}
-	return r.execImportBulk(ctx, "task_partner_config",
-		[]string{"workspace_id", "provider", "group_key", "platform", "is_enabled", "secret", "webhook_secret", "target", "settings"},
+	return r.execImportBulk(
+		ctx,
+		"task_partner_config",
+		[]string{
+			"workspace_id",
+			"provider",
+			"group_key",
+			"platform",
+			"is_enabled",
+			"secret",
+			"webhook_secret",
+			"target",
+			"settings",
+		},
 		rows,
 		"ON CONFLICT (workspace_id, provider, group_key, platform) DO UPDATE SET "+
 			"is_enabled = EXCLUDED.is_enabled, secret = EXCLUDED.secret, webhook_secret = EXCLUDED.webhook_secret, "+
@@ -469,7 +513,14 @@ func (r *Repository) importPartnerConfigsBulk(
 	)
 }
 
-func (r *Repository) importPartnerRewardRulesBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importPartnerRewardRulesBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, group := range groups {
 		for _, rule := range group.PartnerRewardRules {

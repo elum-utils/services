@@ -48,7 +48,13 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (Account, error)
 	if err != nil {
 		return Account{}, noRows(err, ErrAccountNotFound)
 	}
-	return Account{ID: row.ID, DisplayName: row.DisplayName, Status: row.Status, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Account{
+		ID:          row.ID,
+		DisplayName: row.DisplayName,
+		Status:      row.Status,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}, nil
 }
 
 func (r *Repository) CreateWorkspace(ctx context.Context, workspaceID, slug, title, actorID string) (Workspace, error) {
@@ -82,20 +88,42 @@ func (r *Repository) GetWorkspace(ctx context.Context, workspaceID string) (Work
 	if err != nil {
 		return Workspace{}, noRows(err, ErrWorkspaceNotFound)
 	}
-	return Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: row.Status, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Workspace{
+		ID:        row.ID,
+		Slug:      row.Slug,
+		Title:     row.Title,
+		Status:    row.Status,
+		CreatedBy: row.CreatedBy,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}, nil
 }
 
 func (r *Repository) ListWorkspaces(ctx context.Context, accountID string, limit, offset int32) ([]Workspace, error) {
 	if err := required(accountID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.ListWorkspacesForAccount(ctx, controlsqlc.ListWorkspacesForAccountParams{AccountID: accountID, Limit: limit, Offset: offset})
+	rows, err := r.q.ListWorkspacesForAccount(
+		ctx,
+		controlsqlc.ListWorkspacesForAccountParams{AccountID: accountID, Limit: limit, Offset: offset},
+	)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]Workspace, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Workspace{ID: row.ID, Slug: row.Slug, Title: row.Title, Status: row.Status, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(
+			result,
+			Workspace{
+				ID:        row.ID,
+				Slug:      row.Slug,
+				Title:     row.Title,
+				Status:    row.Status,
+				CreatedBy: row.CreatedBy,
+				CreatedAt: row.CreatedAt,
+				UpdatedAt: row.UpdatedAt,
+			},
+		)
 	}
 	return result, nil
 }
@@ -132,7 +160,17 @@ func (r *Repository) GetRole(ctx context.Context, workspaceID, roleID string) (R
 	if err != nil {
 		return Role{}, noRows(err, ErrRoleNotFound)
 	}
-	return Role{ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Title: row.Title, Description: row.Description, Position: row.Position, IsOwner: row.IsOwner, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Role{
+		ID:          row.ID,
+		WorkspaceID: row.WorkspaceID,
+		Code:        row.Code,
+		Title:       row.Title,
+		Description: row.Description,
+		Position:    row.Position,
+		IsOwner:     row.IsOwner,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}, nil
 }
 
 func (r *Repository) ListRoles(ctx context.Context, workspaceID string) ([]Role, error) {
@@ -142,7 +180,21 @@ func (r *Repository) ListRoles(ctx context.Context, workspaceID string) ([]Role,
 	}
 	result := make([]Role, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Role{ID: row.ID, WorkspaceID: row.WorkspaceID, Code: row.Code, Title: row.Title, Description: row.Description, Position: row.Position, IsOwner: row.IsOwner, MemberCount: row.MemberCount, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(
+			result,
+			Role{
+				ID:          row.ID,
+				WorkspaceID: row.WorkspaceID,
+				Code:        row.Code,
+				Title:       row.Title,
+				Description: row.Description,
+				Position:    row.Position,
+				IsOwner:     row.IsOwner,
+				MemberCount: row.MemberCount,
+				CreatedAt:   row.CreatedAt,
+				UpdatedAt:   row.UpdatedAt,
+			},
+		)
 	}
 	return result, nil
 }
@@ -162,7 +214,10 @@ func (r *Repository) AssignRole(ctx context.Context, actorID, workspaceID, accou
 	if role.IsOwner {
 		return ErrRoleHierarchy
 	}
-	active, err := r.q.IsActiveWorkspaceMember(ctx, controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
+	active, err := r.q.IsActiveWorkspaceMember(
+		ctx,
+		controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID},
+	)
 	if err != nil {
 		return err
 	}
@@ -222,7 +277,8 @@ func (r *Repository) UpdateRole(ctx context.Context, actorID string, role Role) 
 	if err != nil {
 		return 0, err
 	}
-	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, current.Position); err != nil || current.IsOwner {
+	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, current.Position); err != nil ||
+		current.IsOwner {
 		if err != nil {
 			return 0, err
 		}
@@ -285,7 +341,11 @@ func (r *Repository) DeleteRole(ctx context.Context, actorID, workspaceID, roleI
 	return rows, r.touchAuthVersion(ctx, workspaceID)
 }
 
-func (r *Repository) SetPermission(ctx context.Context, actorID, workspaceID, roleID, methodKey string, enabled bool) error {
+func (r *Repository) SetPermission(
+	ctx context.Context,
+	actorID, workspaceID, roleID, methodKey string,
+	enabled bool,
+) error {
 	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRolePermissionSet); err != nil {
 		return err
 	}
@@ -328,7 +388,10 @@ func (r *Repository) SetPermission(ctx context.Context, actorID, workspaceID, ro
 }
 
 func (r *Repository) ListPermissions(ctx context.Context, workspaceID, roleID string) ([]string, error) {
-	rows, err := r.q.ListRolePermissions(ctx, controlsqlc.ListRolePermissionsParams{WorkspaceID: workspaceID, RoleID: roleID})
+	rows, err := r.q.ListRolePermissions(
+		ctx,
+		controlsqlc.ListRolePermissionsParams{WorkspaceID: workspaceID, RoleID: roleID},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +502,16 @@ func (r *Repository) ListMethodGroups(ctx context.Context) ([]MethodGroup, error
 	}
 	result := make([]MethodGroup, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, MethodGroup{Service: row.Service, Key: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(
+			result,
+			MethodGroup{
+				Service:   row.Service,
+				Key:       row.GroupKey,
+				Position:  row.Position,
+				CreatedAt: row.CreatedAt,
+				UpdatedAt: row.UpdatedAt,
+			},
+		)
 	}
 	return result, nil
 }
@@ -454,13 +526,39 @@ func (r *Repository) ListAccessCatalog(ctx context.Context, locale string) ([]Ac
 		CacheL2Delay:      r.cacheL2,
 		CacheVersionScope: []any{"control", "access-catalog"},
 	}, func(ctx context.Context) ([]AccessCatalogRow, error) {
-		rows, err := r.q.ListAccessCatalog(ctx, controlsqlc.ListAccessCatalogParams{Locale: locale, Locale_2: locale, Locale_3: locale, Locale_4: locale, Locale_5: locale, Locale_6: locale})
+		rows, err := r.q.ListAccessCatalog(
+			ctx,
+			controlsqlc.ListAccessCatalogParams{
+				Locale:   locale,
+				Locale_2: locale,
+				Locale_3: locale,
+				Locale_4: locale,
+				Locale_5: locale,
+				Locale_6: locale,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
 		result := make([]AccessCatalogRow, 0, len(rows))
 		for _, row := range rows {
-			result = append(result, AccessCatalogRow{Service: row.Service, ServicePosition: row.ServicePosition, ServiceTitle: row.ServiceTitle, ServiceDescription: row.ServiceDescription, GroupKey: row.GroupKey, GroupPosition: row.GroupPosition, GroupTitle: row.GroupTitle, GroupDescription: row.GroupDescription, Key: row.MethodKey, Position: row.Position, Title: row.AccessTitle, Desc: row.AccessDescription})
+			result = append(
+				result,
+				AccessCatalogRow{
+					Service:            row.Service,
+					ServicePosition:    row.ServicePosition,
+					ServiceTitle:       row.ServiceTitle,
+					ServiceDescription: row.ServiceDescription,
+					GroupKey:           row.GroupKey,
+					GroupPosition:      row.GroupPosition,
+					GroupTitle:         row.GroupTitle,
+					GroupDescription:   row.GroupDescription,
+					Key:                row.MethodKey,
+					Position:           row.Position,
+					Title:              row.AccessTitle,
+					Desc:               row.AccessDescription,
+				},
+			)
 		}
 		return result, nil
 	})
@@ -473,7 +571,17 @@ func (r *Repository) ListMethods(ctx context.Context) ([]Method, error) {
 	}
 	result := make([]Method, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(
+			result,
+			Method{
+				Key:       row.MethodKey,
+				Service:   row.Service,
+				GroupKey:  row.GroupKey,
+				Position:  row.Position,
+				CreatedAt: row.CreatedAt,
+				UpdatedAt: row.UpdatedAt,
+			},
+		)
 	}
 	return result, nil
 }
@@ -483,7 +591,14 @@ func (r *Repository) GetMethod(ctx context.Context, methodKey string) (Method, e
 	if err != nil {
 		return Method{}, noRows(err, ErrMethodNotFound)
 	}
-	return Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
+	return Method{
+		Key:       row.MethodKey,
+		Service:   row.Service,
+		GroupKey:  row.GroupKey,
+		Position:  row.Position,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}, nil
 }
 
 func (r *Repository) CheckAccess(ctx context.Context, accountID, workspaceID, methodKey string) (bool, error) {
@@ -496,7 +611,10 @@ func (r *Repository) CheckAccess(ctx context.Context, accountID, workspaceID, me
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 		CacheVersionScope: []any{"control", "access", workspaceID},
 	}, func(ctx context.Context) (bool, error) {
-		return r.q.CheckAccess(ctx, controlsqlc.CheckAccessParams{AccountID: accountID, WorkspaceID: workspaceID, MethodKey: methodKey})
+		return r.q.CheckAccess(
+			ctx,
+			controlsqlc.CheckAccessParams{AccountID: accountID, WorkspaceID: workspaceID, MethodKey: methodKey},
+		)
 	})
 }
 
@@ -512,13 +630,19 @@ func (r *Repository) ListAuthorizedMethods(ctx context.Context, accountID, works
 		CacheL2Delay:      r.cacheL2,
 		CacheVersionScope: []any{"control", "access", workspaceID},
 	}, func(ctx context.Context) ([]Method, error) {
-		rows, err := r.q.ListAuthorizedMethods(ctx, controlsqlc.ListAuthorizedMethodsParams{WorkspaceID: workspaceID, AccountID: accountID})
+		rows, err := r.q.ListAuthorizedMethods(
+			ctx,
+			controlsqlc.ListAuthorizedMethodsParams{WorkspaceID: workspaceID, AccountID: accountID},
+		)
 		if err != nil {
 			return nil, err
 		}
 		result := make([]Method, 0, len(rows))
 		for _, row := range rows {
-			result = append(result, Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position})
+			result = append(
+				result,
+				Method{Key: row.MethodKey, Service: row.Service, GroupKey: row.GroupKey, Position: row.Position},
+			)
 		}
 		return result, nil
 	})
@@ -547,7 +671,11 @@ func (r *Repository) requireMethodAccess(ctx context.Context, accountID, workspa
 	return nil
 }
 
-func (r *Repository) requireHigherThanPosition(ctx context.Context, actorID, workspaceID string, targetPosition int32) error {
+func (r *Repository) requireHigherThanPosition(
+	ctx context.Context,
+	actorID, workspaceID string,
+	targetPosition int32,
+) error {
 	position, err := r.accountPosition(ctx, actorID, workspaceID)
 	if err != nil || position >= targetPosition {
 		if err != nil {
@@ -558,7 +686,11 @@ func (r *Repository) requireHigherThanPosition(ctx context.Context, actorID, wor
 	return nil
 }
 
-func (r *Repository) requireActorHigher(ctx context.Context, actorID, workspaceID, targetAccountID string, changedRolePosition int32) error {
+func (r *Repository) requireActorHigher(
+	ctx context.Context,
+	actorID, workspaceID, targetAccountID string,
+	changedRolePosition int32,
+) error {
 	actorPosition, err := r.accountPosition(ctx, actorID, workspaceID)
 	if err != nil {
 		return err
@@ -574,7 +706,10 @@ func (r *Repository) requireActorHigher(ctx context.Context, actorID, workspaceI
 }
 
 func (r *Repository) accountPosition(ctx context.Context, accountID, workspaceID string) (int32, error) {
-	value, err := r.q.GetAccountPosition(ctx, controlsqlc.GetAccountPositionParams{WorkspaceID: workspaceID, AccountID: accountID})
+	value, err := r.q.GetAccountPosition(
+		ctx,
+		controlsqlc.GetAccountPositionParams{WorkspaceID: workspaceID, AccountID: accountID},
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -599,7 +734,10 @@ func (r *Repository) accountPosition(ctx context.Context, accountID, workspaceID
 }
 
 func (r *Repository) requireActiveMember(ctx context.Context, accountID, workspaceID string) error {
-	active, err := r.q.IsActiveWorkspaceMember(ctx, controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
+	active, err := r.q.IsActiveWorkspaceMember(
+		ctx,
+		controlsqlc.IsActiveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID},
+	)
 	if err != nil {
 		return err
 	}

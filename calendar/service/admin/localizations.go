@@ -23,7 +23,10 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationP
 	return a.repository.UpsertLocalization(mergedCtx, repository.Localization(params))
 }
 
-func (a *Admin) GetLocalization(ctx context.Context, workspaceID, calendarID, locale string) (LocalizationModel, error) {
+func (a *Admin) GetLocalization(
+	ctx context.Context,
+	workspaceID, calendarID, locale string,
+) (LocalizationModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetLocalization(mergedCtx, workspaceID, calendarID, locale)

@@ -93,7 +93,11 @@ func (r *Repository) claimCatalogByKey(ctx context.Context, workspaceID, taskKey
 	return out, nil
 }
 
-func (r *Repository) IntegrationCheckTask(ctx context.Context, workspaceID string, taskRefValue string) (Task, bool, error) {
+func (r *Repository) IntegrationCheckTask(
+	ctx context.Context,
+	workspaceID string,
+	taskRefValue string,
+) (Task, bool, error) {
 	id, keyValue := taskRef(taskRefValue)
 	if id != 0 {
 		key := integrationCheckTaskByIDCacheKey(workspaceID, id)
@@ -178,7 +182,11 @@ func (r *Repository) rewardsCatalog(ctx context.Context, workspaceID string, tas
 	return out, nil
 }
 
-func (r *Repository) nextSequenceTask(ctx context.Context, workspaceID, sequenceKey string, sequencePosition uint32) (nextSequenceTask, error) {
+func (r *Repository) nextSequenceTask(
+	ctx context.Context,
+	workspaceID, sequenceKey string,
+	sequencePosition uint32,
+) (nextSequenceTask, error) {
 	key := nextSequenceTaskCacheKey(workspaceID, sequenceKey, sequencePosition)
 	out, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:               key,

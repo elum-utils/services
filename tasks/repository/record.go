@@ -59,7 +59,12 @@ func (r *Repository) sequenceStatesForUser(ctx context.Context, identity Identit
 	})
 }
 
-func (r *Repository) currentProgressForUpdate(ctx context.Context, identity Identity, taskID uint64, now time.Time) (Progress, error) {
+func (r *Repository) currentProgressForUpdate(
+	ctx context.Context,
+	identity Identity,
+	taskID uint64,
+	now time.Time,
+) (Progress, error) {
 	return repositoryValue[Progress](ctx, r, func(ctx context.Context) (Progress, error) {
 		row, err := r.q.GetCurrentProgressForUpdate(ctx, tasksqlc.GetCurrentProgressForUpdateParams{
 			WorkspaceID: identity.WorkspaceID, TaskID: int64(taskID),
@@ -73,7 +78,13 @@ func (r *Repository) currentProgressForUpdate(ctx context.Context, identity Iden
 	})
 }
 
-func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now time.Time, amount uint64, result *RecordResult) error {
+func (r *Repository) recordInTx(
+	ctx context.Context,
+	params RecordParams,
+	now time.Time,
+	amount uint64,
+	result *RecordResult,
+) error {
 	return r.WithTx(ctx, func(txRepo *Repository) error {
 		catalog, err := txRepo.listRecordCatalog(ctx, params.Identity.WorkspaceID, params.ActionKey)
 		if err != nil {
@@ -90,13 +101,20 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 				return err
 			}
 		}
-		progressRows, err := repositoryValue[[]tasksqlc.TaskProgress](ctx, txRepo, func(ctx context.Context) ([]tasksqlc.TaskProgress, error) {
-			return txRepo.q.ListCurrentProgressForUserForUpdate(ctx, tasksqlc.ListCurrentProgressForUserForUpdateParams{
-				WorkspaceID: params.Identity.WorkspaceID,
-				AppID:       params.Identity.AppID, PlatformID: params.Identity.PlatformID, PlatformUserID: params.Identity.PlatformUserID,
-				PeriodStartAt: now, PeriodEndAt: now,
-			})
-		})
+		progressRows, err := repositoryValue[[]tasksqlc.TaskProgress](
+			ctx,
+			txRepo,
+			func(ctx context.Context) ([]tasksqlc.TaskProgress, error) {
+				return txRepo.q.ListCurrentProgressForUserForUpdate(
+					ctx,
+					tasksqlc.ListCurrentProgressForUserForUpdateParams{
+						WorkspaceID: params.Identity.WorkspaceID,
+						AppID:       params.Identity.AppID, PlatformID: params.Identity.PlatformID, PlatformUserID: params.Identity.PlatformUserID,
+						PeriodStartAt: now, PeriodEndAt: now,
+					},
+				)
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -225,7 +243,13 @@ func (r *Repository) recordInTx(ctx context.Context, params RecordParams, now ti
 		for _, item := range autoClaims {
 			progress := item.progress
 			if !item.exists {
-				progress, err = txRepo.ensureProgress(ctx, params.Identity, item.task, item.periodStartAt, item.periodEndAt)
+				progress, err = txRepo.ensureProgress(
+					ctx,
+					params.Identity,
+					item.task,
+					item.periodStartAt,
+					item.periodEndAt,
+				)
 				if err != nil {
 					return err
 				}
@@ -354,7 +378,10 @@ func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (Sta
 			err  error
 		)
 		if id != 0 {
-			row, err := txRepo.q.GetStartTaskByID(ctx, tasksqlc.GetStartTaskByIDParams{WorkspaceID: params.Identity.WorkspaceID, ID: int64(id)})
+			row, err := txRepo.q.GetStartTaskByID(
+				ctx,
+				tasksqlc.GetStartTaskByIDParams{WorkspaceID: params.Identity.WorkspaceID, ID: int64(id)},
+			)
 			if err == nil {
 				task = mapStartTaskByID(row)
 			}
@@ -407,7 +434,12 @@ func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (Sta
 	return result, err
 }
 
-func (r *Repository) GetClaimTask(ctx context.Context, identity Identity, taskRefValue string, now time.Time) (Task, bool, error) {
+func (r *Repository) GetClaimTask(
+	ctx context.Context,
+	identity Identity,
+	taskRefValue string,
+	now time.Time,
+) (Task, bool, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -445,7 +477,12 @@ func (r *Repository) GetClaimTask(ctx context.Context, identity Identity, taskRe
 	return result, found, err
 }
 
-func (r *Repository) ensureProgress(ctx context.Context, identity Identity, task Task, start, end time.Time) (Progress, error) {
+func (r *Repository) ensureProgress(
+	ctx context.Context,
+	identity Identity,
+	task Task,
+	start, end time.Time,
+) (Progress, error) {
 	id, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.EnsureProgress(ctx, tasksqlc.EnsureProgressParams{
 			WorkspaceID: identity.WorkspaceID, TaskID: int64(task.ID), AppID: identity.AppID,
@@ -467,14 +504,23 @@ func (r *Repository) saveProgress(ctx context.Context, progress Progress) error 
 		return r.q.UpdateProgress(ctx, tasksqlc.UpdateProgressParams{
 			Progress: int64(progress.Progress), Status: progress.Status,
 			ReadyAt: nullTime(progress.ReadyAt), ClaimedAt: nullTime(progress.ClaimedAt),
-			OperationID: nullString(progress.OperationID), RewardsSnapshot: rawMessageParam(rewardsSnapshot(progress.Rewards)),
+			OperationID: nullString(
+				progress.OperationID,
+			), RewardsSnapshot: rawMessageParam(rewardsSnapshot(progress.Rewards)),
 			ID: int64(progress.ID),
 		})
 	})
 	return err
 }
 
-func (r *Repository) claimProgress(ctx context.Context, identity Identity, task *Task, progress *Progress, operationID string, now time.Time) error {
+func (r *Repository) claimProgress(
+	ctx context.Context,
+	identity Identity,
+	task *Task,
+	progress *Progress,
+	operationID string,
+	now time.Time,
+) error {
 	rewards := task.Rewards
 	if rewards == nil {
 		var err error

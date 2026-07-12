@@ -59,13 +59,25 @@ func (i *Internal) RegisterManifest(ctx context.Context, values []MethodManifest
 func (i *Internal) CheckAccess(ctx context.Context, value AccessRequest) (bool, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
-	return i.repository.CheckAccess(mergedCtx, strings.TrimSpace(value.AccountID), strings.TrimSpace(value.WorkspaceID), strings.TrimSpace(value.MethodKey))
+	return i.repository.CheckAccess(
+		mergedCtx,
+		strings.TrimSpace(value.AccountID),
+		strings.TrimSpace(value.WorkspaceID),
+		strings.TrimSpace(value.MethodKey),
+	)
 }
 
-func (i *Internal) GetAuthorizedMethods(ctx context.Context, accountID, workspaceID string) ([]AuthorizedMethod, error) {
+func (i *Internal) GetAuthorizedMethods(
+	ctx context.Context,
+	accountID, workspaceID string,
+) ([]AuthorizedMethod, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
-	methods, err := i.repository.ListAuthorizedMethods(mergedCtx, strings.TrimSpace(accountID), strings.TrimSpace(workspaceID))
+	methods, err := i.repository.ListAuthorizedMethods(
+		mergedCtx,
+		strings.TrimSpace(accountID),
+		strings.TrimSpace(workspaceID),
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -27,7 +27,12 @@ func (r *Repository) GetRedemption(ctx context.Context, identity Identity, promo
 	return &value, nil
 }
 
-func (r *Repository) ListRedemptions(ctx context.Context, workspaceID string, promoID uint64, limit, offset int32) ([]Redemption, error) {
+func (r *Repository) ListRedemptions(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	limit, offset int32,
+) ([]Redemption, error) {
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListRedemptions(ctx, promosqlc.AdminListRedemptionsParams{
 		WorkspaceID: workspaceID,
@@ -60,7 +65,12 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID string, promoID u
 	}, nil
 }
 
-func (r *Repository) ListDailyStats(ctx context.Context, workspaceID string, promoID uint64, from, until time.Time) ([]DailyStats, error) {
+func (r *Repository) ListDailyStats(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	from, until time.Time,
+) ([]DailyStats, error) {
 	rows, err := r.q.AdminListDailyStats(ctx, promosqlc.AdminListDailyStatsParams{
 		WorkspaceID: workspaceID,
 		PromoID:     int64(promoID),

@@ -38,7 +38,10 @@ type tgrassCheckResponse struct {
 	IsFake bool   `json:"is_fake"`
 }
 
-func (p TgrassProvider) ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error) {
+func (p TgrassProvider) ListPartnerTasks(
+	ctx context.Context,
+	params PartnerListProviderParams,
+) ([]PartnerExternalTask, error) {
 	body := map[string]any{
 		"tg_user_id": partnerInt64String(params.Identity.PlatformUserID),
 		"is_premium": params.Identity.IsPremium,
@@ -101,7 +104,10 @@ func (p TgrassProvider) ListPartnerTasks(ctx context.Context, params PartnerList
 	return result, nil
 }
 
-func (p TgrassProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error) {
+func (p TgrassProvider) CheckPartnerTask(
+	ctx context.Context,
+	params PartnerCheckProviderParams,
+) (PartnerCheckResult, error) {
 	var private struct {
 		OfferID int64 `json:"offer_id"`
 	}

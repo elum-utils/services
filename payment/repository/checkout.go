@@ -21,14 +21,26 @@ import (
 )
 
 var (
-	ErrProductLocked          = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product limit is locked")
-	ErrPaymentMismatch        = serviceerrors.New(serviceerrors.CodeConflict, "payment data mismatch")
-	ErrOrderStateInvalid      = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment order state is invalid")
-	ErrPaymentAmountOverflow  = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment amount overflow")
-	ErrProductQuantityFixed   = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product quantity is fixed")
-	ErrOrderExpirationInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment order expiration is invalid")
-	ErrOrderFieldsInvalid     = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment order fields are invalid")
-	ErrAttemptFieldsInvalid   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment attempt fields are invalid")
+	ErrProductLocked = serviceerrors.New(
+		serviceerrors.CodeFailedPrecondition,
+		"payment product limit is locked",
+	)
+	ErrPaymentMismatch   = serviceerrors.New(serviceerrors.CodeConflict, "payment data mismatch")
+	ErrOrderStateInvalid = serviceerrors.New(
+		serviceerrors.CodeFailedPrecondition,
+		"payment order state is invalid",
+	)
+	ErrPaymentAmountOverflow = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment amount overflow")
+	ErrProductQuantityFixed  = serviceerrors.New(
+		serviceerrors.CodeFailedPrecondition,
+		"payment product quantity is fixed",
+	)
+	ErrOrderExpirationInvalid = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"payment order expiration is invalid",
+	)
+	ErrOrderFieldsInvalid   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment order fields are invalid")
+	ErrAttemptFieldsInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment attempt fields are invalid")
 )
 
 type OrderCreateParams struct {
@@ -340,7 +352,13 @@ func multiplyMinorAmount(amount uint64, quantity uint64) (uint64, error) {
 	return amount * quantity, nil
 }
 
-func (r *PaymentRepository) ensureProductLimitAvailable(ctx context.Context, product Product, platformID int64, platformUserID string, quantity uint64) error {
+func (r *PaymentRepository) ensureProductLimitAvailable(
+	ctx context.Context,
+	product Product,
+	platformID int64,
+	platformUserID string,
+	quantity uint64,
+) error {
 	globalLock, err := r.getProductLimitLock(ctx, productLimitQuery{
 		workspaceID:    product.WorkspaceID,
 		platformID:     platformID,
@@ -385,7 +403,11 @@ func (r *PaymentRepository) GetOrder(ctx context.Context, id uint64) (Order, err
 	return mapOrder(order), nil
 }
 
-func (r *PaymentRepository) GetAttemptByProviderPaymentID(ctx context.Context, providerCode string, providerPaymentID string) (Attempt, error) {
+func (r *PaymentRepository) GetAttemptByProviderPaymentID(
+	ctx context.Context,
+	providerCode string,
+	providerPaymentID string,
+) (Attempt, error) {
 	attempt, err := r.q.GetPaymentAttemptByProviderPaymentID(ctx, sqlc.GetPaymentAttemptByProviderPaymentIDParams{
 		ProviderCode:      providerCode,
 		ProviderPaymentID: sql.NullString{String: providerPaymentID, Valid: true},
@@ -504,7 +526,12 @@ func (r *PaymentRepository) CreateEvent(ctx context.Context, params EventCreateP
 	return uint64(id), nil
 }
 
-func (r *PaymentRepository) SetAttemptProviderChargeID(ctx context.Context, attemptID uint64, providerCode string, chargeID string) (int64, error) {
+func (r *PaymentRepository) SetAttemptProviderChargeID(
+	ctx context.Context,
+	attemptID uint64,
+	providerCode string,
+	chargeID string,
+) (int64, error) {
 	return r.q.SetPaymentAttemptProviderChargeID(ctx, sqlc.SetPaymentAttemptProviderChargeIDParams{
 		ProviderChargeID: sql.NullString{String: chargeID, Valid: chargeID != ""},
 		ID:               int64(attemptID),
@@ -516,10 +543,14 @@ func (r *PaymentRepository) SetAttemptProviderChargeID(ctx context.Context, atte
 	})
 }
 
-func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params CompleteAttemptParams) (CompleteAttemptResult, error) {
+func (r *PaymentRepository) CompleteAttempt(
+	ctx context.Context,
+	params CompleteAttemptParams,
+) (CompleteAttemptResult, error) {
 	params.ProviderCode = strings.TrimSpace(params.ProviderCode)
 	params.AssetCode = strings.TrimSpace(params.AssetCode)
-	if params.AttemptID == 0 || params.ProviderCode == "" || params.AssetCode == "" || params.AmountMinor > math.MaxInt64 {
+	if params.AttemptID == 0 || params.ProviderCode == "" || params.AssetCode == "" ||
+		params.AmountMinor > math.MaxInt64 {
 		return CompleteAttemptResult{}, ErrAttemptFieldsInvalid
 	}
 
@@ -557,9 +588,12 @@ func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params Complete
 		if attempt.ProviderCode != params.ProviderCode ||
 			attempt.AssetCode != params.AssetCode ||
 			uint64(attempt.AmountMinor) != params.AmountMinor ||
-			!sameProviderPaymentID(attempt.ProviderPaymentID, sqlwrap.NullFromPtr(params.ProviderPaymentID, func(v string) sql.NullString {
-				return sql.NullString{String: v, Valid: true}
-			})) {
+			!sameProviderPaymentID(
+				attempt.ProviderPaymentID,
+				sqlwrap.NullFromPtr(params.ProviderPaymentID, func(v string) sql.NullString {
+					return sql.NullString{String: v, Valid: true}
+				}),
+			) {
 			return ErrPaymentMismatch
 		}
 
@@ -757,12 +791,19 @@ func (r *PaymentRepository) getProductLimitConfigCached(
 	productID string,
 ) (sqlc.GetProductLimitConfigRow, error) {
 	key := paymentCacheKey("product_limit_config", workspaceID, productID)
-	return queryPaymentVersionedCache(ctx, r, workspaceID, paymentProductLimitConfigVersionScope(workspaceID), key, func(ctx context.Context) (sqlc.GetProductLimitConfigRow, error) {
-		return r.q.GetProductLimitConfig(ctx, sqlc.GetProductLimitConfigParams{
-			WorkspaceID: workspaceID,
-			ID:          productID,
-		})
-	})
+	return queryPaymentVersionedCache(
+		ctx,
+		r,
+		workspaceID,
+		paymentProductLimitConfigVersionScope(workspaceID),
+		key,
+		func(ctx context.Context) (sqlc.GetProductLimitConfigRow, error) {
+			return r.q.GetProductLimitConfig(ctx, sqlc.GetProductLimitConfigParams{
+				WorkspaceID: workspaceID,
+				ID:          productID,
+			})
+		},
+	)
 }
 
 func (r *PaymentRepository) incrementProductLimitCounter(ctx context.Context, query productLimitQuery) error {

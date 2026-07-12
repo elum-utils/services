@@ -197,7 +197,10 @@ func (r *Repository) UpsertLocalization(ctx context.Context, value Localization)
 	return nil
 }
 
-func (r *Repository) GetLocalization(ctx context.Context, workspaceID, calendarID, locale string) (Localization, error) {
+func (r *Repository) GetLocalization(
+	ctx context.Context,
+	workspaceID, calendarID, locale string,
+) (Localization, error) {
 	key := calendarCacheKey(calendarCacheAdminLocalization, workspaceID, calendarID, locale)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -292,7 +295,12 @@ func (r *Repository) CreateStep(ctx context.Context, workspaceID, calendarID str
 	return uint64(id), nil
 }
 
-func (r *Repository) UpdateStep(ctx context.Context, workspaceID, calendarID string, id uint64, position uint32) (int64, error) {
+func (r *Repository) UpdateStep(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	id uint64,
+	position uint32,
+) (int64, error) {
 	var rows int64
 	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
 		var err error
@@ -331,7 +339,13 @@ func (r *Repository) DeleteStep(ctx context.Context, workspaceID, calendarID str
 	return rows, nil
 }
 
-func (r *Repository) UpsertReward(ctx context.Context, workspaceID, calendarID string, stepID uint64, reward Reward, position uint32) (uint64, error) {
+func (r *Repository) UpsertReward(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	stepID uint64,
+	reward Reward,
+	position uint32,
+) (uint64, error) {
 	var id int64
 	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
 		var err error
@@ -356,7 +370,13 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID, calendarID s
 	return uint64(id), nil
 }
 
-func (r *Repository) UpdateReward(ctx context.Context, workspaceID, calendarID string, stepID, id uint64, reward Reward, position uint32) (int64, error) {
+func (r *Repository) UpdateReward(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	stepID, id uint64,
+	reward Reward,
+	position uint32,
+) (int64, error) {
 	var rows int64
 	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
 		var err error

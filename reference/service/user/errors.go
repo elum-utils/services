@@ -4,5 +4,8 @@ import serviceerrors "github.com/elum-utils/services/errors"
 
 var (
 	ErrKeysRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "reference user at least one key is required")
-	ErrTooManyKeys  = serviceerrors.New(serviceerrors.CodeInvalidFields, "reference user no more than 1000 keys are allowed")
+	ErrTooManyKeys  = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"reference user no more than 1000 keys are allowed",
+	)
 )

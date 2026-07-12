@@ -116,7 +116,9 @@ func mapTask(row tasksqlc.TaskDefinition) Task {
 		TaskKind: row.TaskKind, ActionKey: row.ActionKey, ActionKind: string(row.ActionKind), ClaimMode: string(row.ClaimMode), StartMode: string(row.StartMode),
 		TargetCount: uint64(row.TargetCount), ResetUnit: string(row.ResetUnit), ResetEvery: uint32(row.ResetEvery),
 		Position: row.Position, Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target), IntegrationKind: ptrString(row.IntegrationKind),
-		IntegrationProvider: ptrString(row.IntegrationProvider), IntegrationPayload: nullRawMessage(row.IntegrationPayload),
+		IntegrationProvider: ptrString(
+			row.IntegrationProvider,
+		), IntegrationPayload: nullRawMessage(row.IntegrationPayload),
 		ImageURL:  ptrString(row.ImageUrl),
 		IsVisible: row.IsVisible, IsActive: row.IsActive, StartAt: ptrTime(row.StartAt),
 		EndAt: ptrTime(row.EndAt), DeletedAt: ptrTime(row.DeletedAt),

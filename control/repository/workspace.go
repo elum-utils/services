@@ -10,7 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-func (r *Repository) UpdateWorkspace(ctx context.Context, actorID, workspaceID, slug, title, status string) (int64, error) {
+func (r *Repository) UpdateWorkspace(
+	ctx context.Context,
+	actorID, workspaceID, slug, title, status string,
+) (int64, error) {
 	if err := required(actorID, workspaceID, slug, title, status); err != nil {
 		return 0, err
 	}
@@ -45,7 +48,10 @@ func (r *Repository) ListMembers(ctx context.Context, workspaceID string, limit,
 	if err := required(workspaceID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.ListWorkspaceMembers(ctx, controlsqlc.ListWorkspaceMembersParams{WorkspaceID: workspaceID, Limit: limit, Offset: offset})
+	rows, err := r.q.ListWorkspaceMembers(
+		ctx,
+		controlsqlc.ListWorkspaceMembersParams{WorkspaceID: workspaceID, Limit: limit, Offset: offset},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +79,17 @@ func (r *Repository) RemoveMember(ctx context.Context, actorID, workspaceID, acc
 	var rows int64
 	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
 		var err error
-		rows, err = q.RemoveWorkspaceMember(ctx, controlsqlc.RemoveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
+		rows, err = q.RemoveWorkspaceMember(
+			ctx,
+			controlsqlc.RemoveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID},
+		)
 		if err != nil || rows == 0 {
 			return err
 		}
-		_, err = q.RemoveWorkspaceMemberRoles(ctx, controlsqlc.RemoveWorkspaceMemberRolesParams{WorkspaceID: workspaceID, AccountID: accountID})
+		_, err = q.RemoveWorkspaceMemberRoles(
+			ctx,
+			controlsqlc.RemoveWorkspaceMemberRolesParams{WorkspaceID: workspaceID, AccountID: accountID},
+		)
 		return err
 	})
 	if err != nil || rows == 0 {
@@ -198,7 +210,10 @@ func (r *Repository) AcceptInvite(ctx context.Context, accountID, rawToken strin
 }
 
 func (r *Repository) ListInvites(ctx context.Context, workspaceID string, limit, offset int32) ([]Invite, error) {
-	rows, err := r.q.ListInvites(ctx, controlsqlc.ListInvitesParams{WorkspaceID: workspaceID, Limit: limit, Offset: offset})
+	rows, err := r.q.ListInvites(
+		ctx,
+		controlsqlc.ListInvitesParams{WorkspaceID: workspaceID, Limit: limit, Offset: offset},
+	)
 	if err != nil {
 		return nil, err
 	}

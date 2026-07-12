@@ -96,28 +96,34 @@ func (r *Repository) ConfirmTwoFactor(ctx context.Context, accountID, code strin
 	if err != nil {
 		return nil, err
 	}
-	err = sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
-		row, err := q.GetTwoFactor(ctx, accountID)
-		if err != nil {
-			return noRows(err, ErrNotFound)
-		}
-		if row.ActivatedAt.Valid || !validTOTP(row.Secret, code, now) {
-			return ErrForbidden
-		}
-		if rows, err := q.UpdatePendingTwoFactorBackupHashes(ctx, controlsqlc.UpdatePendingTwoFactorBackupHashesParams{BackupHashes: encoded, AccountID: accountID}); err != nil || rows != 1 {
+	err = sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			row, err := q.GetTwoFactor(ctx, accountID)
 			if err != nil {
-				return err
+				return noRows(err, ErrNotFound)
 			}
-			return ErrForbidden
-		}
-		if rows, err := q.ActivateTwoFactor(ctx, accountID); err != nil || rows != 1 {
-			if err != nil {
-				return err
+			if row.ActivatedAt.Valid || !validTOTP(row.Secret, code, now) {
+				return ErrForbidden
 			}
-			return ErrForbidden
-		}
-		return nil
-	})
+			if rows, err := q.UpdatePendingTwoFactorBackupHashes(ctx, controlsqlc.UpdatePendingTwoFactorBackupHashesParams{BackupHashes: encoded, AccountID: accountID}); err != nil ||
+				rows != 1 {
+				if err != nil {
+					return err
+				}
+				return ErrForbidden
+			}
+			if rows, err := q.ActivateTwoFactor(ctx, accountID); err != nil || rows != 1 {
+				if err != nil {
+					return err
+				}
+				return ErrForbidden
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -125,51 +131,84 @@ func (r *Repository) ConfirmTwoFactor(ctx context.Context, accountID, code strin
 }
 
 func (r *Repository) VerifyTwoFactor(ctx context.Context, accountID, code string, now time.Time) error {
-	return sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
-		return verifyTwoFactorWithQueries(ctx, q, accountID, code, now)
-	})
+	return sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			return verifyTwoFactorWithQueries(ctx, q, accountID, code, now)
+		},
+	)
 }
 
-func (r *Repository) CompleteTwoFactorChallenge(ctx context.Context, rawChallenge, code, ip string, now time.Time) (Session, string, error) {
+func (r *Repository) CompleteTwoFactorChallenge(
+	ctx context.Context,
+	rawChallenge, code, ip string,
+	now time.Time,
+) (Session, string, error) {
 	var session Session
 	var rawSession string
 	var rejected error
-	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
-		challenge, err := q.GetTwoFactorChallengeWithFactorForUpdate(ctx, tokenHash(rawChallenge))
-		if err != nil {
-			return noRows(err, ErrNotFound)
-		}
-		if challenge.BindToIp && challenge.Ip != ip {
-			rejected = ErrForbidden
-			return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
-		}
-		if err := verifyTwoFactorData(ctx, q, challenge.AccountID, challenge.Secret, challenge.BackupHashes, challenge.ActivatedAt, code, now); err != nil {
-			if errors.Is(err, ErrForbidden) {
-				rejected = err
+	err := sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			challenge, err := q.GetTwoFactorChallengeWithFactorForUpdate(ctx, tokenHash(rawChallenge))
+			if err != nil {
+				return noRows(err, ErrNotFound)
+			}
+			if challenge.BindToIp && challenge.Ip != ip {
+				rejected = ErrForbidden
 				return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
 			}
-			return err
-		}
+			if err := verifyTwoFactorData(ctx, q, challenge.AccountID, challenge.Secret, challenge.BackupHashes, challenge.ActivatedAt, code, now); err != nil {
+				if errors.Is(err, ErrForbidden) {
+					rejected = err
+					return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
+				}
+				return err
+			}
 
-		account, err := q.GetAccount(ctx, challenge.AccountID)
-		if err != nil {
-			return noRows(err, ErrAccountNotFound)
-		}
-		if account.Status != "active" {
-			rejected = ErrForbidden
-			return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
-		}
-		if err := consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID); err != nil {
-			return err
-		}
-		rawSession, err = randomToken()
-		if err != nil {
-			return err
-		}
-		expiresAt := now.Add(30 * 24 * time.Hour)
-		session = Session{ID: uuid.NewString(), AccountID: challenge.AccountID, IP: challenge.Ip, UserAgent: challenge.UserAgent, BindToIP: challenge.BindToIp, ExpiresAt: expiresAt, CreatedAt: now}
-		return q.CreateSession(ctx, controlsqlc.CreateSessionParams{ID: session.ID, AccountID: session.AccountID, TokenHash: tokenHash(rawSession), Ip: session.IP, UserAgent: session.UserAgent, BindToIp: session.BindToIP, ExpiresAt: session.ExpiresAt})
-	})
+			account, err := q.GetAccount(ctx, challenge.AccountID)
+			if err != nil {
+				return noRows(err, ErrAccountNotFound)
+			}
+			if account.Status != "active" {
+				rejected = ErrForbidden
+				return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
+			}
+			if err := consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID); err != nil {
+				return err
+			}
+			rawSession, err = randomToken()
+			if err != nil {
+				return err
+			}
+			expiresAt := now.Add(30 * 24 * time.Hour)
+			session = Session{
+				ID:        uuid.NewString(),
+				AccountID: challenge.AccountID,
+				IP:        challenge.Ip,
+				UserAgent: challenge.UserAgent,
+				BindToIP:  challenge.BindToIp,
+				ExpiresAt: expiresAt,
+				CreatedAt: now,
+			}
+			return q.CreateSession(
+				ctx,
+				controlsqlc.CreateSessionParams{
+					ID:        session.ID,
+					AccountID: session.AccountID,
+					TokenHash: tokenHash(rawSession),
+					Ip:        session.IP,
+					UserAgent: session.UserAgent,
+					BindToIp:  session.BindToIP,
+					ExpiresAt: session.ExpiresAt,
+				},
+			)
+		},
+	)
 	if err != nil {
 		return Session{}, "", err
 	}
@@ -190,7 +229,12 @@ func consumeTwoFactorChallenge(ctx context.Context, q *controlsqlc.Queries, chal
 	return nil
 }
 
-func verifyTwoFactorWithQueries(ctx context.Context, q *controlsqlc.Queries, accountID, code string, now time.Time) error {
+func verifyTwoFactorWithQueries(
+	ctx context.Context,
+	q *controlsqlc.Queries,
+	accountID, code string,
+	now time.Time,
+) error {
 	row, err := q.GetTwoFactorForUpdate(ctx, accountID)
 	if err != nil {
 		return noRows(err, ErrNotFound)
@@ -198,7 +242,15 @@ func verifyTwoFactorWithQueries(ctx context.Context, q *controlsqlc.Queries, acc
 	return verifyTwoFactorData(ctx, q, accountID, row.Secret, row.BackupHashes, row.ActivatedAt, code, now)
 }
 
-func verifyTwoFactorData(ctx context.Context, q *controlsqlc.Queries, accountID, secret string, backupHashes json.RawMessage, activatedAt sql.NullTime, code string, now time.Time) error {
+func verifyTwoFactorData(
+	ctx context.Context,
+	q *controlsqlc.Queries,
+	accountID, secret string,
+	backupHashes json.RawMessage,
+	activatedAt sql.NullTime,
+	code string,
+	now time.Time,
+) error {
 	if !activatedAt.Valid {
 		return ErrForbidden
 	}
@@ -225,7 +277,10 @@ func verifyTwoFactorData(ctx context.Context, q *controlsqlc.Queries, accountID,
 	if err != nil {
 		return err
 	}
-	rows, err := q.UpdateTwoFactorBackupHashes(ctx, controlsqlc.UpdateTwoFactorBackupHashesParams{BackupHashes: encoded, AccountID: accountID})
+	rows, err := q.UpdateTwoFactorBackupHashes(
+		ctx,
+		controlsqlc.UpdateTwoFactorBackupHashesParams{BackupHashes: encoded, AccountID: accountID},
+	)
 	if err != nil {
 		return err
 	}
@@ -237,14 +292,19 @@ func verifyTwoFactorData(ctx context.Context, q *controlsqlc.Queries, accountID,
 
 func (r *Repository) DisableTwoFactor(ctx context.Context, accountID, code string, now time.Time) (int64, error) {
 	var rows int64
-	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
-		if err := verifyTwoFactorWithQueries(ctx, q, accountID, code, now); err != nil {
+	err := sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			if err := verifyTwoFactorWithQueries(ctx, q, accountID, code, now); err != nil {
+				return err
+			}
+			var err error
+			rows, err = q.DeleteTwoFactor(ctx, accountID)
 			return err
-		}
-		var err error
-		rows, err = q.DeleteTwoFactor(ctx, accountID)
-		return err
-	})
+		},
+	)
 	return rows, err
 }
 
@@ -258,7 +318,10 @@ func randomSecret() (string, error) {
 
 func validTOTP(secret, code string, now time.Time) bool {
 	for _, offset := range []int64{-1, 0, 1} {
-		if hmac.Equal([]byte(totp(secret, now.Add(time.Duration(offset)*twoFactorPeriod))), []byte(strings.TrimSpace(code))) {
+		if hmac.Equal(
+			[]byte(totp(secret, now.Add(time.Duration(offset)*twoFactorPeriod))),
+			[]byte(strings.TrimSpace(code)),
+		) {
 			return true
 		}
 	}
@@ -266,7 +329,8 @@ func validTOTP(secret, code string, now time.Time) bool {
 }
 
 func totp(secret string, now time.Time) string {
-	key, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(strings.TrimSpace(secret)))
+	key, err := base32.StdEncoding.WithPadding(base32.NoPadding).
+		DecodeString(strings.ToUpper(strings.TrimSpace(secret)))
 	if err != nil {
 		return ""
 	}
@@ -276,7 +340,13 @@ func totp(secret string, now time.Time) string {
 	_, _ = mac.Write(counter[:])
 	sum := mac.Sum(nil)
 	offset := int(sum[len(sum)-1] & 0x0f)
-	value := (uint32(sum[offset])&0x7f)<<24 | uint32(sum[offset+1])<<16 | uint32(sum[offset+2])<<8 | uint32(sum[offset+3])
+	value := (uint32(sum[offset])&0x7f)<<24 | uint32(
+		sum[offset+1],
+	)<<16 | uint32(
+		sum[offset+2],
+	)<<8 | uint32(
+		sum[offset+3],
+	)
 	return fmt.Sprintf("%06d", value%1_000_000)
 }
 

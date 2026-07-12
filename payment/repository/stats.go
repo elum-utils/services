@@ -109,7 +109,10 @@ func (r *PaymentRepository) GetPaymentStats(ctx context.Context, workspaceID str
 	}, nil
 }
 
-func (r *PaymentRepository) GetPaymentProductStats(ctx context.Context, workspaceID, productID string) (PaymentProductStats, error) {
+func (r *PaymentRepository) GetPaymentProductStats(
+	ctx context.Context,
+	workspaceID, productID string,
+) (PaymentProductStats, error) {
 	row, err := r.q.AdminGetPaymentProductStats(ctx, sqlc.AdminGetPaymentProductStatsParams{
 		WorkspaceID: workspaceID, ProductID: productID,
 		WorkspaceID_2: workspaceID, ProductID_2: productID,
@@ -132,7 +135,10 @@ func (r *PaymentRepository) GetPaymentProductStats(ctx context.Context, workspac
 	}, nil
 }
 
-func (r *PaymentRepository) listPaymentAssetStats(ctx context.Context, workspaceID, productID string) ([]PaymentAssetStats, error) {
+func (r *PaymentRepository) listPaymentAssetStats(
+	ctx context.Context,
+	workspaceID, productID string,
+) ([]PaymentAssetStats, error) {
 	rows, err := r.q.AdminListPaymentAssetStats(ctx, sqlc.AdminListPaymentAssetStatsParams{
 		WorkspaceID: workspaceID,
 		Column2:     productID,
@@ -152,7 +158,11 @@ func (r *PaymentRepository) listPaymentAssetStats(ctx context.Context, workspace
 	return result, nil
 }
 
-func (r *PaymentRepository) ListPaymentDailyStats(ctx context.Context, workspaceID, productID string, from, until time.Time) ([]PaymentDailyStats, error) {
+func (r *PaymentRepository) ListPaymentDailyStats(
+	ctx context.Context,
+	workspaceID, productID string,
+	from, until time.Time,
+) ([]PaymentDailyStats, error) {
 	rows, err := r.q.AdminListPaymentDailyStats(ctx, sqlc.AdminListPaymentDailyStatsParams{
 		WorkspaceID: workspaceID,
 		ProductID:   productID,
@@ -199,7 +209,11 @@ func (r *PaymentRepository) ListPaymentDailyOverview(
 	return result, nil
 }
 
-func (r *PaymentRepository) RefreshPaymentDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+func (r *PaymentRepository) RefreshPaymentDailyStats(
+	ctx context.Context,
+	workspaceID string,
+	from, until time.Time,
+) error {
 	if strings.TrimSpace(workspaceID) == "" {
 		return ErrWorkspaceRequired
 	}

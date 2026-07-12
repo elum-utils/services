@@ -17,7 +17,10 @@ type LuaProvider struct {
 	Provider string
 }
 
-func (p LuaProvider) ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error) {
+func (p LuaProvider) ListPartnerTasks(
+	ctx context.Context,
+	params PartnerListProviderParams,
+) ([]PartnerExternalTask, error) {
 	result, err := p.handle(
 		ctx,
 		"list",
@@ -55,7 +58,10 @@ func (p LuaProvider) ListPartnerTasks(ctx context.Context, params PartnerListPro
 	return tasks, nil
 }
 
-func (p LuaProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error) {
+func (p LuaProvider) CheckPartnerTask(
+	ctx context.Context,
+	params PartnerCheckProviderParams,
+) (PartnerCheckResult, error) {
 	result, err := p.handle(
 		ctx,
 		"check",
@@ -71,7 +77,11 @@ func (p LuaProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckPr
 		return PartnerCheckResult{}, err
 	}
 	if ok, _ := result["ok"].(bool); !ok {
-		return PartnerCheckResult{}, fmt.Errorf("lua partner %s check failed: %s", p.Provider, stringValue(result["error"]))
+		return PartnerCheckResult{}, fmt.Errorf(
+			"lua partner %s check failed: %s",
+			p.Provider,
+			stringValue(result["error"]),
+		)
 	}
 	return PartnerCheckResult{
 		Completed: boolValue(result["completed"]),
@@ -80,7 +90,10 @@ func (p LuaProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckPr
 	}, nil
 }
 
-func (p LuaProvider) StartPartnerTask(ctx context.Context, params PartnerStartProviderParams) (PartnerStartResult, error) {
+func (p LuaProvider) StartPartnerTask(
+	ctx context.Context,
+	params PartnerStartProviderParams,
+) (PartnerStartResult, error) {
 	result, err := p.handle(
 		ctx,
 		"start",

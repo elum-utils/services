@@ -77,19 +77,27 @@ func compileProgressBulkUpsert(identity Identity, items []recordProgressUpsert) 
 			nullTime(item.readyAt),
 		)
 	}
-	builder.WriteString(" ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET ")
+	builder.WriteString(
+		" ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET ",
+	)
 	builder.WriteString("period_end_at = EXCLUDED.period_end_at, ")
 	builder.WriteString("progress = LEAST(task_progress.progress + EXCLUDED.progress, ")
-	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id)), ")
+	builder.WriteString(
+		"(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id)), ",
+	)
 	builder.WriteString("status = CASE ")
 	builder.WriteString("WHEN task_progress.status IN ('ready', 'claimed') THEN task_progress.status ")
 	builder.WriteString("WHEN task_progress.progress + EXCLUDED.progress >= ")
-	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN 'ready' ")
+	builder.WriteString(
+		"(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN 'ready' ",
+	)
 	builder.WriteString("ELSE EXCLUDED.status END, ")
 	builder.WriteString("ready_at = CASE ")
 	builder.WriteString("WHEN task_progress.ready_at IS NOT NULL THEN task_progress.ready_at ")
 	builder.WriteString("WHEN task_progress.progress + EXCLUDED.progress >= ")
-	builder.WriteString("(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN COALESCE(EXCLUDED.ready_at, now()) ")
+	builder.WriteString(
+		"(SELECT target_count FROM task_definition WHERE workspace_id = EXCLUDED.workspace_id AND id = EXCLUDED.task_id) THEN COALESCE(EXCLUDED.ready_at, now()) ",
+	)
 	builder.WriteString("ELSE EXCLUDED.ready_at END")
 	return builder.String(), args
 }

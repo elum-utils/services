@@ -18,7 +18,10 @@ func (a *Admin) SavePartnerConfig(ctx context.Context, params PartnerConfigModel
 	})
 }
 
-func (a *Admin) GetPartnerConfig(ctx context.Context, workspaceID, provider, groupKey, platform string) (PartnerConfigModel, bool, error) {
+func (a *Admin) GetPartnerConfig(
+	ctx context.Context,
+	workspaceID, provider, groupKey, platform string,
+) (PartnerConfigModel, bool, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	config, found, err := a.repository.GetPartnerConfig(mergedCtx, workspaceID, provider, groupKey, platform)
@@ -59,13 +62,20 @@ func (a *Admin) SavePartnerRewardRule(ctx context.Context, params SavePartnerRew
 	})
 }
 
-func (a *Admin) DeletePartnerRewardRule(ctx context.Context, workspaceID, provider, groupKey, externalType, rewardKey string) (int64, error) {
+func (a *Admin) DeletePartnerRewardRule(
+	ctx context.Context,
+	workspaceID, provider, groupKey, externalType, rewardKey string,
+) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.DeletePartnerRewardRule(mergedCtx, workspaceID, provider, groupKey, externalType, rewardKey)
 }
 
-func (a *Admin) ListPartnerDailyStats(ctx context.Context, workspaceID, provider, groupKey string, from, until time.Time) ([]PartnerDailyStatsModel, error) {
+func (a *Admin) ListPartnerDailyStats(
+	ctx context.Context,
+	workspaceID, provider, groupKey string,
+	from, until time.Time,
+) ([]PartnerDailyStatsModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListPartnerDailyStats(mergedCtx, workspaceID, provider, groupKey, from, until)

@@ -49,7 +49,11 @@ func (a *Admin) ListProviderAssets(ctx context.Context, params ProviderAssetList
 	})
 }
 
-func (a *Admin) GetProviderAsset(ctx context.Context, providerCode string, assetCode string) (ProviderAssetModel, error) {
+func (a *Admin) GetProviderAsset(
+	ctx context.Context,
+	providerCode string,
+	assetCode string,
+) (ProviderAssetModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx

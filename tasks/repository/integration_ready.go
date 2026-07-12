@@ -7,7 +7,10 @@ import (
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
-func (r *Repository) MarkIntegrationTaskReady(ctx context.Context, params MarkIntegrationTaskReadyParams) (MarkIntegrationTaskReadyResult, error) {
+func (r *Repository) MarkIntegrationTaskReady(
+	ctx context.Context,
+	params MarkIntegrationTaskReadyParams,
+) (MarkIntegrationTaskReadyResult, error) {
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -104,7 +107,12 @@ func (r *Repository) integrationTaskSequenceReady(ctx context.Context, identity 
 	return string(row.Status) == "active" && row.CurrentTaskID.Valid && uint64(row.CurrentTaskID.Int64) == task.ID, nil
 }
 
-func (r *Repository) integrationTaskProgressForUpdate(ctx context.Context, identity Identity, taskID uint64, now time.Time) (Progress, bool, error) {
+func (r *Repository) integrationTaskProgressForUpdate(
+	ctx context.Context,
+	identity Identity,
+	taskID uint64,
+	now time.Time,
+) (Progress, bool, error) {
 	progress, err := r.currentProgressForUpdate(ctx, identity, taskID, now)
 	if err != nil {
 		if isNoRows(err) {

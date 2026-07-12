@@ -30,7 +30,11 @@ func NewWithRepositoryOptions(ctx context.Context, db *sqlwrap.Client, options r
 	if err != nil {
 		repo = repository.NewWithOptions(db, options)
 	}
-	return &Admin{repository: repo, callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable), rootCtx: contextutil.Normalize(ctx)}
+	return &Admin{
+		repository: repo,
+		callbacks:  callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable),
+		rootCtx:    contextutil.Normalize(ctx),
+	}
 }
 
 func (a *Admin) Close() error {

@@ -146,7 +146,12 @@ func (a *Admin) DeleteRole(ctx context.Context, actorID, workspaceID, roleID str
 		TargetID:    strings.TrimSpace(roleID),
 	})
 	defer cancel()
-	return a.repository.DeleteRole(mergedCtx, strings.TrimSpace(actorID), strings.TrimSpace(workspaceID), strings.TrimSpace(roleID))
+	return a.repository.DeleteRole(
+		mergedCtx,
+		strings.TrimSpace(actorID),
+		strings.TrimSpace(workspaceID),
+		strings.TrimSpace(roleID),
+	)
 }
 
 func (a *Admin) SetRoleMember(ctx context.Context, params SetRoleMemberParams) error {
@@ -216,7 +221,12 @@ func (a *Admin) RemoveMember(ctx context.Context, actorID, workspaceID, accountI
 		TargetID:    strings.TrimSpace(accountID),
 	})
 	defer cancel()
-	return a.repository.RemoveMember(mergedCtx, strings.TrimSpace(actorID), strings.TrimSpace(workspaceID), strings.TrimSpace(accountID))
+	return a.repository.RemoveMember(
+		mergedCtx,
+		strings.TrimSpace(actorID),
+		strings.TrimSpace(workspaceID),
+		strings.TrimSpace(accountID),
+	)
 }
 
 func (a *Admin) CreateInvite(ctx context.Context, params CreateInviteParams) (InviteModel, string, error) {
@@ -273,7 +283,12 @@ func (a *Admin) RevokeInvite(ctx context.Context, actorID, workspaceID, inviteID
 		TargetID:    strings.TrimSpace(inviteID),
 	})
 	defer cancel()
-	return a.repository.RevokeInvite(mergedCtx, strings.TrimSpace(actorID), strings.TrimSpace(workspaceID), strings.TrimSpace(inviteID))
+	return a.repository.RevokeInvite(
+		mergedCtx,
+		strings.TrimSpace(actorID),
+		strings.TrimSpace(workspaceID),
+		strings.TrimSpace(inviteID),
+	)
 }
 
 func (a *Admin) SetRolePermission(ctx context.Context, params SetRolePermissionParams) error {
@@ -310,7 +325,12 @@ func (a *Admin) ClearRolePermissions(ctx context.Context, actorID, workspaceID, 
 		TargetID:    strings.TrimSpace(roleID),
 	})
 	defer cancel()
-	return a.repository.ClearPermissions(mergedCtx, strings.TrimSpace(actorID), strings.TrimSpace(workspaceID), strings.TrimSpace(roleID))
+	return a.repository.ClearPermissions(
+		mergedCtx,
+		strings.TrimSpace(actorID),
+		strings.TrimSpace(workspaceID),
+		strings.TrimSpace(roleID),
+	)
 }
 
 func (a *Admin) ListMethods(ctx context.Context) ([]MethodModel, error) {
@@ -344,10 +364,14 @@ func (a *Admin) ListAccess(ctx context.Context, locale string) ([]AccessGroupMod
 	services := make([]AccessGroupModel, 0)
 	for _, row := range rows {
 		if len(services) == 0 || services[len(services)-1].Service != row.Service {
-			services = append(services, AccessGroupModel{Service: row.Service, Title: row.ServiceTitle, Description: row.ServiceDescription})
+			services = append(
+				services,
+				AccessGroupModel{Service: row.Service, Title: row.ServiceTitle, Description: row.ServiceDescription},
+			)
 		}
 		serviceIndex := len(services) - 1
-		if len(services[serviceIndex].Groups) == 0 || services[serviceIndex].Groups[len(services[serviceIndex].Groups)-1].Key != row.GroupKey {
+		if len(services[serviceIndex].Groups) == 0 ||
+			services[serviceIndex].Groups[len(services[serviceIndex].Groups)-1].Key != row.GroupKey {
 			services[serviceIndex].Groups = append(services[serviceIndex].Groups, AccessGroups{
 				Key:         row.GroupKey,
 				Title:       row.GroupTitle,
@@ -381,7 +405,13 @@ func normalizePage(page Page) (int32, int32) {
 }
 
 func mapAccount(value repository.Account) AccountModel {
-	return AccountModel{ID: value.ID, DisplayName: value.DisplayName, Status: value.Status, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+	return AccountModel{
+		ID:          value.ID,
+		DisplayName: value.DisplayName,
+		Status:      value.Status,
+		CreatedAt:   value.CreatedAt,
+		UpdatedAt:   value.UpdatedAt,
+	}
 }
 
 func mapSession(value repository.Session) SessionModel {
@@ -440,5 +470,11 @@ func mapInvite(value repository.Invite) InviteModel {
 }
 
 func mapMethod(value repository.Method) MethodModel {
-	return MethodModel{Key: value.Key, Service: value.Service, GroupKey: value.GroupKey, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+	return MethodModel{
+		Key:       value.Key,
+		Service:   value.Service,
+		GroupKey:  value.GroupKey,
+		CreatedAt: value.CreatedAt,
+		UpdatedAt: value.UpdatedAt,
+	}
 }

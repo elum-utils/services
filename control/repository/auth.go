@@ -100,7 +100,15 @@ func (r *Repository) BindIdentity(ctx context.Context, accountID string, value I
 	if _, err := r.GetAccount(ctx, accountID); err != nil {
 		return err
 	}
-	return r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: accountID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: rawMessageParam(value.Payload)})
+	return r.q.UpsertIdentity(
+		ctx,
+		controlsqlc.UpsertIdentityParams{
+			AccountID:       accountID,
+			Provider:        value.Provider,
+			ProviderSubject: value.Subject,
+			Payload:         rawMessageParam(value.Payload),
+		},
+	)
 }
 
 func (r *Repository) ListIdentities(ctx context.Context, accountID string) ([]Identity, error) {
@@ -110,7 +118,17 @@ func (r *Repository) ListIdentities(ctx context.Context, accountID string) ([]Id
 	}
 	result := make([]Identity, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Identity{AccountID: row.AccountID, Provider: row.Provider, ProviderSubject: row.ProviderSubject, Payload: nullRawMessage(row.Payload), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+		result = append(
+			result,
+			Identity{
+				AccountID:       row.AccountID,
+				Provider:        row.Provider,
+				ProviderSubject: row.ProviderSubject,
+				Payload:         nullRawMessage(row.Payload),
+				CreatedAt:       row.CreatedAt,
+				UpdatedAt:       row.UpdatedAt,
+			},
+		)
 	}
 	return result, nil
 }
@@ -178,10 +196,22 @@ func (r *Repository) CreateSession(ctx context.Context, accountID string, value 
 	if err := r.q.CreateSession(ctx, controlsqlc.CreateSessionParams{ID: id, AccountID: accountID, TokenHash: tokenHash(rawToken), Ip: value.IP, UserAgent: value.UserAgent, BindToIp: value.BindToIP, ExpiresAt: value.ExpiresAt}); err != nil {
 		return Session{}, "", err
 	}
-	return Session{ID: id, AccountID: accountID, IP: value.IP, UserAgent: value.UserAgent, BindToIP: value.BindToIP, ExpiresAt: value.ExpiresAt, CreatedAt: time.Now()}, rawToken, nil
+	return Session{
+		ID:        id,
+		AccountID: accountID,
+		IP:        value.IP,
+		UserAgent: value.UserAgent,
+		BindToIP:  value.BindToIP,
+		ExpiresAt: value.ExpiresAt,
+		CreatedAt: time.Now(),
+	}, rawToken, nil
 }
 
-func (r *Repository) CreateTwoFactorChallenge(ctx context.Context, accountID string, value SessionInput) (string, error) {
+func (r *Repository) CreateTwoFactorChallenge(
+	ctx context.Context,
+	accountID string,
+	value SessionInput,
+) (string, error) {
 	if err := required(accountID); err != nil {
 		return "", err
 	}
@@ -241,7 +271,10 @@ func (r *Repository) RevokeAllSessions(ctx context.Context, accountID, exceptSes
 	if err := required(accountID); err != nil {
 		return 0, err
 	}
-	return r.q.RevokeAllSessions(ctx, controlsqlc.RevokeAllSessionsParams{AccountID: accountID, Column2: exceptSessionID, ID: exceptSessionID})
+	return r.q.RevokeAllSessions(
+		ctx,
+		controlsqlc.RevokeAllSessionsParams{AccountID: accountID, Column2: exceptSessionID, ID: exceptSessionID},
+	)
 }
 
 func tokenHash(value string) string {
@@ -258,7 +291,16 @@ func randomToken() (string, error) {
 }
 
 func mapSession(value controlsqlc.ControlSession) Session {
-	result := Session{ID: value.ID, AccountID: value.AccountID, IP: value.Ip, UserAgent: value.UserAgent, BindToIP: value.BindToIp, ExpiresAt: value.ExpiresAt, LastUsedAt: value.LastUsedAt, CreatedAt: value.CreatedAt}
+	result := Session{
+		ID:         value.ID,
+		AccountID:  value.AccountID,
+		IP:         value.Ip,
+		UserAgent:  value.UserAgent,
+		BindToIP:   value.BindToIp,
+		ExpiresAt:  value.ExpiresAt,
+		LastUsedAt: value.LastUsedAt,
+		CreatedAt:  value.CreatedAt,
+	}
 	if value.RevokedAt.Valid {
 		result.RevokedAt = &value.RevokedAt.Time
 	}

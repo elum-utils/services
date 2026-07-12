@@ -319,8 +319,8 @@ type ActiveTask struct {
 	ID          uint64          `json:"id"`
 	Key         string          `json:"key"`
 	GroupKey    string          `json:"group_key"`
-	GroupTitle  string          `json:"-" msgpack:"group_title"`
-	GroupDesc   string          `json:"-" msgpack:"group_description"`
+	GroupTitle  string          `json:"-"                     msgpack:"group_title"`
+	GroupDesc   string          `json:"-"                     msgpack:"group_description"`
 	TaskKind    string          `json:"task_kind"`
 	ActionKey   string          `json:"action_key"`
 	ActionKind  string          `json:"action_kind"`
@@ -334,9 +334,9 @@ type ActiveTask struct {
 	Rewards     []Reward        `json:"rewards"`
 	Progress    *ActiveProgress `json:"progress,omitempty"`
 	Conditions  []ActiveTask    `json:"conditions,omitempty"`
-	StartAt     *time.Time      `json:"-" msgpack:"start_at"`
-	EndAt       *time.Time      `json:"-" msgpack:"end_at"`
-	Target      json.RawMessage `json:"-" msgpack:"target"`
+	StartAt     *time.Time      `json:"-"                     msgpack:"start_at"`
+	EndAt       *time.Time      `json:"-"                     msgpack:"end_at"`
+	Target      json.RawMessage `json:"-"                     msgpack:"target"`
 }
 
 type ComplexCondition struct {

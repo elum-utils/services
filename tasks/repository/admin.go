@@ -30,7 +30,10 @@ func (r *Repository) UpsertGroup(ctx context.Context, workspaceID, key string, p
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
-func (r *Repository) UpsertGroupLocalization(ctx context.Context, workspaceID, key, locale, title, description string) error {
+func (r *Repository) UpsertGroupLocalization(
+	ctx context.Context,
+	workspaceID, key, locale, title, description string,
+) error {
 	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" ||
 		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
 		return fmt.Errorf("tasks group localization scope, locale, and title are required")
@@ -81,13 +84,17 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 			var err error
 			id, err = txRepo.q.AdminCreateTask(ctx, tasksqlc.AdminCreateTaskParams{
 				WorkspaceID: params.WorkspaceID, Key: params.Key, GroupKey: params.GroupKey,
-				SequenceKey: nullString(params.SequenceKey), SequencePosition: nullInt32FromUint32(params.SequencePosition),
+				SequenceKey: nullString(
+					params.SequenceKey,
+				), SequencePosition: nullInt32FromUint32(params.SequencePosition),
 				TaskKind:  params.TaskKind,
 				ActionKey: params.ActionKey, ActionKind: params.ActionKind,
 				ClaimMode: params.ClaimMode, StartMode: params.StartMode, TargetCount: int64(params.TargetCount),
 				ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
 				Position: params.Position, Payload: rawMessageParam(params.Payload), Target: rawMessageParam(params.Target), IntegrationKind: nullString(params.IntegrationKind),
-				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
+				IntegrationProvider: nullString(
+					params.IntegrationProvider,
+				), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
 				ImageUrl:  nullString(params.ImageURL),
 				IsVisible: params.IsVisible, IsActive: params.IsActive,
 				StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
@@ -104,12 +111,16 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 	err := r.withWorkspaceMutation(ctx, params.WorkspaceID, func(txRepo *Repository) error {
 		_, err := txRepo.q.AdminUpdateTask(ctx, tasksqlc.AdminUpdateTaskParams{
 			GroupKey: params.GroupKey, SequenceKey: nullString(params.SequenceKey),
-			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: params.TaskKind, ActionKey: params.ActionKey,
+			SequencePosition: nullInt32FromUint32(
+				params.SequencePosition,
+			), TaskKind: params.TaskKind, ActionKey: params.ActionKey,
 			ActionKind: params.ActionKind,
 			ClaimMode:  params.ClaimMode, StartMode: params.StartMode, TargetCount: int64(params.TargetCount),
 			ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
 			Position: params.Position, Payload: rawMessageParam(params.Payload), Target: rawMessageParam(params.Target), IntegrationKind: nullString(params.IntegrationKind),
-			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
+			IntegrationProvider: nullString(
+				params.IntegrationProvider,
+			), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
 			ImageUrl:  nullString(params.ImageURL),
 			IsVisible: params.IsVisible, IsActive: params.IsActive,
 			StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
@@ -220,7 +231,12 @@ func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string
 	return out, nil
 }
 
-func (r *Repository) UpsertTaskLocalization(ctx context.Context, workspaceID string, taskID uint64, locale, title, description string) error {
+func (r *Repository) UpsertTaskLocalization(
+	ctx context.Context,
+	workspaceID string,
+	taskID uint64,
+	locale, title, description string,
+) error {
 	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 ||
 		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
 		return fmt.Errorf("tasks localization scope, locale, or title is invalid")
@@ -241,7 +257,13 @@ func (r *Repository) UpsertTaskLocalization(ctx context.Context, workspaceID str
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
-func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskID uint64, reward Reward, position int32) error {
+func (r *Repository) UpsertReward(
+	ctx context.Context,
+	workspaceID string,
+	taskID uint64,
+	reward Reward,
+	position int32,
+) error {
 	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 {
 		return fmt.Errorf("tasks reward scope is invalid")
 	}
@@ -352,7 +374,12 @@ func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComp
 	return r.invalidateTaskCache(ctx, params.WorkspaceID)
 }
 
-func (r *Repository) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
+func (r *Repository) DeleteComplexCondition(
+	ctx context.Context,
+	workspaceID string,
+	parentTaskID uint64,
+	conditionTaskID uint64,
+) (int64, error) {
 	if err := validateComplexCondition(SaveComplexConditionParams{
 		WorkspaceID:     workspaceID,
 		ParentTaskID:    parentTaskID,

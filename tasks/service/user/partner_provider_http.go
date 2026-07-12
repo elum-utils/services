@@ -21,7 +21,13 @@ type partnerHTTPClient struct {
 	baseURL string
 }
 
-func (c partnerHTTPClient) postJSON(ctx context.Context, path string, headers map[string]string, request any, response any) error {
+func (c partnerHTTPClient) postJSON(
+	ctx context.Context,
+	path string,
+	headers map[string]string,
+	request any,
+	response any,
+) error {
 	if c.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
@@ -31,7 +37,12 @@ func (c partnerHTTPClient) postJSON(ctx context.Context, path string, headers ma
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.baseURL, "/")+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		strings.TrimRight(c.baseURL, "/")+path,
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return err
 	}

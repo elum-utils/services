@@ -9,7 +9,11 @@ import (
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
 )
 
-func (r *Repository) ListOperations(ctx context.Context, workspaceID, calendarID string, limit, offset int32) ([]Operation, error) {
+func (r *Repository) ListOperations(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	limit, offset int32,
+) ([]Operation, error) {
 	limit, offset = normalizePage(limit, offset)
 	rows, err := r.q.AdminListOperations(ctx, calendarsqlc.AdminListOperationsParams{
 		WorkspaceID: workspaceID, CalendarID: calendarID, Limit: limit, Offset: offset,
@@ -46,7 +50,11 @@ func (r *Repository) GetStats(ctx context.Context, workspaceID, calendarID strin
 	}, nil
 }
 
-func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, calendarID string, from, until time.Time) ([]DailyStats, error) {
+func (r *Repository) ListDailyStats(
+	ctx context.Context,
+	workspaceID, calendarID string,
+	from, until time.Time,
+) ([]DailyStats, error) {
 	rows, err := r.q.AdminListDailyStats(ctx, calendarsqlc.AdminListDailyStatsParams{
 		WorkspaceID: workspaceID, CalendarID: calendarID, StatsDate: from, StatsDate_2: until,
 	})

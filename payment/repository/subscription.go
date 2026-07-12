@@ -80,7 +80,10 @@ func (r *PaymentRepository) UpsertSubscription(ctx context.Context, params Subsc
 	return uint64(id), nil
 }
 
-func (r *PaymentRepository) UpdateSubscriptionStatus(ctx context.Context, params SubscriptionStatusUpdateParams) (int64, error) {
+func (r *PaymentRepository) UpdateSubscriptionStatus(
+	ctx context.Context,
+	params SubscriptionStatusUpdateParams,
+) (int64, error) {
 	return r.q.UpdatePaymentSubscriptionStatus(ctx, paymentsqlc.UpdatePaymentSubscriptionStatusParams{
 		Status:                 paymentsqlc.PaymentSubscriptionStatus(params.Status),
 		CancelReason:           params.CancelReason,
@@ -103,14 +106,17 @@ func (r *PaymentRepository) IsSubscriptionActive(ctx context.Context, params Sub
 	endedAt := sql.NullTime{Time: now, Valid: true}
 	var count int64
 	if params.ProductID != "" && params.ProviderCode != "" {
-		count, err = r.q.CountActivePaymentSubscriptionsForProductProvider(ctx, paymentsqlc.CountActivePaymentSubscriptionsForProductProviderParams{
-			PlatformID:     params.PlatformID,
-			PlatformUserID: params.PlatformUserID,
-			WorkspaceID:    workspaceID,
-			ProductID:      params.ProductID,
-			ProviderCode:   params.ProviderCode,
-			EndedAt:        endedAt,
-		})
+		count, err = r.q.CountActivePaymentSubscriptionsForProductProvider(
+			ctx,
+			paymentsqlc.CountActivePaymentSubscriptionsForProductProviderParams{
+				PlatformID:     params.PlatformID,
+				PlatformUserID: params.PlatformUserID,
+				WorkspaceID:    workspaceID,
+				ProductID:      params.ProductID,
+				ProviderCode:   params.ProviderCode,
+				EndedAt:        endedAt,
+			},
+		)
 	} else if params.ProductID != "" {
 		count, err = r.q.CountActivePaymentSubscriptionsForProduct(ctx, paymentsqlc.CountActivePaymentSubscriptionsForProductParams{
 			PlatformID:     params.PlatformID,

@@ -23,7 +23,12 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationP
 	return a.repository.UpsertLocalization(mergedCtx, repository.Localization(params))
 }
 
-func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, promoID uint64, locale string) (LocalizationModel, error) {
+func (a *Admin) GetLocalization(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	locale string,
+) (LocalizationModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetLocalization(mergedCtx, workspaceID, promoID, locale)
@@ -33,7 +38,11 @@ func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, promoID
 	return LocalizationModel{Locale: value.Locale, Title: value.Title, Description: value.Description}, nil
 }
 
-func (a *Admin) ListLocalizations(ctx context.Context, workspaceID string, promoID uint64) ([]LocalizationModel, error) {
+func (a *Admin) ListLocalizations(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+) ([]LocalizationModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListLocalizations(mergedCtx, workspaceID, promoID)
@@ -42,12 +51,20 @@ func (a *Admin) ListLocalizations(ctx context.Context, workspaceID string, promo
 	}
 	result := make([]LocalizationModel, 0, len(values))
 	for _, value := range values {
-		result = append(result, LocalizationModel{Locale: value.Locale, Title: value.Title, Description: value.Description})
+		result = append(
+			result,
+			LocalizationModel{Locale: value.Locale, Title: value.Title, Description: value.Description},
+		)
 	}
 	return result, nil
 }
 
-func (a *Admin) DeleteLocalization(ctx context.Context, workspaceID string, promoID uint64, locale string) (int64, error) {
+func (a *Admin) DeleteLocalization(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	locale string,
+) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.DeleteLocalization(mergedCtx, workspaceID, promoID, locale)

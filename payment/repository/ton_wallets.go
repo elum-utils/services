@@ -14,7 +14,10 @@ func (r *PaymentRepository) DeleteTONWallet(ctx context.Context, workspaceID str
 	return r.q.DeleteTONWallet(ctx, workspaceID)
 }
 
-func (r *PaymentRepository) AdminGetTONWallet(ctx context.Context, workspaceID string) (paymentsqlc.PaymentTonWallet, error) {
+func (r *PaymentRepository) AdminGetTONWallet(
+	ctx context.Context,
+	workspaceID string,
+) (paymentsqlc.PaymentTonWallet, error) {
 	return r.q.AdminGetTONWallet(ctx, workspaceID)
 }
 
@@ -22,6 +25,9 @@ func (r *PaymentRepository) ListEnabledTONWallets(ctx context.Context) ([]paymen
 	return r.q.ListEnabledTONWallets(ctx)
 }
 
-func (r *PaymentRepository) GetEnabledTONWalletForWorkspace(ctx context.Context, workspaceID string) (paymentsqlc.PaymentTonWallet, error) {
+func (r *PaymentRepository) GetEnabledTONWalletForWorkspace(
+	ctx context.Context,
+	workspaceID string,
+) (paymentsqlc.PaymentTonWallet, error) {
 	return r.q.GetEnabledTONWalletForWorkspace(ctx, workspaceID)
 }

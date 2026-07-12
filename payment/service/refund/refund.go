@@ -52,7 +52,12 @@ func New(ctx context.Context, db *sqlwrap.Client, providers map[string]ProviderR
 	return NewWithOptions(ctx, db, providers, repository.Options{})
 }
 
-func NewWithOptions(ctx context.Context, db *sqlwrap.Client, providers map[string]ProviderRefundFunc, options repository.Options) *Refund {
+func NewWithOptions(
+	ctx context.Context,
+	db *sqlwrap.Client,
+	providers map[string]ProviderRefundFunc,
+	options repository.Options,
+) *Refund {
 	repo, err := repository.NewPreparedPaymentRepositoryWithOptions(context.Background(), db, options)
 	if err == nil {
 		return &Refund{

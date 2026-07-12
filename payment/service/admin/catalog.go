@@ -65,7 +65,12 @@ func (a *Admin) ListLocalizations(ctx context.Context, params LocalizationListPa
 	})
 }
 
-func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, locale string, key string) (LocalizationModel, error) {
+func (a *Admin) GetLocalization(
+	ctx context.Context,
+	workspaceID string,
+	locale string,
+	key string,
+) (LocalizationModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -190,7 +195,12 @@ func (a *Admin) UpsertProductItem(ctx context.Context, params ProductItemUpsertP
 	})
 }
 
-func (a *Admin) DeleteProductItem(ctx context.Context, workspaceID string, productID string, itemID string) (int64, error) {
+func (a *Admin) DeleteProductItem(
+	ctx context.Context,
+	workspaceID string,
+	productID string,
+	itemID string,
+) (int64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -259,7 +269,10 @@ func (a *Admin) DeletePrice(ctx context.Context, workspaceID string, id uint64) 
 	return a.repository.DeleteProductPrice(ctx, workspaceID, id)
 }
 
-func (a *Admin) ListProductLimitCounters(ctx context.Context, params ProductLimitCounterListParams) ([]ProductLimitCounterModel, error) {
+func (a *Admin) ListProductLimitCounters(
+	ctx context.Context,
+	params ProductLimitCounterListParams,
+) ([]ProductLimitCounterModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx

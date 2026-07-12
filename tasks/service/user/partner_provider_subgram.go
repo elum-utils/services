@@ -43,15 +43,21 @@ type subGramSubscriptionsResponse struct {
 	} `json:"additional"`
 }
 
-func (p SubGramProvider) ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error) {
+func (p SubGramProvider) ListPartnerTasks(
+	ctx context.Context,
+	params PartnerListProviderParams,
+) ([]PartnerExternalTask, error) {
 	maxSponsors := partnerLimit(params.Limit, 5)
-	if configured := partnerConfigSetting(params.Config.Settings, "max_sponsors", ""); configured != "" && params.Limit <= 0 {
+	if configured := partnerConfigSetting(params.Config.Settings, "max_sponsors", ""); configured != "" &&
+		params.Limit <= 0 {
 		if parsed, err := strconv.Atoi(configured); err == nil && parsed > 0 {
 			maxSponsors = parsed
 		}
 	}
 	body := map[string]any{
-		"chat_id":       partnerInt64String(firstNonEmpty(partnerString(params.Variables, "chat_id"), params.Identity.PlatformUserID)),
+		"chat_id": partnerInt64String(
+			firstNonEmpty(partnerString(params.Variables, "chat_id"), params.Identity.PlatformUserID),
+		),
 		"user_id":       partnerInt64String(params.Identity.PlatformUserID),
 		"language_code": params.Locale,
 		"is_premium":    params.Identity.IsPremium,
@@ -96,7 +102,10 @@ func (p SubGramProvider) ListPartnerTasks(ctx context.Context, params PartnerLis
 	return result, nil
 }
 
-func (p SubGramProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error) {
+func (p SubGramProvider) CheckPartnerTask(
+	ctx context.Context,
+	params PartnerCheckProviderParams,
+) (PartnerCheckResult, error) {
 	var private struct {
 		AdsID string `json:"ads_id"`
 		Link  string `json:"link"`

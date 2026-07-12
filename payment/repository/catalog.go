@@ -17,9 +17,15 @@ import (
 
 var (
 	ErrInvalidPrice        = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment price is invalid")
-	ErrInvalidItemQuantity = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment item quantity must be positive")
-	ErrInvalidReward       = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment reward type or duration unit is invalid")
-	ErrInvalidProduct      = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment product is invalid")
+	ErrInvalidItemQuantity = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"payment item quantity must be positive",
+	)
+	ErrInvalidReward = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"payment reward type or duration unit is invalid",
+	)
+	ErrInvalidProduct = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment product is invalid")
 )
 
 type ProductGroupUpsertParams struct {
@@ -293,7 +299,12 @@ func (r *PaymentRepository) UpsertLocalization(ctx context.Context, params Local
 	})
 }
 
-func (r *PaymentRepository) DeleteLocalization(ctx context.Context, workspaceID string, locale string, localizationKey string) (int64, error) {
+func (r *PaymentRepository) DeleteLocalization(
+	ctx context.Context,
+	workspaceID string,
+	locale string,
+	localizationKey string,
+) (int64, error) {
 	workspaceID, err := requireWorkspaceID(workspaceID)
 	if err != nil {
 		return 0, err
@@ -370,7 +381,12 @@ func pointerString(value *string) string {
 	return *value
 }
 
-func (r *PaymentRepository) DeleteProductItem(ctx context.Context, workspaceID string, productID string, itemID string) (int64, error) {
+func (r *PaymentRepository) DeleteProductItem(
+	ctx context.Context,
+	workspaceID string,
+	productID string,
+	itemID string,
+) (int64, error) {
 	workspaceID, err := requireWorkspaceID(workspaceID)
 	if err != nil {
 		return 0, err

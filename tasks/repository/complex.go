@@ -14,7 +14,12 @@ type complexRefreshResult struct {
 	progress *Progress
 }
 
-func (r *Repository) refreshComplexParentsForChangedTasks(ctx context.Context, identity Identity, changedTaskIDs []uint64, now time.Time) error {
+func (r *Repository) refreshComplexParentsForChangedTasks(
+	ctx context.Context,
+	identity Identity,
+	changedTaskIDs []uint64,
+	now time.Time,
+) error {
 	if len(changedTaskIDs) == 0 {
 		return nil
 	}
@@ -22,10 +27,13 @@ func (r *Repository) refreshComplexParentsForChangedTasks(ctx context.Context, i
 	seen := make(map[uint64]struct{}, len(queue))
 	for depth := 0; depth < maxComplexRefreshDepth && len(queue) > 0; depth++ {
 		parentIDs, err := repositoryValue(ctx, r, func(ctx context.Context) ([]uint64, error) {
-			ids, err := r.q.ListComplexParentIDsForConditionTasks(ctx, tasksqlc.ListComplexParentIDsForConditionTasksParams{
-				WorkspaceID: identity.WorkspaceID,
-				Column2:     int64sFromUint64s(queue),
-			})
+			ids, err := r.q.ListComplexParentIDsForConditionTasks(
+				ctx,
+				tasksqlc.ListComplexParentIDsForConditionTasksParams{
+					WorkspaceID: identity.WorkspaceID,
+					Column2:     int64sFromUint64s(queue),
+				},
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -53,18 +61,27 @@ func (r *Repository) refreshComplexParentsForChangedTasks(ctx context.Context, i
 	return nil
 }
 
-func (r *Repository) refreshComplexParent(ctx context.Context, identity Identity, parentTaskID uint64, now time.Time) (complexRefreshResult, error) {
-	conditions, err := repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.ListComplexConditionProgressForParentRow, error) {
-		return r.q.ListComplexConditionProgressForParent(ctx, tasksqlc.ListComplexConditionProgressForParentParams{
-			WorkspaceID:    identity.WorkspaceID,
-			ParentTaskID:   int64(parentTaskID),
-			AppID:          identity.AppID,
-			PlatformID:     identity.PlatformID,
-			PlatformUserID: identity.PlatformUserID,
-			PeriodStartAt:  now,
-			PeriodEndAt:    now,
-		})
-	})
+func (r *Repository) refreshComplexParent(
+	ctx context.Context,
+	identity Identity,
+	parentTaskID uint64,
+	now time.Time,
+) (complexRefreshResult, error) {
+	conditions, err := repositoryValue(
+		ctx,
+		r,
+		func(ctx context.Context) ([]tasksqlc.ListComplexConditionProgressForParentRow, error) {
+			return r.q.ListComplexConditionProgressForParent(ctx, tasksqlc.ListComplexConditionProgressForParentParams{
+				WorkspaceID:    identity.WorkspaceID,
+				ParentTaskID:   int64(parentTaskID),
+				AppID:          identity.AppID,
+				PlatformID:     identity.PlatformID,
+				PlatformUserID: identity.PlatformUserID,
+				PeriodStartAt:  now,
+				PeriodEndAt:    now,
+			})
+		},
+	)
 	if err != nil || len(conditions) == 0 {
 		return complexRefreshResult{}, err
 	}
@@ -137,7 +154,12 @@ func complexParentFromConditionRow(workspaceID string, row tasksqlc.ListComplexC
 	}
 }
 
-func (r *Repository) saveOrCreateComplexProgress(ctx context.Context, identity Identity, parent Task, progress Progress) error {
+func (r *Repository) saveOrCreateComplexProgress(
+	ctx context.Context,
+	identity Identity,
+	parent Task,
+	progress Progress,
+) error {
 	if progress.ID != 0 {
 		return r.saveProgress(ctx, progress)
 	}
@@ -189,7 +211,12 @@ func uniqueUint64(values []uint64) []uint64 {
 	return out
 }
 
-func (r *Repository) refreshComplexTaskBeforeClaim(ctx context.Context, identity Identity, task Task, now time.Time) (*Progress, error) {
+func (r *Repository) refreshComplexTaskBeforeClaim(
+	ctx context.Context,
+	identity Identity,
+	task Task,
+	now time.Time,
+) (*Progress, error) {
 	if task.TaskKind != TaskKindComplex {
 		return nil, nil
 	}

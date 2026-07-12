@@ -42,7 +42,10 @@ type flyerCheckResponse struct {
 	Error     string `json:"error"`
 }
 
-func (p FlyerProvider) ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error) {
+func (p FlyerProvider) ListPartnerTasks(
+	ctx context.Context,
+	params PartnerListProviderParams,
+) ([]PartnerExternalTask, error) {
 	body := map[string]any{
 		"key":           partnerSecret(params.Config.Secret),
 		"user_id":       partnerInt64String(params.Identity.PlatformUserID),
@@ -90,7 +93,10 @@ func (p FlyerProvider) ListPartnerTasks(ctx context.Context, params PartnerListP
 	return result, nil
 }
 
-func (p FlyerProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error) {
+func (p FlyerProvider) CheckPartnerTask(
+	ctx context.Context,
+	params PartnerCheckProviderParams,
+) (PartnerCheckResult, error) {
 	var private struct {
 		Signature string `json:"signature"`
 	}

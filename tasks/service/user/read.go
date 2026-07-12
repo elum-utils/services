@@ -15,7 +15,13 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]TaskG
 		return nil, err
 	}
 
-	tasks, err := u.repository.ListActive(mergedCtx, repositoryIdentity(params.Identity), params.Locale, params.GroupKey, params.Now)
+	tasks, err := u.repository.ListActive(
+		mergedCtx,
+		repositoryIdentity(params.Identity),
+		params.Locale,
+		params.GroupKey,
+		params.Now,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +64,13 @@ func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, erro
 	}
 
 	if issueID, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
-		result, err := u.repository.ClaimPartnerIssue(mergedCtx, repositoryIdentity(params.Identity), issueID, params.OperationID, params.Now)
+		result, err := u.repository.ClaimPartnerIssue(
+			mergedCtx,
+			repositoryIdentity(params.Identity),
+			issueID,
+			params.OperationID,
+			params.Now,
+		)
 		if err != nil {
 			return ClaimResult{}, err
 		}

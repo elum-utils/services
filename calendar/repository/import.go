@@ -279,8 +279,20 @@ func (r *Repository) importRewardsBulk(
 			}
 		}
 	}
-	return r.execImportBulk(ctx, "calendar_reward",
-		[]string{"workspace_id", "calendar_id", "step_id", "item_key", "reward_type", "item_count", "scale", "duration_unit", "position"},
+	return r.execImportBulk(
+		ctx,
+		"calendar_reward",
+		[]string{
+			"workspace_id",
+			"calendar_id",
+			"step_id",
+			"item_key",
+			"reward_type",
+			"item_count",
+			"scale",
+			"duration_unit",
+			"position",
+		},
 		rows,
 		"(workspace_id, calendar_id, step_id, item_key)",
 		"reward_type = EXCLUDED.reward_type, item_count = EXCLUDED.item_count, scale = EXCLUDED.scale, "+
@@ -289,7 +301,11 @@ func (r *Repository) importRewardsBulk(
 	)
 }
 
-func (r *Repository) importStepIDs(ctx context.Context, workspaceID string, calendarIDs map[string]string) (map[string]uint64, error) {
+func (r *Repository) importStepIDs(
+	ctx context.Context,
+	workspaceID string,
+	calendarIDs map[string]string,
+) (map[string]uint64, error) {
 	rows, err := r.q.ListImportStepIDs(ctx, workspaceID)
 	if err != nil {
 		return nil, err

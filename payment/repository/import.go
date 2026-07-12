@@ -14,7 +14,11 @@ import (
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
-func (r *PaymentRepository) PreviewImport(ctx context.Context, workspaceID string, pkg ExportPackage) (ImportPreview, error) {
+func (r *PaymentRepository) PreviewImport(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+) (ImportPreview, error) {
 	workspaceID, err := requireWorkspaceID(workspaceID)
 	if err != nil {
 		return ImportPreview{}, err
@@ -119,7 +123,14 @@ func (r *PaymentRepository) withWorkspaceMutation(
 	})
 }
 
-func (r *PaymentRepository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importBulk(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	if err := r.importGroupsBulk(ctx, workspaceID, pkg.Groups, strategy, preview, result); err != nil {
 		return err
 	}
@@ -139,14 +150,31 @@ func (r *PaymentRepository) importBulk(ctx context.Context, workspaceID string, 
 	return r.importTONWalletsBulk(ctx, workspaceID, pkg.TONWallets, strategy, preview, result)
 }
 
-func (r *PaymentRepository) importGroupsBulk(ctx context.Context, workspaceID string, groups []ExportProductGroup, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importGroupsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportProductGroup,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0, len(groups))
 	for _, group := range groups {
 		if previewHasConflict(preview, "group", group.Code) && strategy == ImportConflictSkip {
 			result.Skipped.Groups++
 			continue
 		}
-		rows = append(rows, []any{workspaceID, group.Code, nullableString(group.TitleKey), nullableString(group.DescriptionKey), group.Position, group.IsActive})
+		rows = append(
+			rows,
+			[]any{
+				workspaceID,
+				group.Code,
+				nullableString(group.TitleKey),
+				nullableString(group.DescriptionKey),
+				group.Position,
+				group.IsActive,
+			},
+		)
 		result.Imported.Groups++
 	}
 	return r.execImportBulk(ctx, "payment_product_group",
@@ -159,7 +187,14 @@ func (r *PaymentRepository) importGroupsBulk(ctx context.Context, workspaceID st
 	)
 }
 
-func (r *PaymentRepository) importLocalizationsBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importLocalizationsBulk(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rowsByKey := make(map[string][]any)
 	addText := func(entityType, entityKey string, titleKey string, descriptionKey *string, localization map[string]ExportText) {
 		if previewHasConflict(preview, entityType, entityKey) && strategy == ImportConflictSkip {
@@ -201,7 +236,14 @@ func (r *PaymentRepository) importLocalizationsBulk(ctx context.Context, workspa
 	)
 }
 
-func (r *PaymentRepository) importProductsBulk(ctx context.Context, workspaceID string, products []ExportProduct, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importProductsBulk(
+	ctx context.Context,
+	workspaceID string,
+	products []ExportProduct,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0, len(products))
 	for _, product := range products {
 		if previewHasConflict(preview, "product", product.ID) && strategy == ImportConflictSkip {
@@ -222,7 +264,9 @@ func (r *PaymentRepository) importProductsBulk(ctx context.Context, workspaceID 
 		})
 		result.Imported.Products++
 	}
-	return r.execImportBulk(ctx, "payment_product",
+	return r.execImportBulk(
+		ctx,
+		"payment_product",
 		[]string{
 			"workspace_id", "id", "group_code", "title_key", "description_key", "target", "image_url",
 			"link_url", "size_label", "period_seconds", "trial_duration_seconds", "quantity_mode",
@@ -243,7 +287,14 @@ func (r *PaymentRepository) importProductsBulk(ctx context.Context, workspaceID 
 	)
 }
 
-func (r *PaymentRepository) importProductItemsBulk(ctx context.Context, workspaceID string, products []ExportProduct, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importProductItemsBulk(
+	ctx context.Context,
+	workspaceID string,
+	products []ExportProduct,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, product := range products {
 		if previewHasConflict(preview, "product", product.ID) && strategy == ImportConflictSkip {
@@ -267,7 +318,14 @@ func (r *PaymentRepository) importProductItemsBulk(ctx context.Context, workspac
 	)
 }
 
-func (r *PaymentRepository) importPricesBulk(ctx context.Context, workspaceID string, products []ExportProduct, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importPricesBulk(
+	ctx context.Context,
+	workspaceID string,
+	products []ExportProduct,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, product := range products {
 		if previewHasConflict(preview, "product", product.ID) && strategy == ImportConflictSkip {
@@ -300,7 +358,14 @@ func (r *PaymentRepository) importPricesBulk(ctx context.Context, workspaceID st
 	)
 }
 
-func (r *PaymentRepository) importTONWalletsBulk(ctx context.Context, workspaceID string, wallets []ExportTONWallet, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *PaymentRepository) importTONWalletsBulk(
+	ctx context.Context,
+	workspaceID string,
+	wallets []ExportTONWallet,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0, len(wallets))
 	for _, wallet := range wallets {
 		if previewHasConflict(preview, "ton_wallet", "default") && strategy == ImportConflictSkip {
@@ -414,7 +479,8 @@ func validateExportPackage(pkg ExportPackage) error {
 		if strings.TrimSpace(wallet.WalletAddress) == "" {
 			return fmt.Errorf("payment import ton_wallets[%d].wallet_address is required", index)
 		}
-		if network := defaultString(strings.TrimSpace(wallet.Network), "mainnet"); network != "mainnet" && network != "testnet" {
+		if network := defaultString(strings.TrimSpace(wallet.Network), "mainnet"); network != "mainnet" &&
+			network != "testnet" {
 			return fmt.Errorf("payment import ton_wallets[%d].network is unsupported", index)
 		}
 	}
@@ -506,7 +572,8 @@ func validateExportProduct(product ExportProduct, path string, productPaths map[
 			return fmt.Errorf("%s.item_id duplicates items[%d].item_id", itemPath, previous)
 		}
 		itemIndexes[item.ItemID] = itemIndex
-		if item.Quantity <= 0 || item.Scale > math.MaxInt16 || !validReward(defaultString(item.RewardType, "quantity"), item.DurationUnit) {
+		if item.Quantity <= 0 || item.Scale > math.MaxInt16 ||
+			!validReward(defaultString(item.RewardType, "quantity"), item.DurationUnit) {
 			return fmt.Errorf("%s reward is invalid", itemPath)
 		}
 	}
@@ -517,7 +584,13 @@ func validateExportProduct(product ExportProduct, path string, productPaths map[
 		if err := validateExportPrice(price, pricePath); err != nil {
 			return err
 		}
-		key := fmt.Sprintf("%s\x00%t\x00%s\x00%s", price.AssetCode, price.IsPromotion, price.StartsAt.UTC(), price.EndsAt.UTC())
+		key := fmt.Sprintf(
+			"%s\x00%t\x00%s\x00%s",
+			price.AssetCode,
+			price.IsPromotion,
+			price.StartsAt.UTC(),
+			price.EndsAt.UTC(),
+		)
 		if previous, exists := priceIndexes[key]; exists {
 			return fmt.Errorf("%s duplicates prices[%d] window", pricePath, previous)
 		}

@@ -42,7 +42,12 @@ func (a *Admin) MarkCallbackEventOK(ctx context.Context, workspaceID string, id 
 	return a.callbacks.AdminMarkEventOK(ctx, workspaceID, id)
 }
 
-func (a *Admin) MarkCallbackEventReject(ctx context.Context, workspaceID string, id uint64, reason string) (int64, error) {
+func (a *Admin) MarkCallbackEventReject(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	reason string,
+) (int64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx

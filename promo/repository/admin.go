@@ -178,7 +178,12 @@ func (r *Repository) UpsertLocalization(ctx context.Context, value Localization)
 	return r.invalidatePromoCache(value.WorkspaceID)
 }
 
-func (r *Repository) GetLocalization(ctx context.Context, workspaceID string, promoID uint64, locale string) (Localization, error) {
+func (r *Repository) GetLocalization(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	locale string,
+) (Localization, error) {
 	key := promoCacheKey(promoCacheAdminLocalization, workspaceID, promoID, locale)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -199,7 +204,11 @@ func (r *Repository) GetLocalization(ctx context.Context, workspaceID string, pr
 	})
 }
 
-func (r *Repository) ListLocalizations(ctx context.Context, workspaceID string, promoID uint64) ([]Localization, error) {
+func (r *Repository) ListLocalizations(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+) ([]Localization, error) {
 	key := promoCacheKey(promoCacheAdminLocalizations, workspaceID, promoID)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -223,7 +232,12 @@ func (r *Repository) ListLocalizations(ctx context.Context, workspaceID string, 
 	})
 }
 
-func (r *Repository) DeleteLocalization(ctx context.Context, workspaceID string, promoID uint64, locale string) (int64, error) {
+func (r *Repository) DeleteLocalization(
+	ctx context.Context,
+	workspaceID string,
+	promoID uint64,
+	locale string,
+) (int64, error) {
 	var rows int64
 	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
 		var err error

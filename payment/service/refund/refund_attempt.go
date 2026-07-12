@@ -8,7 +8,11 @@ import (
 	"github.com/elum-utils/services/payment/repository"
 )
 
-func (a *Refund) refundAttempt(ctx context.Context, order repository.Order, attemptID uint64) (repository.Attempt, error) {
+func (a *Refund) refundAttempt(
+	ctx context.Context,
+	order repository.Order,
+	attemptID uint64,
+) (repository.Attempt, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx

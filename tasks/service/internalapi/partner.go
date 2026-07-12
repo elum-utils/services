@@ -126,7 +126,12 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 			return PartnerCallbackResult{Status: issue.Status, Issue: &issue}, nil
 		}
 		return PartnerCallbackResult{Status: issue.Status, Issue: &issue}, nil
-	case PartnerCallbackStatusRevoked, repository.PartnerIssueStatusRevokedAfterClaim, "unsubscribe", "unsubscribed", "cancelled", "canceled":
+	case PartnerCallbackStatusRevoked,
+		repository.PartnerIssueStatusRevokedAfterClaim,
+		"unsubscribe",
+		"unsubscribed",
+		"cancelled",
+		"canceled":
 		issue, changed, err := i.repository.RevokePartnerIssue(
 			mergedCtx,
 			params.WorkspaceID,
@@ -190,7 +195,10 @@ func (i *Internal) lookupPartnerIssueByPrivatePayload(
 	)
 }
 
-func (i *Internal) HandlePartnerWebhook(ctx context.Context, params PartnerWebhookParams) (PartnerCallbackResult, error) {
+func (i *Internal) HandlePartnerWebhook(
+	ctx context.Context,
+	params PartnerWebhookParams,
+) (PartnerCallbackResult, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
 	if params.WorkspaceID == "" || params.Secret == "" {

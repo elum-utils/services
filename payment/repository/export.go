@@ -87,7 +87,11 @@ func (r *PaymentRepository) Export(ctx context.Context, workspaceID string, req 
 	}, nil
 }
 
-func (r *PaymentRepository) exportGroups(ctx context.Context, workspaceID string, localizations map[string]map[string]string) ([]ExportProductGroup, error) {
+func (r *PaymentRepository) exportGroups(
+	ctx context.Context,
+	workspaceID string,
+	localizations map[string]map[string]string,
+) ([]ExportProductGroup, error) {
 	rows, err := r.q.ExportListProductGroups(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -107,7 +111,11 @@ func (r *PaymentRepository) exportGroups(ctx context.Context, workspaceID string
 	return result, nil
 }
 
-func (r *PaymentRepository) exportProducts(ctx context.Context, workspaceID string, localizations map[string]map[string]string) ([]ExportProduct, error) {
+func (r *PaymentRepository) exportProducts(
+	ctx context.Context,
+	workspaceID string,
+	localizations map[string]map[string]string,
+) ([]ExportProduct, error) {
 	rows, err := r.q.ExportListProducts(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -149,7 +157,10 @@ func (r *PaymentRepository) exportProducts(ctx context.Context, workspaceID stri
 	return result, nil
 }
 
-func (r *PaymentRepository) exportProductItems(ctx context.Context, workspaceID string) (map[string][]ExportProductItem, error) {
+func (r *PaymentRepository) exportProductItems(
+	ctx context.Context,
+	workspaceID string,
+) (map[string][]ExportProductItem, error) {
 	rows, err := r.q.ExportListProductItems(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -200,7 +211,10 @@ func (r *PaymentRepository) exportPrices(ctx context.Context, workspaceID string
 	return result, nil
 }
 
-func (r *PaymentRepository) exportLocalizations(ctx context.Context, workspaceID string) (map[string]map[string]string, error) {
+func (r *PaymentRepository) exportLocalizations(
+	ctx context.Context,
+	workspaceID string,
+) (map[string]map[string]string, error) {
 	rows, err := r.q.ExportListLocalizations(ctx, workspaceID)
 	if err != nil {
 		return nil, err
@@ -240,7 +254,11 @@ func exportProductItemDurationUnit(value paymentsqlc.NullPaymentProductItemDurat
 	return &unit
 }
 
-func exportText(localizations map[string]map[string]string, titleKey *string, descriptionKey *string) map[string]ExportText {
+func exportText(
+	localizations map[string]map[string]string,
+	titleKey *string,
+	descriptionKey *string,
+) map[string]ExportText {
 	if titleKey == nil && descriptionKey == nil {
 		return nil
 	}

@@ -172,8 +172,20 @@ func (r *Repository) importPromosBulk(
 		})
 		result.Imported.Promos++
 	}
-	return r.execImportBulk(ctx, "promo_offer",
-		[]string{"workspace_id", "code", "code_normalized", "payload", "target", "max_activations", "is_active", "start_at", "end_at"},
+	return r.execImportBulk(
+		ctx,
+		"promo_offer",
+		[]string{
+			"workspace_id",
+			"code",
+			"code_normalized",
+			"payload",
+			"target",
+			"max_activations",
+			"is_active",
+			"start_at",
+			"end_at",
+		},
 		rows,
 		"(workspace_id, code_normalized)",
 		"code = EXCLUDED.code, payload = EXCLUDED.payload, target = EXCLUDED.target, max_activations = EXCLUDED.max_activations, "+
@@ -272,7 +284,9 @@ func (r *Repository) importRewardsBulk(
 			result.Imported.Rewards++
 		}
 	}
-	return r.execImportBulk(ctx, "promo_reward",
+	return r.execImportBulk(
+		ctx,
+		"promo_reward",
 		[]string{"workspace_id", "promo_id", "reward_key", "reward_type", "quantity", "scale", "duration_unit"},
 		rows,
 		"(workspace_id, promo_id, reward_key)",

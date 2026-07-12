@@ -7,7 +7,10 @@ import (
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
-func (a *Admin) ListProviderCursors(ctx context.Context, params ProviderCursorListParams) ([]ProviderCursorModel, error) {
+func (a *Admin) ListProviderCursors(
+	ctx context.Context,
+	params ProviderCursorListParams,
+) ([]ProviderCursorModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(params.Page)
@@ -22,7 +25,10 @@ func (a *Admin) ListProviderCursors(ctx context.Context, params ProviderCursorLi
 	})
 }
 
-func (a *Admin) GetProviderCursor(ctx context.Context, workspaceID, providerCode, network, sourceKey string) (ProviderCursorModel, error) {
+func (a *Admin) GetProviderCursor(
+	ctx context.Context,
+	workspaceID, providerCode, network, sourceKey string,
+) (ProviderCursorModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.GetProviderCursor(mergedCtx, paymentsqlc.GetProviderCursorParams{
@@ -44,7 +50,10 @@ func (a *Admin) UpsertProviderCursor(ctx context.Context, params ProviderCursorU
 	})
 }
 
-func (a *Admin) ListProviderTransactions(ctx context.Context, params ProviderTransactionListParams) ([]ProviderTransactionModel, error) {
+func (a *Admin) ListProviderTransactions(
+	ctx context.Context,
+	params ProviderTransactionListParams,
+) ([]ProviderTransactionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(params.Page)
@@ -63,7 +72,11 @@ func (a *Admin) ListProviderTransactions(ctx context.Context, params ProviderTra
 	})
 }
 
-func (a *Admin) GetProviderTransaction(ctx context.Context, workspaceID string, id uint64) (ProviderTransactionModel, error) {
+func (a *Admin) GetProviderTransaction(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+) (ProviderTransactionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.AdminGetProviderTransaction(mergedCtx, paymentsqlc.AdminGetProviderTransactionParams{
@@ -78,19 +91,31 @@ func (a *Admin) GetProviderTransactionByExternalID(
 ) (ProviderTransactionModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.GetProviderTransactionByExternalID(mergedCtx, paymentsqlc.GetProviderTransactionByExternalIDParams{
-		WorkspaceID: workspaceID, ProviderCode: providerCode, Network: network,
-		SourceKey: sourceKey, ExternalTransactionID: externalTransactionID,
-	})
+	return a.repository.GetProviderTransactionByExternalID(
+		mergedCtx,
+		paymentsqlc.GetProviderTransactionByExternalIDParams{
+			WorkspaceID: workspaceID, ProviderCode: providerCode, Network: network,
+			SourceKey: sourceKey, ExternalTransactionID: externalTransactionID,
+		},
+	)
 }
 
-func (a *Admin) UpdateProviderTransactionStatus(ctx context.Context, workspaceID string, id uint64, status string, message string) (int64, error) {
+func (a *Admin) UpdateProviderTransactionStatus(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	status string,
+	message string,
+) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.AdminUpdateProviderTransactionStatus(mergedCtx, paymentsqlc.AdminUpdateProviderTransactionStatusParams{
-		WorkspaceID: workspaceID,
-		ID:          int64(id),
-		Status:      paymentsqlc.PaymentProviderTransactionStatus(status),
-		Error:       sql.NullString{String: message, Valid: message != ""},
-	})
+	return a.repository.AdminUpdateProviderTransactionStatus(
+		mergedCtx,
+		paymentsqlc.AdminUpdateProviderTransactionStatusParams{
+			WorkspaceID: workspaceID,
+			ID:          int64(id),
+			Status:      paymentsqlc.PaymentProviderTransactionStatus(status),
+			Error:       sql.NullString{String: message, Valid: message != ""},
+		},
+	)
 }

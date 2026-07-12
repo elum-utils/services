@@ -15,14 +15,49 @@ func (r *Repository) ExportManifest() ExportManifest {
 		Sections: []ExportManifestSection{
 			{Key: ExportSectionGroups, Title: "Groups", Description: "Task groups and ordering.", DefaultEnabled: true},
 			{Key: ExportSectionTasks, Title: "Tasks", Description: "Task definitions.", DefaultEnabled: true},
-			{Key: ExportSectionSequences, Title: "Sequences", Description: "Sequential execution chains.", DefaultEnabled: true},
-			{Key: ExportSectionLocalization, Title: "Localization", Description: "Group and task texts.", DefaultEnabled: true},
+			{
+				Key:            ExportSectionSequences,
+				Title:          "Sequences",
+				Description:    "Sequential execution chains.",
+				DefaultEnabled: true,
+			},
+			{
+				Key:            ExportSectionLocalization,
+				Title:          "Localization",
+				Description:    "Group and task texts.",
+				DefaultEnabled: true,
+			},
 			{Key: ExportSectionRewards, Title: "Rewards", Description: "Task rewards.", DefaultEnabled: true},
-			{Key: ExportSectionTarget, Title: "Target", Description: "Task and partner visibility filters.", DefaultEnabled: true},
-			{Key: ExportSectionIntegration, Title: "Integration", Description: "Private integration configuration without secret values.", DefaultEnabled: true},
-			{Key: ExportSectionPartnerConfigs, Title: "Partner configs", Description: "Partner provider settings without secret values.", DefaultEnabled: true},
-			{Key: ExportSectionPartnerRewards, Title: "Partner rewards", Description: "Partner reward rules.", DefaultEnabled: true},
-			{Key: ExportSectionComplex, Title: "Complex tasks", Description: "Complex task conditions.", DefaultEnabled: true},
+			{
+				Key:            ExportSectionTarget,
+				Title:          "Target",
+				Description:    "Task and partner visibility filters.",
+				DefaultEnabled: true,
+			},
+			{
+				Key:            ExportSectionIntegration,
+				Title:          "Integration",
+				Description:    "Private integration configuration without secret values.",
+				DefaultEnabled: true,
+			},
+			{
+				Key:            ExportSectionPartnerConfigs,
+				Title:          "Partner configs",
+				Description:    "Partner provider settings without secret values.",
+				DefaultEnabled: true,
+			},
+			{
+				Key:            ExportSectionPartnerRewards,
+				Title:          "Partner rewards",
+				Description:    "Partner reward rules.",
+				DefaultEnabled: true,
+			},
+			{
+				Key:            ExportSectionComplex,
+				Title:          "Complex tasks",
+				Description:    "Complex task conditions.",
+				DefaultEnabled: true,
+			},
 		},
 	}
 }
@@ -58,9 +93,13 @@ func (r *Repository) exportSnapshot(ctx context.Context, workspaceID string, req
 	}
 	var groupLocalizations []tasksqlc.TaskGroupLocalization
 	if sections[ExportSectionLocalization] {
-		groupLocalizations, err = repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskGroupLocalization, error) {
-			return r.q.AdminListGroupLocalizations(ctx, workspaceID)
-		})
+		groupLocalizations, err = repositoryValue(
+			ctx,
+			r,
+			func(ctx context.Context) ([]tasksqlc.TaskGroupLocalization, error) {
+				return r.q.AdminListGroupLocalizations(ctx, workspaceID)
+			},
+		)
 		if err != nil {
 			return ExportPackage{}, err
 		}
@@ -85,9 +124,13 @@ func (r *Repository) exportSnapshot(ctx context.Context, workspaceID string, req
 	}
 	var taskLocalizations []tasksqlc.TaskLocalization
 	if sections[ExportSectionLocalization] {
-		taskLocalizations, err = repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskLocalization, error) {
-			return r.q.AdminListTaskLocalizations(ctx, workspaceID)
-		})
+		taskLocalizations, err = repositoryValue(
+			ctx,
+			r,
+			func(ctx context.Context) ([]tasksqlc.TaskLocalization, error) {
+				return r.q.AdminListTaskLocalizations(ctx, workspaceID)
+			},
+		)
 		if err != nil {
 			return ExportPackage{}, err
 		}
@@ -112,18 +155,26 @@ func (r *Repository) exportSnapshot(ctx context.Context, workspaceID string, req
 	}
 	var partnerRewards []tasksqlc.TaskPartnerRewardRule
 	if sections[ExportSectionPartnerRewards] {
-		partnerRewards, err = repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskPartnerRewardRule, error) {
-			return r.q.AdminListPartnerRewardRules(ctx, workspaceID)
-		})
+		partnerRewards, err = repositoryValue(
+			ctx,
+			r,
+			func(ctx context.Context) ([]tasksqlc.TaskPartnerRewardRule, error) {
+				return r.q.AdminListPartnerRewardRules(ctx, workspaceID)
+			},
+		)
 		if err != nil {
 			return ExportPackage{}, err
 		}
 	}
 	var complexConditions []tasksqlc.TaskComplexCondition
 	if sections[ExportSectionComplex] {
-		complexConditions, err = repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskComplexCondition, error) {
-			return r.q.AdminListComplexConditions(ctx, workspaceID)
-		})
+		complexConditions, err = repositoryValue(
+			ctx,
+			r,
+			func(ctx context.Context) ([]tasksqlc.TaskComplexCondition, error) {
+				return r.q.AdminListComplexConditions(ctx, workspaceID)
+			},
+		)
 		if err != nil {
 			return ExportPackage{}, err
 		}
@@ -240,7 +291,10 @@ func (r *Repository) exportSnapshot(ctx context.Context, workspaceID string, req
 		}
 		out.Groups[index].PartnerConfigs = append(out.Groups[index].PartnerConfigs, ExportPartnerConfig{
 			Provider: config.Provider, Platform: config.Platform, IsEnabled: config.IsEnabled,
-			Secret: exportSecret(config, req.IncludeSecrets), WebhookSecret: exportWebhookSecret(config, req.IncludeSecrets),
+			Secret: exportSecret(
+				config,
+				req.IncludeSecrets,
+			), WebhookSecret: exportWebhookSecret(config, req.IncludeSecrets),
 			Target: target, Settings: nullableRaw(config.Settings),
 		})
 	}
@@ -284,7 +338,10 @@ func exportSecret(config PartnerConfig, includeValue bool) *ExportSecret {
 	if config.Secret == nil || *config.Secret == "" {
 		return nil
 	}
-	secret := &ExportSecret{Mode: "required", Key: partnerSecretImportKey(config.Provider, config.GroupKey, config.Platform)}
+	secret := &ExportSecret{
+		Mode: "required",
+		Key:  partnerSecretImportKey(config.Provider, config.GroupKey, config.Platform),
+	}
 	if includeValue {
 		secret.Value = config.Secret
 	}
@@ -295,7 +352,10 @@ func exportWebhookSecret(config PartnerConfig, includeValue bool) *ExportSecret 
 	if config.WebhookSecret == nil || *config.WebhookSecret == "" {
 		return nil
 	}
-	secret := &ExportSecret{Mode: "required", Key: partnerWebhookSecretImportKey(config.Provider, config.GroupKey, config.Platform)}
+	secret := &ExportSecret{
+		Mode: "required",
+		Key:  partnerWebhookSecretImportKey(config.Provider, config.GroupKey, config.Platform),
+	}
 	if includeValue {
 		secret.Value = config.WebhookSecret
 	}

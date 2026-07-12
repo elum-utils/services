@@ -151,7 +151,11 @@ func mapCalendar(value repository.Calendar) CalendarModel {
 		Steps: make([]user.StepModel, 0, len(value.Steps)),
 	}
 	for _, step := range value.Steps {
-		item := user.StepModel{ID: step.ID, Position: step.Position, Rewards: make([]user.RewardModel, 0, len(step.Rewards))}
+		item := user.StepModel{
+			ID:       step.ID,
+			Position: step.Position,
+			Rewards:  make([]user.RewardModel, 0, len(step.Rewards)),
+		}
 		for _, reward := range step.Rewards {
 			item.Rewards = append(item.Rewards, user.RewardModel{
 				Key: reward.Key, Type: reward.Type, Quantity: reward.Quantity, Scale: reward.Scale, Unit: reward.Unit,

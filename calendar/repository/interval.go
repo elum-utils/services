@@ -48,7 +48,16 @@ func calendarBoundary(calendar Calendar, value time.Time) (time.Time, error) {
 	var boundary time.Time
 	switch calendar.IntervalUnit {
 	case "second":
-		boundary = time.Date(local.Year(), local.Month(), local.Day(), local.Hour(), local.Minute(), local.Second(), 0, location)
+		boundary = time.Date(
+			local.Year(),
+			local.Month(),
+			local.Day(),
+			local.Hour(),
+			local.Minute(),
+			local.Second(),
+			0,
+			location,
+		)
 	case "minute":
 		boundary = time.Date(local.Year(), local.Month(), local.Day(), local.Hour(), local.Minute(), 0, 0, location)
 	case "hour":

@@ -17,5 +17,5 @@
 
 - [x] Собрать тесты в `control_test.go` и `control_bench_test.go`, удалить
   `control/tests`.
-- [ ] Разнести длинные repository/service literals и вызовы по одному полю или
+- [x] Разнести длинные repository/service literals и вызовы по одному полю или
   аргументу на строку.

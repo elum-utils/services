@@ -97,7 +97,10 @@ func NewChannelSubscriptionChecker(options ChannelSubscriptionCheckerOptions) *C
 	}
 }
 
-func (c *ChannelSubscriptionPlatformChecker) CheckChannelSubscription(ctx context.Context, params ChannelSubscriptionCheckParams) (CheckResult, error) {
+func (c *ChannelSubscriptionPlatformChecker) CheckChannelSubscription(
+	ctx context.Context,
+	params ChannelSubscriptionCheckParams,
+) (CheckResult, error) {
 	config, err := parseChannelSubscriptionPayload(params.Task.IntegrationPayload)
 	if err != nil {
 		return CheckResult{}, err
@@ -114,7 +117,10 @@ func (c *ChannelSubscriptionPlatformChecker) CheckChannelSubscription(ctx contex
 	}
 }
 
-func (c *ChannelSubscriptionPlatformChecker) CheckChannelBoost(ctx context.Context, params ChannelBoostCheckParams) (CheckResult, error) {
+func (c *ChannelSubscriptionPlatformChecker) CheckChannelBoost(
+	ctx context.Context,
+	params ChannelBoostCheckParams,
+) (CheckResult, error) {
 	config, err := parseChannelSubscriptionPayload(params.Task.IntegrationPayload)
 	if err != nil {
 		return CheckResult{}, err
@@ -127,10 +133,23 @@ func (c *ChannelSubscriptionPlatformChecker) CheckChannelBoost(ctx context.Conte
 	return c.checkTelegramBoost(ctx, params, config)
 }
 
-func (c *ChannelSubscriptionPlatformChecker) checkTelegram(ctx context.Context, params ChannelSubscriptionCheckParams, config channelSubscriptionPayload) (CheckResult, error) {
+func (c *ChannelSubscriptionPlatformChecker) checkTelegram(
+	ctx context.Context,
+	params ChannelSubscriptionCheckParams,
+	config channelSubscriptionPayload,
+) (CheckResult, error) {
 	tg := mergeChannelPlatform(config, config.TG, config.Telegram)
-	chatID := firstNonEmptyString(tg.ChatID, tg.ChannelID, partnerVariable(params.Variables, "chat_id"), partnerVariable(params.Variables, "channel_id"))
-	userID := firstNonEmptyString(partnerVariable(params.Variables, "tg_user_id"), partnerVariable(params.Variables, "user_id"), params.Identity.PlatformUserID)
+	chatID := firstNonEmptyString(
+		tg.ChatID,
+		tg.ChannelID,
+		partnerVariable(params.Variables, "chat_id"),
+		partnerVariable(params.Variables, "channel_id"),
+	)
+	userID := firstNonEmptyString(
+		partnerVariable(params.Variables, "tg_user_id"),
+		partnerVariable(params.Variables, "user_id"),
+		params.Identity.PlatformUserID,
+	)
 	tokens := channelTokens(tg)
 	if chatID == "" || userID == "" || len(tokens) == 0 {
 		payload := marshalChannelCheckPayload("telegram", "", false, "invalid_config")
@@ -171,10 +190,23 @@ func (c *ChannelSubscriptionPlatformChecker) checkTelegram(ctx context.Context, 
 	return CheckResult{Completed: completed, Payload: payload}, nil
 }
 
-func (c *ChannelSubscriptionPlatformChecker) checkTelegramBoost(ctx context.Context, params ChannelBoostCheckParams, config channelSubscriptionPayload) (CheckResult, error) {
+func (c *ChannelSubscriptionPlatformChecker) checkTelegramBoost(
+	ctx context.Context,
+	params ChannelBoostCheckParams,
+	config channelSubscriptionPayload,
+) (CheckResult, error) {
 	tg := mergeChannelPlatform(config, config.TG, config.Telegram)
-	chatID := firstNonEmptyString(tg.ChatID, tg.ChannelID, partnerVariable(params.Variables, "chat_id"), partnerVariable(params.Variables, "channel_id"))
-	userID := firstNonEmptyString(partnerVariable(params.Variables, "tg_user_id"), partnerVariable(params.Variables, "user_id"), params.Identity.PlatformUserID)
+	chatID := firstNonEmptyString(
+		tg.ChatID,
+		tg.ChannelID,
+		partnerVariable(params.Variables, "chat_id"),
+		partnerVariable(params.Variables, "channel_id"),
+	)
+	userID := firstNonEmptyString(
+		partnerVariable(params.Variables, "tg_user_id"),
+		partnerVariable(params.Variables, "user_id"),
+		params.Identity.PlatformUserID,
+	)
 	tokens := channelTokens(tg)
 	if chatID == "" || userID == "" || len(tokens) == 0 {
 		payload := marshalChannelCheckPayload("telegram", "", false, "invalid_config")
@@ -212,10 +244,23 @@ func (c *ChannelSubscriptionPlatformChecker) checkTelegramBoost(ctx context.Cont
 	return CheckResult{Completed: completed, Payload: payload}, nil
 }
 
-func (c *ChannelSubscriptionPlatformChecker) checkVK(ctx context.Context, params ChannelSubscriptionCheckParams, config channelSubscriptionPayload) (CheckResult, error) {
+func (c *ChannelSubscriptionPlatformChecker) checkVK(
+	ctx context.Context,
+	params ChannelSubscriptionCheckParams,
+	config channelSubscriptionPayload,
+) (CheckResult, error) {
 	vk := mergeChannelPlatform(config, config.VK)
-	groupID := firstNonEmptyString(vk.GroupID, vk.ChannelID, partnerVariable(params.Variables, "group_id"), partnerVariable(params.Variables, "channel_id"))
-	userID := firstNonEmptyString(partnerVariable(params.Variables, "vk_user_id"), partnerVariable(params.Variables, "user_id"), params.Identity.PlatformUserID)
+	groupID := firstNonEmptyString(
+		vk.GroupID,
+		vk.ChannelID,
+		partnerVariable(params.Variables, "group_id"),
+		partnerVariable(params.Variables, "channel_id"),
+	)
+	userID := firstNonEmptyString(
+		partnerVariable(params.Variables, "vk_user_id"),
+		partnerVariable(params.Variables, "user_id"),
+		params.Identity.PlatformUserID,
+	)
 	tokens := channelTokens(vk)
 	if groupID == "" || userID == "" || len(tokens) == 0 {
 		payload := marshalChannelCheckPayload("vk", "", false, "invalid_config")
@@ -257,7 +302,10 @@ func (c *ChannelSubscriptionPlatformChecker) checkVK(ctx context.Context, params
 	return CheckResult{Completed: completed, Payload: payload}, nil
 }
 
-func mergeChannelPlatform(root channelSubscriptionPayload, nested ...*channelSubscriptionPlatformPayload) channelSubscriptionPlatformPayload {
+func mergeChannelPlatform(
+	root channelSubscriptionPayload,
+	nested ...*channelSubscriptionPlatformPayload,
+) channelSubscriptionPlatformPayload {
 	out := channelSubscriptionPlatformPayload{
 		Token:     root.Token,
 		Tokens:    append([]string(nil), root.Tokens...),
@@ -361,7 +409,11 @@ func (c *ChannelSubscriptionPlatformChecker) restyClient() *resty.Client {
 	return client
 }
 
-func (c *ChannelSubscriptionPlatformChecker) acquireToken(ctx context.Context, tokens []string, strategy string) (string, error) {
+func (c *ChannelSubscriptionPlatformChecker) acquireToken(
+	ctx context.Context,
+	tokens []string,
+	strategy string,
+) (string, error) {
 	if c.tokenFlow == nil {
 		c.tokenFlow = defaultTokenFlow(nil)
 	}

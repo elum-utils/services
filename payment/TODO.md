@@ -20,5 +20,5 @@
 
 - [x] Собрать тесты в `payment_test.go` и `payment_bench_test.go`, удалить
   `payment/tests`.
-- [ ] Убрать generated SQLC types из публичных Admin signatures и разнести
+- [x] Убрать generated SQLC types из публичных Admin signatures и разнести
   оставшиеся длинные literals/calls по одному полю или аргументу на строку.

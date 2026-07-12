@@ -10,7 +10,12 @@ import (
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
-func (r *Repository) ListActive(ctx context.Context, identity Identity, locale, groupKey string, now time.Time) ([]ActiveTask, error) {
+func (r *Repository) ListActive(
+	ctx context.Context,
+	identity Identity,
+	locale, groupKey string,
+	now time.Time,
+) ([]ActiveTask, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -26,13 +31,17 @@ func (r *Repository) ListActive(ctx context.Context, identity Identity, locale, 
 			tasks = append(tasks, task)
 		}
 	}
-	progressRows, err := repositoryValue[[]tasksqlc.TaskProgress](ctx, r, func(ctx context.Context) ([]tasksqlc.TaskProgress, error) {
-		return r.q.ListCurrentProgressForUser(ctx, tasksqlc.ListCurrentProgressForUserParams{
-			WorkspaceID: identity.WorkspaceID,
-			AppID:       identity.AppID, PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
-			PeriodStartAt: now, PeriodEndAt: now,
-		})
-	})
+	progressRows, err := repositoryValue[[]tasksqlc.TaskProgress](
+		ctx,
+		r,
+		func(ctx context.Context) ([]tasksqlc.TaskProgress, error) {
+			return r.q.ListCurrentProgressForUser(ctx, tasksqlc.ListCurrentProgressForUserParams{
+				WorkspaceID: identity.WorkspaceID,
+				AppID:       identity.AppID, PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
+				PeriodStartAt: now, PeriodEndAt: now,
+			})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +105,10 @@ func (r *Repository) attachComplexConditions(ctx context.Context, workspaceID st
 	return nil
 }
 
-func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale, groupKey string) ([]ActiveTask, error) {
+func (r *Repository) listActiveCatalog(
+	ctx context.Context,
+	workspaceID, locale, groupKey string,
+) ([]ActiveTask, error) {
 	key := activeCatalogCacheKey(workspaceID, locale, groupKey)
 	out, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:               key,

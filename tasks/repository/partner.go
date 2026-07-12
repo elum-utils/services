@@ -70,7 +70,10 @@ func (r *Repository) SavePartnerConfig(ctx context.Context, params SavePartnerCo
 	return r.bumpPartnerConfigCache(params.WorkspaceID)
 }
 
-func (r *Repository) GetPartnerConfig(ctx context.Context, workspaceID, provider, groupKey, platform string) (PartnerConfig, bool, error) {
+func (r *Repository) GetPartnerConfig(
+	ctx context.Context,
+	workspaceID, provider, groupKey, platform string,
+) (PartnerConfig, bool, error) {
 	config, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:               partnerConfigCacheKey(workspaceID, provider, groupKey, platform),
 		CacheL1Delay:      r.cacheL1Delay,
@@ -94,7 +97,10 @@ func (r *Repository) GetPartnerConfig(ctx context.Context, workspaceID, provider
 	return config, true, nil
 }
 
-func (r *Repository) GetPartnerConfigByWebhookSecret(ctx context.Context, workspaceID, secret string) (PartnerConfig, bool, error) {
+func (r *Repository) GetPartnerConfigByWebhookSecret(
+	ctx context.Context,
+	workspaceID, secret string,
+) (PartnerConfig, bool, error) {
 	config, err := repositoryQuery(ctx, r, sqlwrap.Params{
 		Key:               partnerConfigWebhookCacheKey(workspaceID, secret),
 		CacheL1Delay:      r.cacheL1Delay,
@@ -310,7 +316,10 @@ func (r *Repository) SavePartnerRewardRule(ctx context.Context, params SavePartn
 	})
 }
 
-func (r *Repository) DeletePartnerRewardRule(ctx context.Context, workspaceID, provider, groupKey, externalType, rewardKey string) (int64, error) {
+func (r *Repository) DeletePartnerRewardRule(
+	ctx context.Context,
+	workspaceID, provider, groupKey, externalType, rewardKey string,
+) (int64, error) {
 	if externalType == "" {
 		externalType = "*"
 	}
@@ -329,7 +338,10 @@ func (r *Repository) DeletePartnerRewardRule(ctx context.Context, workspaceID, p
 	return rows, err
 }
 
-func (r *Repository) PartnerRewards(ctx context.Context, workspaceID, provider, groupKey, externalType string) ([]Reward, error) {
+func (r *Repository) PartnerRewards(
+	ctx context.Context,
+	workspaceID, provider, groupKey, externalType string,
+) ([]Reward, error) {
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskPartnerRewardRule, error) {
 		return r.q.ListPartnerRewardRules(ctx, tasksqlc.ListPartnerRewardRulesParams{
 			WorkspaceID: workspaceID, Provider: provider, GroupKey: groupKey,
@@ -355,7 +367,10 @@ func (r *Repository) PartnerRewards(ctx context.Context, workspaceID, provider, 
 	return rewards, nil
 }
 
-func (r *Repository) CreatePartnerIssue(ctx context.Context, params CreatePartnerIssueParams) (PartnerIssue, bool, error) {
+func (r *Repository) CreatePartnerIssue(
+	ctx context.Context,
+	params CreatePartnerIssueParams,
+) (PartnerIssue, bool, error) {
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -413,7 +428,15 @@ func (r *Repository) CreatePartnerIssue(ctx context.Context, params CreatePartne
 		return issue, false, err
 	}
 	eventKey := "partner.issue:" + issue.IssueKey
-	inserted, err := r.recordPartnerStatsEvent(ctx, issue, PartnerStatsEventIssued, eventKey, "", issue.PublicPayload, now)
+	inserted, err := r.recordPartnerStatsEvent(
+		ctx,
+		issue,
+		PartnerStatsEventIssued,
+		eventKey,
+		"",
+		issue.PublicPayload,
+		now,
+	)
 	return issue, inserted, err
 }
 
@@ -430,7 +453,10 @@ func (r *Repository) GetPartnerIssue(ctx context.Context, workspaceID string, id
 	return mapPartnerIssue(row), true, nil
 }
 
-func (r *Repository) GetPartnerIssueByExternalClickID(ctx context.Context, workspaceID, provider, externalClickID string) (PartnerIssue, bool, error) {
+func (r *Repository) GetPartnerIssueByExternalClickID(
+	ctx context.Context,
+	workspaceID, provider, externalClickID string,
+) (PartnerIssue, bool, error) {
 	row, err := repositoryValue(ctx, r, func(ctx context.Context) (tasksqlc.TaskPartnerIssue, error) {
 		return r.q.GetPartnerIssueByExternalClickID(ctx, tasksqlc.GetPartnerIssueByExternalClickIDParams{
 			WorkspaceID: workspaceID, Provider: provider, ExternalClickID: sql.NullString{String: externalClickID, Valid: externalClickID != ""},
@@ -445,7 +471,10 @@ func (r *Repository) GetPartnerIssueByExternalClickID(ctx context.Context, works
 	return mapPartnerIssue(row), true, nil
 }
 
-func (r *Repository) GetPartnerIssueByExternalUser(ctx context.Context, workspaceID, provider, groupKey, platform, externalID, platformUserID string) (PartnerIssue, bool, error) {
+func (r *Repository) GetPartnerIssueByExternalUser(
+	ctx context.Context,
+	workspaceID, provider, groupKey, platform, externalID, platformUserID string,
+) (PartnerIssue, bool, error) {
 	row, err := repositoryValue(ctx, r, func(ctx context.Context) (tasksqlc.TaskPartnerIssue, error) {
 		return r.q.GetPartnerIssueByExternalUser(ctx, tasksqlc.GetPartnerIssueByExternalUserParams{
 			WorkspaceID: workspaceID, Provider: provider, GroupKey: groupKey, Platform: platform,
@@ -461,7 +490,10 @@ func (r *Repository) GetPartnerIssueByExternalUser(ctx context.Context, workspac
 	return mapPartnerIssue(row), true, nil
 }
 
-func (r *Repository) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, workspaceID, provider, groupKey, platform, lookupKey, lookupValue, platformUserID string) (PartnerIssue, bool, error) {
+func (r *Repository) GetPartnerIssueByPrivatePayloadUser(
+	ctx context.Context,
+	workspaceID, provider, groupKey, platform, lookupKey, lookupValue, platformUserID string,
+) (PartnerIssue, bool, error) {
 	row, err := repositoryValue(ctx, r, func(ctx context.Context) (tasksqlc.TaskPartnerIssue, error) {
 		return r.q.GetPartnerIssueByPrivatePayloadUser(ctx, tasksqlc.GetPartnerIssueByPrivatePayloadUserParams{
 			WorkspaceID: workspaceID, Provider: provider, GroupKey: groupKey, Platform: platform,
@@ -477,7 +509,13 @@ func (r *Repository) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, wo
 	return mapPartnerIssue(row), true, nil
 }
 
-func (r *Repository) UpdatePartnerIssueStart(ctx context.Context, workspaceID string, id uint64, externalClickID string, publicPatch, privatePatch json.RawMessage) (PartnerIssue, bool, error) {
+func (r *Repository) UpdatePartnerIssueStart(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	externalClickID string,
+	publicPatch, privatePatch json.RawMessage,
+) (PartnerIssue, bool, error) {
 	issue, found, err := r.GetPartnerIssue(ctx, workspaceID, id)
 	if err != nil || !found {
 		return issue, false, err
@@ -486,8 +524,10 @@ func (r *Repository) UpdatePartnerIssueStart(ctx context.Context, workspaceID st
 	privatePayload := mergeRawObjects(issue.PrivatePayload, privatePatch)
 	affected, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.UpdatePartnerIssueStart(ctx, tasksqlc.UpdatePartnerIssueStartParams{
-			Column1:       externalClickID,
-			PublicPayload: rawMessageParam(publicPayload), PrivatePayload: rawMessageParam(privatePayload), WorkspaceID: workspaceID, ID: int64(id),
+			Column1: externalClickID,
+			PublicPayload: rawMessageParam(
+				publicPayload,
+			), PrivatePayload: rawMessageParam(privatePayload), WorkspaceID: workspaceID, ID: int64(id),
 		})
 	})
 	if err != nil || affected == 0 {
@@ -496,7 +536,12 @@ func (r *Repository) UpdatePartnerIssueStart(ctx context.Context, workspaceID st
 	return r.GetPartnerIssue(ctx, workspaceID, id)
 }
 
-func (r *Repository) ListPartnerIssuesForUser(ctx context.Context, identity Identity, provider, groupKey, platform string, now time.Time) ([]PartnerIssue, error) {
+func (r *Repository) ListPartnerIssuesForUser(
+	ctx context.Context,
+	identity Identity,
+	provider, groupKey, platform string,
+	now time.Time,
+) ([]PartnerIssue, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -517,14 +562,24 @@ func (r *Repository) ListPartnerIssuesForUser(ctx context.Context, identity Iden
 	return result, nil
 }
 
-func (r *Repository) CompletePartnerIssue(ctx context.Context, workspaceID string, id uint64, status string, payload json.RawMessage, now time.Time) (PartnerIssue, bool, error) {
+func (r *Repository) CompletePartnerIssue(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	status string,
+	payload json.RawMessage,
+	now time.Time,
+) (PartnerIssue, bool, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	var issue PartnerIssue
 	completed := false
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
-		row, err := txRepo.q.GetPartnerIssueByIDForUpdate(ctx, tasksqlc.GetPartnerIssueByIDForUpdateParams{WorkspaceID: workspaceID, ID: int64(id)})
+		row, err := txRepo.q.GetPartnerIssueByIDForUpdate(
+			ctx,
+			tasksqlc.GetPartnerIssueByIDForUpdateParams{WorkspaceID: workspaceID, ID: int64(id)},
+		)
 		if err != nil {
 			return err
 		}
@@ -543,7 +598,15 @@ func (r *Repository) CompletePartnerIssue(ctx context.Context, workspaceID strin
 			issue.Status = PartnerIssueStatusCompleted
 			issue.CompletedAt = &now
 			eventKey := fmt.Sprintf("partner.completed:%d", issue.ID)
-			_, err = txRepo.recordPartnerStatsEvent(ctx, issue, PartnerStatsEventCompleted, eventKey, status, payload, now)
+			_, err = txRepo.recordPartnerStatsEvent(
+				ctx,
+				issue,
+				PartnerStatsEventCompleted,
+				eventKey,
+				status,
+				payload,
+				now,
+			)
 			return err
 		}
 		return nil
@@ -557,14 +620,24 @@ func (r *Repository) CompletePartnerIssue(ctx context.Context, workspaceID strin
 	return issue, completed, nil
 }
 
-func (r *Repository) RevokePartnerIssue(ctx context.Context, workspaceID string, id uint64, status string, payload json.RawMessage, now time.Time) (PartnerIssue, bool, error) {
+func (r *Repository) RevokePartnerIssue(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	status string,
+	payload json.RawMessage,
+	now time.Time,
+) (PartnerIssue, bool, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	var issue PartnerIssue
 	revoked := false
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
-		row, err := txRepo.q.GetPartnerIssueByIDForUpdate(ctx, tasksqlc.GetPartnerIssueByIDForUpdateParams{WorkspaceID: workspaceID, ID: int64(id)})
+		row, err := txRepo.q.GetPartnerIssueByIDForUpdate(
+			ctx,
+			tasksqlc.GetPartnerIssueByIDForUpdateParams{WorkspaceID: workspaceID, ID: int64(id)},
+		)
 		if err != nil {
 			return err
 		}
@@ -629,7 +702,13 @@ func (r *Repository) RevokePartnerIssue(ctx context.Context, workspaceID string,
 	return issue, revoked, nil
 }
 
-func (r *Repository) ClaimPartnerIssue(ctx context.Context, identity Identity, issueID uint64, operationID string, now time.Time) (PartnerClaimResult, error) {
+func (r *Repository) ClaimPartnerIssue(
+	ctx context.Context,
+	identity Identity,
+	issueID uint64,
+	operationID string,
+	now time.Time,
+) (PartnerClaimResult, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -649,7 +728,8 @@ func (r *Repository) ClaimPartnerIssue(ctx context.Context, identity Identity, i
 		}
 		issue := mapPartnerIssue(row)
 		result.Issue = issue
-		if issue.AppID != identity.AppID || issue.PlatformID != identity.PlatformID || issue.PlatformUserID != identity.PlatformUserID {
+		if issue.AppID != identity.AppID || issue.PlatformID != identity.PlatformID ||
+			issue.PlatformUserID != identity.PlatformUserID {
 			result.Status = ClaimStatusNotFound
 			return nil
 		}
@@ -665,7 +745,13 @@ func (r *Repository) ClaimPartnerIssue(ctx context.Context, identity Identity, i
 			result.Status = ClaimStatusNotReady
 			return nil
 		}
-		rewards, err := txRepo.PartnerRewards(ctx, issue.WorkspaceID, issue.Provider, issue.GroupKey, issue.ExternalType)
+		rewards, err := txRepo.PartnerRewards(
+			ctx,
+			issue.WorkspaceID,
+			issue.Provider,
+			issue.GroupKey,
+			issue.ExternalType,
+		)
 		if err != nil {
 			return err
 		}
@@ -719,7 +805,12 @@ func (r *Repository) ClaimPartnerIssue(ctx context.Context, identity Identity, i
 	return result, err
 }
 
-func (r *Repository) partnerCallbackPayload(ctx context.Context, issue PartnerIssue, operationID string, now time.Time) ([]byte, error) {
+func (r *Repository) partnerCallbackPayload(
+	ctx context.Context,
+	issue PartnerIssue,
+	operationID string,
+	now time.Time,
+) ([]byte, error) {
 	rewards, err := r.PartnerRewards(ctx, issue.WorkspaceID, issue.Provider, issue.GroupKey, issue.ExternalType)
 	if err != nil {
 		return nil, err
@@ -732,7 +823,11 @@ func (r *Repository) partnerCallbackPayload(ctx context.Context, issue PartnerIs
 	})
 }
 
-func (r *Repository) ListPartnerDailyStats(ctx context.Context, workspaceID, provider, groupKey string, from, until time.Time) ([]PartnerStatsDaily, error) {
+func (r *Repository) ListPartnerDailyStats(
+	ctx context.Context,
+	workspaceID, provider, groupKey string,
+	from, until time.Time,
+) ([]PartnerStatsDaily, error) {
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskPartnerStatsDaily, error) {
 		return r.q.AdminListPartnerDailyStats(ctx, tasksqlc.AdminListPartnerDailyStatsParams{
 			WorkspaceID: workspaceID, StatsDate: from, StatsDate_2: until,
@@ -746,16 +841,28 @@ func (r *Repository) ListPartnerDailyStats(ctx context.Context, workspaceID, pro
 	for _, row := range rows {
 		result = append(result, PartnerStatsDaily{
 			Date: row.StatsDate, Provider: row.Provider, GroupKey: row.GroupKey, ExternalType: row.ExternalType,
-			IssuedCount: uint64(row.IssuedCount), CompletedCount: uint64(row.CompletedCount), ClaimedCount: uint64(row.ClaimedCount),
+			IssuedCount: uint64(
+				row.IssuedCount,
+			), CompletedCount: uint64(row.CompletedCount), ClaimedCount: uint64(row.ClaimedCount),
 			RevokedCount: uint64(row.RevokedCount), RevokedAfterClaimCount: uint64(row.RevokedAfterClaimCount),
-			FailedCount: uint64(row.FailedCount), FakeCount: uint64(row.FakeCount), ExpiredCount: uint64(row.ExpiredCount),
-			UniqueIssuedUsers: uint64(row.UniqueIssuedUsers), UniqueCompletedUsers: uint64(row.UniqueCompletedUsers), UniqueClaimers: uint64(row.UniqueClaimers),
+			FailedCount: uint64(
+				row.FailedCount,
+			), FakeCount: uint64(row.FakeCount), ExpiredCount: uint64(row.ExpiredCount),
+			UniqueIssuedUsers: uint64(
+				row.UniqueIssuedUsers,
+			), UniqueCompletedUsers: uint64(row.UniqueCompletedUsers), UniqueClaimers: uint64(row.UniqueClaimers),
 		})
 	}
 	return result, nil
 }
 
-func (r *Repository) recordPartnerStatsEvent(ctx context.Context, issue PartnerIssue, eventType, eventKey, status string, payload json.RawMessage, now time.Time) (bool, error) {
+func (r *Repository) recordPartnerStatsEvent(
+	ctx context.Context,
+	issue PartnerIssue,
+	eventType, eventKey, status string,
+	payload json.RawMessage,
+	now time.Time,
+) (bool, error) {
 	if len(payload) == 0 {
 		payload = []byte("{}")
 	}
@@ -789,10 +896,16 @@ func (r *Repository) recordPartnerStatsEvent(ctx context.Context, issue PartnerI
 	}
 	err = r.q.IncrementPartnerStatsDaily(ctx, tasksqlc.IncrementPartnerStatsDailyParams{
 		WorkspaceID: issue.WorkspaceID, Column2: now, Provider: issue.Provider, GroupKey: issue.GroupKey, ExternalType: issue.ExternalType,
-		IssuedCount: int64(increment.IssuedCount), CompletedCount: int64(increment.CompletedCount), ClaimedCount: int64(increment.ClaimedCount),
+		IssuedCount: int64(
+			increment.IssuedCount,
+		), CompletedCount: int64(increment.CompletedCount), ClaimedCount: int64(increment.ClaimedCount),
 		RevokedCount: int64(increment.RevokedCount), RevokedAfterClaimCount: int64(increment.RevokedAfterClaimCount),
-		FailedCount: int64(increment.FailedCount), FakeCount: int64(increment.FakeCount), ExpiredCount: int64(increment.ExpiredCount),
-		UniqueIssuedUsers: int64(increment.UniqueIssuedUsers), UniqueCompletedUsers: int64(increment.UniqueCompletedUsers), UniqueClaimers: int64(increment.UniqueClaimers),
+		FailedCount: int64(
+			increment.FailedCount,
+		), FakeCount: int64(increment.FakeCount), ExpiredCount: int64(increment.ExpiredCount),
+		UniqueIssuedUsers: int64(
+			increment.UniqueIssuedUsers,
+		), UniqueCompletedUsers: int64(increment.UniqueCompletedUsers), UniqueClaimers: int64(increment.UniqueClaimers),
 	})
 	return true, err
 }

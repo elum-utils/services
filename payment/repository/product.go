@@ -170,7 +170,15 @@ func (r *PaymentRepository) GetProduct(ctx context.Context, params ProductGetPar
 	if err != nil {
 		return Product{}, err
 	}
-	if !productTargetMatches(product.Target, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID) {
+	if !productTargetMatches(
+		product.Target,
+		params.IsPremium,
+		params.Sex,
+		params.Country,
+		locale,
+		params.Platform,
+		params.PlatformID,
+	) {
 		return Product{}, sql.ErrNoRows
 	}
 
@@ -193,21 +201,35 @@ func (r *PaymentRepository) ListProducts(ctx context.Context, params ProductList
 	}
 
 	key := paymentCacheKey("products_catalog", workspaceID, params.AssetCode, locale, params.GroupCode)
-	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductsCatalogCacheRowsRow, error) {
-		return r.q.ListProductsCatalogCacheRows(ctx, sqlc.ListProductsCatalogCacheRowsParams{
-			WorkspaceID: workspaceID,
-			AssetCode:   params.AssetCode,
-			Locale:      locale,
-			Column4:     params.GroupCode,
-			GroupCode:   sql.NullString{String: params.GroupCode, Valid: params.GroupCode != ""},
-		})
-	})
+	rows, err := queryPaymentCache(
+		ctx,
+		r,
+		workspaceID,
+		key,
+		func(ctx context.Context) ([]sqlc.ListProductsCatalogCacheRowsRow, error) {
+			return r.q.ListProductsCatalogCacheRows(ctx, sqlc.ListProductsCatalogCacheRowsParams{
+				WorkspaceID: workspaceID,
+				AssetCode:   params.AssetCode,
+				Locale:      locale,
+				Column4:     params.GroupCode,
+				GroupCode:   sql.NullString{String: params.GroupCode, Valid: params.GroupCode != ""},
+			})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	products := mapProductsCatalogRows(rows, now)
-	products = filterProductsByTarget(products, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID)
+	products = filterProductsByTarget(
+		products,
+		params.IsPremium,
+		params.Sex,
+		params.Country,
+		locale,
+		params.Platform,
+		params.PlatformID,
+	)
 	if len(products) == 0 {
 		return []Product{}, nil
 	}
@@ -226,21 +248,32 @@ func (r *PaymentRepository) getProductCatalog(
 	now time.Time,
 ) (Product, error) {
 	key := paymentCacheKey("product_catalog", workspaceID, productID, assetCode, locale)
-	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductCatalogCacheRowsRow, error) {
-		return r.q.ListProductCatalogCacheRows(ctx, sqlc.ListProductCatalogCacheRowsParams{
-			ProductID:   productID,
-			WorkspaceID: workspaceID,
-			AssetCode:   assetCode,
-			Locale:      locale,
-		})
-	})
+	rows, err := queryPaymentCache(
+		ctx,
+		r,
+		workspaceID,
+		key,
+		func(ctx context.Context) ([]sqlc.ListProductCatalogCacheRowsRow, error) {
+			return r.q.ListProductCatalogCacheRows(ctx, sqlc.ListProductCatalogCacheRowsParams{
+				ProductID:   productID,
+				WorkspaceID: workspaceID,
+				AssetCode:   assetCode,
+				Locale:      locale,
+			})
+		},
+	)
 	if err != nil {
 		return Product{}, err
 	}
 	return mapProductCatalogRows(rows, now)
 }
 
-func (r *PaymentRepository) attachProductLimitLocks(ctx context.Context, product *Product, platformID int64, platformUserID string) error {
+func (r *PaymentRepository) attachProductLimitLocks(
+	ctx context.Context,
+	product *Product,
+	platformID int64,
+	platformUserID string,
+) error {
 	var err error
 	product.Limit.Global.LockUntil, err = r.getProductLimitLock(ctx, productLimitQuery{
 		workspaceID:    product.WorkspaceID,
@@ -285,7 +318,15 @@ func (r *PaymentRepository) getCheckoutProduct(ctx context.Context, params Produ
 	if err != nil {
 		return Product{}, err
 	}
-	if !productTargetMatches(product.Target, params.IsPremium, params.Sex, params.Country, locale, params.Platform, params.PlatformID) {
+	if !productTargetMatches(
+		product.Target,
+		params.IsPremium,
+		params.Sex,
+		params.Country,
+		locale,
+		params.Platform,
+		params.PlatformID,
+	) {
 		return Product{}, sql.ErrNoRows
 	}
 	product.Items = nil
@@ -332,7 +373,10 @@ type ProductPreviewParams struct {
 	Now            time.Time
 }
 
-func (r *PaymentRepository) GetProductPreview(ctx context.Context, params ProductPreviewParams) (ProductPreview, error) {
+func (r *PaymentRepository) GetProductPreview(
+	ctx context.Context,
+	params ProductPreviewParams,
+) (ProductPreview, error) {
 	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
 	if err != nil {
 		return ProductPreview{}, err
@@ -348,13 +392,19 @@ func (r *PaymentRepository) GetProductPreview(ctx context.Context, params Produc
 	}
 
 	key := paymentCacheKey("product_preview_catalog", workspaceID, params.ProductID, locale)
-	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductPreviewCatalogCacheRowsRow, error) {
-		return r.q.ListProductPreviewCatalogCacheRows(ctx, sqlc.ListProductPreviewCatalogCacheRowsParams{
-			ProductID:   params.ProductID,
-			WorkspaceID: workspaceID,
-			Locale:      locale,
-		})
-	})
+	rows, err := queryPaymentCache(
+		ctx,
+		r,
+		workspaceID,
+		key,
+		func(ctx context.Context) ([]sqlc.ListProductPreviewCatalogCacheRowsRow, error) {
+			return r.q.ListProductPreviewCatalogCacheRows(ctx, sqlc.ListProductPreviewCatalogCacheRowsParams{
+				ProductID:   params.ProductID,
+				WorkspaceID: workspaceID,
+				Locale:      locale,
+			})
+		},
+	)
 	if err != nil {
 		return ProductPreview{}, err
 	}
@@ -392,7 +442,11 @@ func (r *PaymentRepository) GetProductPreview(ctx context.Context, params Produc
 	return product, nil
 }
 
-func (r *PaymentRepository) ListProductPriceOptions(ctx context.Context, workspaceID string, productID string) ([]ProductPriceOption, error) {
+func (r *PaymentRepository) ListProductPriceOptions(
+	ctx context.Context,
+	workspaceID string,
+	productID string,
+) ([]ProductPriceOption, error) {
 	workspaceID, err := requireWorkspaceID(workspaceID)
 	if err != nil {
 		return nil, err
@@ -402,12 +456,18 @@ func (r *PaymentRepository) ListProductPriceOptions(ctx context.Context, workspa
 		return nil, err
 	}
 	key := paymentCacheKey("product_price_options", workspaceID, productID)
-	rows, err := queryPaymentCache(ctx, r, workspaceID, key, func(ctx context.Context) ([]sqlc.ListProductPriceOptionCatalogRowsRow, error) {
-		return r.q.ListProductPriceOptionCatalogRows(ctx, sqlc.ListProductPriceOptionCatalogRowsParams{
-			WorkspaceID: workspaceID,
-			ProductID:   productID,
-		})
-	})
+	rows, err := queryPaymentCache(
+		ctx,
+		r,
+		workspaceID,
+		key,
+		func(ctx context.Context) ([]sqlc.ListProductPriceOptionCatalogRowsRow, error) {
+			return r.q.ListProductPriceOptionCatalogRows(ctx, sqlc.ListProductPriceOptionCatalogRowsParams{
+				WorkspaceID: workspaceID,
+				ProductID:   productID,
+			})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -522,7 +582,15 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 	var selected sqlc.ListProductsCatalogCacheRowsRow
 	found := false
 	for _, row := range rows {
-		if productCatalogRowActive(row.IsVisible, row.IsClosed, row.AvailableFrom, row.AvailableUntil, row.PriceStartsAt, row.PriceEndsAt, now) {
+		if productCatalogRowActive(
+			row.IsVisible,
+			row.IsClosed,
+			row.AvailableFrom,
+			row.AvailableUntil,
+			row.PriceStartsAt,
+			row.PriceEndsAt,
+			now,
+		) {
 			selected = row
 			found = true
 			break
@@ -581,7 +649,12 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 	return product, true
 }
 
-func filterProductsByTarget(products []Product, isPremium bool, sex, country, locale, platform string, platformID int64) []Product {
+func filterProductsByTarget(
+	products []Product,
+	isPremium bool,
+	sex, country, locale, platform string,
+	platformID int64,
+) []Product {
 	filtered := products[:0]
 	for _, product := range products {
 		if productTargetMatches(product.Target, isPremium, sex, country, locale, platform, platformID) {
@@ -592,7 +665,12 @@ func filterProductsByTarget(products []Product, isPremium bool, sex, country, lo
 	return filtered
 }
 
-func productTargetMatches(raw json.RawMessage, isPremium bool, sex, country, locale, platform string, platformID int64) bool {
+func productTargetMatches(
+	raw json.RawMessage,
+	isPremium bool,
+	sex, country, locale, platform string,
+	platformID int64,
+) bool {
 	return target.Match(raw, target.Context{
 		IsPremium:  isPremium,
 		Sex:        sex,
@@ -632,7 +710,9 @@ func (r *PaymentRepository) attachProductsLimitLocks(
 
 	counts := make(map[string]uint64, len(rows))
 	for _, row := range rows {
-		counts[productLimitCounterKey(row.ProductID, string(row.CounterScope), row.PlatformUserID, row.WindowStart, row.WindowEnd)] = uint64(row.PaidCount)
+		counts[productLimitCounterKey(row.ProductID, string(row.CounterScope), row.PlatformUserID, row.WindowStart, row.WindowEnd)] = uint64(
+			row.PaidCount,
+		)
 	}
 
 	for index := range products {
@@ -642,7 +722,14 @@ func (r *PaymentRepository) attachProductsLimitLocks(
 	return nil
 }
 
-func attachProductListLimitLock(rule *ProductLimitRule, productID string, scope string, platformUserID string, now time.Time, counts map[string]uint64) {
+func attachProductListLimitLock(
+	rule *ProductLimitRule,
+	productID string,
+	scope string,
+	platformUserID string,
+	now time.Time,
+	counts map[string]uint64,
+) {
 	if rule.Limit <= 0 || rule.Interval == "UNLIMITED" {
 		return
 	}
@@ -655,20 +742,44 @@ func attachProductListLimitLock(rule *ProductLimitRule, productID string, scope 
 	}
 }
 
-func productLimitCounterKey(productID string, scope string, platformUserID string, start time.Time, end time.Time) string {
-	return productID + "\x00" + scope + "\x00" + platformUserID + "\x00" + start.Format(time.RFC3339Nano) + "\x00" + end.Format(time.RFC3339Nano)
+func productLimitCounterKey(
+	productID string,
+	scope string,
+	platformUserID string,
+	start time.Time,
+	end time.Time,
+) string {
+	return productID + "\x00" + scope + "\x00" + platformUserID + "\x00" + start.Format(
+		time.RFC3339Nano,
+	) + "\x00" + end.Format(
+		time.RFC3339Nano,
+	)
 }
 
-func selectProductCatalogPrice(rows []sqlc.ListProductCatalogCacheRowsRow, now time.Time) (sqlc.ListProductCatalogCacheRowsRow, bool) {
+func selectProductCatalogPrice(
+	rows []sqlc.ListProductCatalogCacheRowsRow,
+	now time.Time,
+) (sqlc.ListProductCatalogCacheRowsRow, bool) {
 	for _, row := range rows {
-		if productCatalogRowActive(row.IsVisible, row.IsClosed, row.AvailableFrom, row.AvailableUntil, row.PriceStartsAt, row.PriceEndsAt, now) {
+		if productCatalogRowActive(
+			row.IsVisible,
+			row.IsClosed,
+			row.AvailableFrom,
+			row.AvailableUntil,
+			row.PriceStartsAt,
+			row.PriceEndsAt,
+			now,
+		) {
 			return row, true
 		}
 	}
 	return sqlc.ListProductCatalogCacheRowsRow{}, false
 }
 
-func mapProductPreviewCatalogRows(rows []sqlc.ListProductPreviewCatalogCacheRowsRow, now time.Time) (ProductPreview, error) {
+func mapProductPreviewCatalogRows(
+	rows []sqlc.ListProductPreviewCatalogCacheRowsRow,
+	now time.Time,
+) (ProductPreview, error) {
 	if len(rows) == 0 {
 		return ProductPreview{}, sql.ErrNoRows
 	}
@@ -729,16 +840,35 @@ func paymentCacheDurationUnitPtr(value sqlc.NullPaymentProductCacheDurationUnit)
 	return &unit
 }
 
-func selectProductPreviewCatalogPrice(rows []sqlc.ListProductPreviewCatalogCacheRowsRow, now time.Time) (sqlc.ListProductPreviewCatalogCacheRowsRow, bool) {
+func selectProductPreviewCatalogPrice(
+	rows []sqlc.ListProductPreviewCatalogCacheRowsRow,
+	now time.Time,
+) (sqlc.ListProductPreviewCatalogCacheRowsRow, bool) {
 	for _, row := range rows {
-		if productCatalogRowActive(row.IsVisible, row.IsClosed, row.AvailableFrom, row.AvailableUntil, row.PriceStartsAt, row.PriceEndsAt, now) {
+		if productCatalogRowActive(
+			row.IsVisible,
+			row.IsClosed,
+			row.AvailableFrom,
+			row.AvailableUntil,
+			row.PriceStartsAt,
+			row.PriceEndsAt,
+			now,
+		) {
 			return row, true
 		}
 	}
 	return sqlc.ListProductPreviewCatalogCacheRowsRow{}, false
 }
 
-func productCatalogRowActive(isVisible bool, isClosed bool, availableFrom time.Time, availableUntil time.Time, priceStartsAt time.Time, priceEndsAt time.Time, now time.Time) bool {
+func productCatalogRowActive(
+	isVisible bool,
+	isClosed bool,
+	availableFrom time.Time,
+	availableUntil time.Time,
+	priceStartsAt time.Time,
+	priceEndsAt time.Time,
+	now time.Time,
+) bool {
 	return isVisible &&
 		!isClosed &&
 		!now.Before(availableFrom) &&
@@ -747,7 +877,10 @@ func productCatalogRowActive(isVisible bool, isClosed bool, availableFrom time.T
 		!now.After(priceEndsAt)
 }
 
-func (r *PaymentRepository) CreateProductPurchaseKey(ctx context.Context, params ProductCreateKeyParams) (string, error) {
+func (r *PaymentRepository) CreateProductPurchaseKey(
+	ctx context.Context,
+	params ProductCreateKeyParams,
+) (string, error) {
 	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
 	if err != nil {
 		return "", err

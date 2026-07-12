@@ -14,8 +14,11 @@ import (
 )
 
 var (
-	ErrNotFound          = serviceerrors.New(serviceerrors.CodeNotFound, "control entity not found")
-	ErrInvalidScope      = serviceerrors.New(serviceerrors.CodeInvalidFields, "control workspace or account is required")
+	ErrNotFound     = serviceerrors.New(serviceerrors.CodeNotFound, "control entity not found")
+	ErrInvalidScope = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"control workspace or account is required",
+	)
 	ErrForbidden         = serviceerrors.New(serviceerrors.CodeForbidden, "control access denied")
 	ErrRoleHierarchy     = serviceerrors.New(serviceerrors.CodeForbidden, "control role hierarchy denied")
 	ErrMethodNotFound    = serviceerrors.New(serviceerrors.CodeNotFound, "control method not found")
@@ -23,7 +26,10 @@ var (
 	ErrRoleNotFound      = serviceerrors.New(serviceerrors.CodeNotFound, "control role not found")
 	ErrAccountNotFound   = serviceerrors.New(serviceerrors.CodeNotFound, "control account not found")
 	ErrWorkspaceNotFound = serviceerrors.New(serviceerrors.CodeNotFound, "control workspace not found")
-	ErrTwoFactorEnabled  = serviceerrors.New(serviceerrors.CodeConflict, "control two-factor authentication is already enabled")
+	ErrTwoFactorEnabled  = serviceerrors.New(
+		serviceerrors.CodeConflict,
+		"control two-factor authentication is already enabled",
+	)
 )
 
 const bootstrapQueryTimeout = 30 * time.Second

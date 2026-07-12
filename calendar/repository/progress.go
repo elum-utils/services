@@ -28,7 +28,12 @@ func (r *Repository) GetProgress(ctx context.Context, identity Identity, calenda
 	}, nil
 }
 
-func (r *Repository) Next(ctx context.Context, identity Identity, ref, locale string, now time.Time) (RecordResult, error) {
+func (r *Repository) Next(
+	ctx context.Context,
+	identity Identity,
+	ref, locale string,
+	now time.Time,
+) (RecordResult, error) {
 	calendar, err := r.GetCalendar(ctx, identity.WorkspaceID, ref, locale)
 	if err != nil || calendar.ID == "" {
 		return RecordResult{Status: StatusNotFound, Calendar: calendar}, err

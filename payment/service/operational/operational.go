@@ -35,7 +35,10 @@ func (o *Operational) CreateEvent(ctx context.Context, params CreateEventParams)
 	return o.checkout.CreateEvent(mergedCtx, params)
 }
 
-func (o *Operational) CompleteAttempt(ctx context.Context, params CompleteAttemptParams) (*CompleteAttemptResult, error) {
+func (o *Operational) CompleteAttempt(
+	ctx context.Context,
+	params CompleteAttemptParams,
+) (*CompleteAttemptResult, error) {
 	mergedCtx, cancel := contextutil.Merge(o.rootCtx, ctx)
 	defer cancel()
 
