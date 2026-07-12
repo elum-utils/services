@@ -14,6 +14,7 @@ import (
 const adminListEvents = `-- name: AdminListEvents :many
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -32,19 +33,21 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE ($1 = '' OR source_service = $2)
-  AND ($3 = '' OR event_type = $4)
-  AND ($5 = '' OR status = $6)
+WHERE workspace_id = $1
+  AND ($2 = '' OR source_service = $3)
+  AND ($4 = '' OR event_type = $5)
+  AND ($6 = '' OR status = $7)
 ORDER BY created_at DESC, id DESC
-LIMIT $7 OFFSET $8
+LIMIT $8 OFFSET $9
 `
 
 type AdminListEventsParams struct {
-	Column1       interface{} `json:"column_1"`
+	WorkspaceID   string      `json:"workspace_id"`
+	Column2       interface{} `json:"column_2"`
 	SourceService string      `json:"source_service"`
-	Column3       interface{} `json:"column_3"`
+	Column4       interface{} `json:"column_4"`
 	EventType     string      `json:"event_type"`
-	Column5       interface{} `json:"column_5"`
+	Column6       interface{} `json:"column_6"`
 	Status        string      `json:"status"`
 	Limit         int32       `json:"limit"`
 	Offset        int32       `json:"offset"`
@@ -52,11 +55,12 @@ type AdminListEventsParams struct {
 
 func (q *Queries) AdminListEvents(ctx context.Context, arg AdminListEventsParams) ([]ClbEvent, error) {
 	rows, err := q.query(ctx, q.adminListEventsStmt, adminListEvents,
-		arg.Column1,
+		arg.WorkspaceID,
+		arg.Column2,
 		arg.SourceService,
-		arg.Column3,
+		arg.Column4,
 		arg.EventType,
-		arg.Column5,
+		arg.Column6,
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
@@ -70,6 +74,7 @@ func (q *Queries) AdminListEvents(ctx context.Context, arg AdminListEventsParams
 		var i ClbEvent
 		if err := rows.Scan(
 			&i.ID,
+			&i.WorkspaceID,
 			&i.SourceService,
 			&i.EventType,
 			&i.EventKey,
@@ -109,12 +114,18 @@ SET status = 'ok',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
   AND status IN ('pending', 'processing')
 `
 
-func (q *Queries) AdminMarkEventOK(ctx context.Context, id int64) (int64, error) {
-	result, err := q.exec(ctx, q.adminMarkEventOKStmt, adminMarkEventOK, id)
+type AdminMarkEventOKParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminMarkEventOK(ctx context.Context, arg AdminMarkEventOKParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminMarkEventOKStmt, adminMarkEventOK, arg.WorkspaceID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -129,17 +140,19 @@ SET status = 'reject',
     locked_by = NULL,
     locked_until = NULL,
     updated_at = NOW()
-WHERE id = $2
+WHERE workspace_id = $2
+  AND id = $3
   AND status IN ('pending', 'processing')
 `
 
 type AdminMarkEventRejectParams struct {
 	RejectReason sql.NullString `json:"reject_reason"`
+	WorkspaceID  string         `json:"workspace_id"`
 	ID           int64          `json:"id"`
 }
 
 func (q *Queries) AdminMarkEventReject(ctx context.Context, arg AdminMarkEventRejectParams) (int64, error) {
-	result, err := q.exec(ctx, q.adminMarkEventRejectStmt, adminMarkEventReject, arg.RejectReason, arg.ID)
+	result, err := q.exec(ctx, q.adminMarkEventRejectStmt, adminMarkEventReject, arg.RejectReason, arg.WorkspaceID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -153,13 +166,14 @@ SET status = 'pending',
     locked_until = NULL,
     next_attempt_at = NOW(),
     updated_at = NOW()
-WHERE status = 'processing'
+WHERE workspace_id = $1
+  AND status = 'processing'
   AND locked_until IS NOT NULL
   AND locked_until <= NOW()
 `
 
-func (q *Queries) AdminResetExpiredProcessing(ctx context.Context) (int64, error) {
-	result, err := q.exec(ctx, q.adminResetExpiredProcessingStmt, adminResetExpiredProcessing)
+func (q *Queries) AdminResetExpiredProcessing(ctx context.Context, workspaceID string) (int64, error) {
+	result, err := q.exec(ctx, q.adminResetExpiredProcessingStmt, adminResetExpiredProcessing, workspaceID)
 	if err != nil {
 		return 0, err
 	}
@@ -174,12 +188,18 @@ SET status = 'pending',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
   AND status IN ('pending', 'processing')
 `
 
-func (q *Queries) AdminRetryEventNow(ctx context.Context, id int64) (int64, error) {
-	result, err := q.exec(ctx, q.adminRetryEventNowStmt, adminRetryEventNow, id)
+type AdminRetryEventNowParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminRetryEventNow(ctx context.Context, arg AdminRetryEventNowParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminRetryEventNowStmt, adminRetryEventNow, arg.WorkspaceID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -188,6 +208,7 @@ func (q *Queries) AdminRetryEventNow(ctx context.Context, id int64) (int64, erro
 
 const createEvent = `-- name: CreateEvent :one
 INSERT INTO clb_event (
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -196,13 +217,14 @@ INSERT INTO clb_event (
     payload_content_type,
     next_attempt_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (idempotency_key) DO UPDATE SET
     idempotency_key = EXCLUDED.idempotency_key
 RETURNING id
 `
 
 type CreateEventParams struct {
+	WorkspaceID        string    `json:"workspace_id"`
 	SourceService      string    `json:"source_service"`
 	EventType          string    `json:"event_type"`
 	EventKey           string    `json:"event_key"`
@@ -214,6 +236,7 @@ type CreateEventParams struct {
 
 func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (int64, error) {
 	row := q.queryRow(ctx, q.createEventStmt, createEvent,
+		arg.WorkspaceID,
 		arg.SourceService,
 		arg.EventType,
 		arg.EventKey,
@@ -230,6 +253,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (int64
 const getEvent = `-- name: GetEvent :one
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -248,15 +272,22 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
 LIMIT 1
 `
 
-func (q *Queries) GetEvent(ctx context.Context, id int64) (ClbEvent, error) {
-	row := q.queryRow(ctx, q.getEventStmt, getEvent, id)
+type GetEventParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (ClbEvent, error) {
+	row := q.queryRow(ctx, q.getEventStmt, getEvent, arg.WorkspaceID, arg.ID)
 	var i ClbEvent
 	err := row.Scan(
 		&i.ID,
+		&i.WorkspaceID,
 		&i.SourceService,
 		&i.EventType,
 		&i.EventKey,
@@ -281,6 +312,7 @@ func (q *Queries) GetEvent(ctx context.Context, id int64) (ClbEvent, error) {
 const listDueEventsForUpdate = `-- name: ListDueEventsForUpdate :many
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -325,6 +357,7 @@ func (q *Queries) ListDueEventsForUpdate(ctx context.Context, arg ListDueEventsF
 		var i ClbEvent
 		if err := rows.Scan(
 			&i.ID,
+			&i.WorkspaceID,
 			&i.SourceService,
 			&i.EventType,
 			&i.EventKey,

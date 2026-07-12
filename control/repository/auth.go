@@ -10,6 +10,7 @@ import (
 	"time"
 
 	controlsqlc "github.com/elum-utils/services/control/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/google/uuid"
 )
 
@@ -28,25 +29,68 @@ func (r *Repository) AuthenticateIdentity(ctx context.Context, value IdentityInp
 	if err := required(value.Provider, value.Subject); err != nil {
 		return Account{}, false, err
 	}
-	account, err := r.q.FindAccountByIdentity(ctx, controlsqlc.FindAccountByIdentityParams{Provider: value.Provider, ProviderSubject: value.Subject})
-	if err == nil {
-		result := Account{ID: account.ID, DisplayName: account.DisplayName, Status: account.Status, CreatedAt: account.CreatedAt, UpdatedAt: account.UpdatedAt}
-		if result.Status != "active" {
-			return Account{}, false, ErrForbidden
-		}
-		return result, false, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return Account{}, false, err
-	}
-	created, err := r.CreateAccount(ctx, uuid.NewString(), value.DisplayName)
+
+	var result Account
+	var created bool
+	err := sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries {
+			return controlsqlc.New(tx)
+		},
+		func(tx *sql.Tx, q *controlsqlc.Queries) error {
+			if _, err := tx.ExecContext(
+				ctx,
+				"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+				"control:identity:"+value.Provider+"\x00"+value.Subject,
+			); err != nil {
+				return err
+			}
+
+			account, err := q.FindAccountByIdentity(ctx, controlsqlc.FindAccountByIdentityParams{
+				Provider:        value.Provider,
+				ProviderSubject: value.Subject,
+			})
+			if err == nil {
+				result = mapAccountRow(account)
+				return nil
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+
+			accountID := uuid.NewString()
+			if err := q.CreateAccount(ctx, controlsqlc.CreateAccountParams{
+				ID:          accountID,
+				DisplayName: value.DisplayName,
+			}); err != nil {
+				return err
+			}
+			if err := q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{
+				AccountID:       accountID,
+				Provider:        value.Provider,
+				ProviderSubject: value.Subject,
+				Payload:         rawMessageParam(value.Payload),
+			}); err != nil {
+				return err
+			}
+
+			account, err = q.GetAccount(ctx, accountID)
+			if err != nil {
+				return err
+			}
+			result = mapAccountRow(account)
+			created = true
+			return nil
+		},
+	)
 	if err != nil {
 		return Account{}, false, err
 	}
-	if err := r.q.UpsertIdentity(ctx, controlsqlc.UpsertIdentityParams{AccountID: created.ID, Provider: value.Provider, ProviderSubject: value.Subject, Payload: rawMessageParam(value.Payload)}); err != nil {
-		return Account{}, false, err
+	if result.Status != "active" {
+		return Account{}, false, ErrForbidden
 	}
-	return created, true, nil
+	return result, created, nil
 }
 
 func (r *Repository) BindIdentity(ctx context.Context, accountID string, value IdentityInput) error {
@@ -75,14 +119,48 @@ func (r *Repository) UnbindIdentity(ctx context.Context, accountID, provider str
 	if err := required(accountID, provider); err != nil {
 		return 0, err
 	}
-	count, err := r.q.CountIdentities(ctx, accountID)
-	if err != nil {
-		return 0, err
+	var rows int64
+	err := sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries {
+			return controlsqlc.New(tx)
+		},
+		func(tx *sql.Tx, q *controlsqlc.Queries) error {
+			if _, err := tx.ExecContext(
+				ctx,
+				"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+				"control:account-identities:"+accountID,
+			); err != nil {
+				return err
+			}
+
+			count, err := q.CountIdentities(ctx, accountID)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return ErrForbidden
+			}
+
+			rows, err = q.DeleteIdentity(ctx, controlsqlc.DeleteIdentityParams{
+				AccountID: accountID,
+				Provider:  provider,
+			})
+			return err
+		},
+	)
+	return rows, err
+}
+
+func mapAccountRow(value controlsqlc.ControlAccount) Account {
+	return Account{
+		ID:          value.ID,
+		DisplayName: value.DisplayName,
+		Status:      value.Status,
+		CreatedAt:   value.CreatedAt,
+		UpdatedAt:   value.UpdatedAt,
 	}
-	if count <= 1 {
-		return 0, ErrForbidden
-	}
-	return r.q.DeleteIdentity(ctx, controlsqlc.DeleteIdentityParams{AccountID: accountID, Provider: provider})
 }
 
 func (r *Repository) CreateSession(ctx context.Context, accountID string, value SessionInput) (Session, string, error) {

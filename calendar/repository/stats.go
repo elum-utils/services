@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -61,8 +63,14 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, calendarID
 	return result, nil
 }
 
-func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
+func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+		return fmt.Errorf("calendar stats workspace or date range is invalid")
+	}
+
 	return r.q.RefreshDailyStats(ctx, calendarsqlc.RefreshDailyStatsParams{
-		OccurredAt: from, OccurredAt_2: until,
+		RefreshWorkspaceID: workspaceID,
+		OccurredAt:         from,
+		OccurredAt_2:       until,
 	})
 }

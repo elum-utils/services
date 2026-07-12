@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
@@ -79,8 +81,13 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID string, pro
 	return result, nil
 }
 
-func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
+func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+		return fmt.Errorf("promo stats workspace or date range is invalid")
+	}
+
 	return r.q.RefreshDailyStats(ctx, promosqlc.RefreshDailyStatsParams{
+		WorkspaceID:  workspaceID,
 		OccurredAt:   from,
 		OccurredAt_2: until,
 	})

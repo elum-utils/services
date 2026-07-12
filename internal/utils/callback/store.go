@@ -44,6 +44,7 @@ type Store struct {
 }
 
 type CreateParams struct {
+	WorkspaceID        string
 	SourceService      string
 	EventType          string
 	EventKey           string
@@ -69,6 +70,7 @@ type FailParams struct {
 }
 
 type AdminListEventsParams struct {
+	WorkspaceID   string
 	SourceService string
 	EventType     string
 	Status        string
@@ -78,6 +80,7 @@ type AdminListEventsParams struct {
 
 type Event struct {
 	ID                 uint64
+	WorkspaceID        string
 	SourceService      string
 	EventType          string
 	EventKey           string
@@ -134,6 +137,10 @@ func (s *Store) CreateEvent(ctx context.Context, params CreateParams) (uint64, e
 	if err := s.validate(); err != nil {
 		return 0, err
 	}
+	workspaceID := strings.TrimSpace(params.WorkspaceID)
+	if workspaceID == "" {
+		return 0, errors.New("callback: workspace id is required")
+	}
 	sourceService := params.SourceService
 	if sourceService == "" {
 		sourceService = DefaultSourceService
@@ -158,11 +165,11 @@ func (s *Store) CreateEvent(ctx context.Context, params CreateParams) (uint64, e
 	if !s.postgres {
 		result, err := s.executor.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (
-    source_service, event_type, event_key, idempotency_key,
+    workspace_id, source_service, event_type, event_key, idempotency_key,
     payload, payload_content_type, next_attempt_at
-) VALUES (?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, s.table()),
-			sourceService, params.EventType, params.EventKey, idempotencyKey,
+			workspaceID, sourceService, params.EventType, params.EventKey, idempotencyKey,
 			params.Payload, contentType, nextAttemptAt,
 		)
 		if err != nil {
@@ -174,28 +181,32 @@ ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, s.table()),
 	var id int64
 	err := s.executor.QueryRowContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (
-    source_service, event_type, event_key, idempotency_key,
+    workspace_id, source_service, event_type, event_key, idempotency_key,
     payload, payload_content_type, next_attempt_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (idempotency_key) DO UPDATE SET
     idempotency_key = EXCLUDED.idempotency_key
 RETURNING id`, s.table()),
-		sourceService, params.EventType, params.EventKey, idempotencyKey,
+		workspaceID, sourceService, params.EventType, params.EventKey, idempotencyKey,
 		params.Payload, contentType, nextAttemptAt,
 	).Scan(&id)
 	return uint64(id), err
 }
 
-func (s *Store) GetEvent(ctx context.Context, id uint64) (Event, error) {
+func (s *Store) GetEvent(ctx context.Context, workspaceID string, id uint64) (Event, error) {
 	if err := s.validate(); err != nil {
 		return Event{}, err
 	}
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return Event{}, errors.New("callback: workspace id is required")
+	}
 	query := fmt.Sprintf(`
-SELECT %s FROM %s WHERE id = ? LIMIT 1`, eventColumns, s.table())
+SELECT %s FROM %s WHERE workspace_id = ? AND id = ? LIMIT 1`, eventColumns, s.table())
 	if s.postgres {
 		query = rewriteQuestionPlaceholders(query)
 	}
-	row := s.executor.QueryRowContext(ctx, query, int64(id))
+	row := s.executor.QueryRowContext(ctx, query, workspaceID, int64(id))
 	value, err := scanEvent(row.Scan)
 	if err != nil {
 		return Event{}, err
@@ -207,10 +218,15 @@ func (s *Store) AdminListEvents(ctx context.Context, params AdminListEventsParam
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
+	workspaceID := strings.TrimSpace(params.WorkspaceID)
+	if workspaceID == "" {
+		return nil, errors.New("callback: workspace id is required")
+	}
 	limit, offset := normalizePage(params.Limit, params.Offset)
 	query := fmt.Sprintf(`
 SELECT %s FROM %s
-WHERE (? = '' OR source_service = ?)
+WHERE workspace_id = ?
+  AND (? = '' OR source_service = ?)
   AND (? = '' OR event_type = ?)
   AND (? = '' OR status = ?)
 ORDER BY created_at DESC, id DESC
@@ -219,6 +235,7 @@ LIMIT ? OFFSET ?`, eventColumns, s.table())
 		query = rewriteQuestionPlaceholders(query)
 	}
 	rows, err := s.executor.QueryContext(ctx, query,
+		workspaceID,
 		params.SourceService, params.SourceService,
 		params.EventType, params.EventType,
 		params.Status, params.Status,
@@ -239,32 +256,48 @@ LIMIT ? OFFSET ?`, eventColumns, s.table())
 	return result, rows.Err()
 }
 
-func (s *Store) AdminRetryEventNow(ctx context.Context, id uint64) (int64, error) {
+func (s *Store) AdminRetryEventNow(ctx context.Context, workspaceID string, id uint64) (int64, error) {
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return 0, err
+	}
 	return s.execRows(ctx, `
 SET status = 'pending', next_attempt_at = NOW(), locked_by = NULL,
     locked_until = NULL, last_error = NULL, updated_at = NOW()
-WHERE id = ? AND status IN ('pending', 'processing')`, int64(id))
+WHERE workspace_id = ? AND id = ? AND status IN ('pending', 'processing')`, workspaceID, int64(id))
 }
 
-func (s *Store) AdminMarkEventOK(ctx context.Context, id uint64) (int64, error) {
+func (s *Store) AdminMarkEventOK(ctx context.Context, workspaceID string, id uint64) (int64, error) {
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return 0, err
+	}
 	return s.execRows(ctx, `
 SET status = 'ok', delivered_at = NOW(), locked_by = NULL,
     locked_until = NULL, last_error = NULL, updated_at = NOW()
-WHERE id = ? AND status IN ('pending', 'processing')`, int64(id))
+WHERE workspace_id = ? AND id = ? AND status IN ('pending', 'processing')`, workspaceID, int64(id))
 }
 
-func (s *Store) AdminMarkEventReject(ctx context.Context, id uint64, reason string) (int64, error) {
+func (s *Store) AdminMarkEventReject(ctx context.Context, workspaceID string, id uint64, reason string) (int64, error) {
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return 0, err
+	}
 	return s.execRows(ctx, `
 SET status = 'reject', rejected_at = NOW(), reject_reason = ?,
     locked_by = NULL, locked_until = NULL, updated_at = NOW()
-WHERE id = ? AND status IN ('pending', 'processing')`, nullableString(reason), int64(id))
+WHERE workspace_id = ? AND id = ? AND status IN ('pending', 'processing')`, nullableString(reason), workspaceID, int64(id))
 }
 
-func (s *Store) AdminResetExpiredProcessing(ctx context.Context) (int64, error) {
+func (s *Store) AdminResetExpiredProcessing(ctx context.Context, workspaceID string) (int64, error) {
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return 0, err
+	}
 	return s.execRows(ctx, `
 SET status = 'pending', locked_by = NULL, locked_until = NULL,
     next_attempt_at = NOW(), updated_at = NOW()
-WHERE status = 'processing' AND locked_until IS NOT NULL AND locked_until <= NOW()`)
+WHERE workspace_id = ? AND status = 'processing' AND locked_until IS NOT NULL AND locked_until <= NOW()`, workspaceID)
 }
 
 func (s *Store) LeaseEvents(ctx context.Context, params LeaseParams) ([]storedEvent, error) {
@@ -422,6 +455,14 @@ func normalizePage(limit int32, offset int32) (int32, int32) {
 	return limit, offset
 }
 
+func requireWorkspaceID(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("callback: workspace id is required")
+	}
+	return value, nil
+}
+
 func (s *Store) withTx(ctx context.Context, fn func(*Store) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -514,6 +555,7 @@ func bootstrapMySQLTable(ctx context.Context, db *sql.DB, tableName string) erro
 	statement := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    workspace_id VARCHAR(36) NOT NULL,
     source_service VARCHAR(64) NOT NULL,
     event_type VARCHAR(128) NOT NULL,
     event_key VARCHAR(128) NOT NULL,
@@ -547,6 +589,7 @@ func bootstrapPostgresTable(ctx context.Context, db *sql.DB, tableName string) e
 	statement := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
     id BIGSERIAL PRIMARY KEY,
+    workspace_id VARCHAR(36) NOT NULL,
     source_service VARCHAR(64) NOT NULL,
     event_type VARCHAR(128) NOT NULL,
     event_key VARCHAR(128) NOT NULL,
@@ -571,9 +614,15 @@ CREATE TABLE IF NOT EXISTS %s (
 	if _, err := db.ExecContext(ctx, statement); err != nil {
 		return fmt.Errorf("callback schema statement failed for %s: %w", tableName, err)
 	}
+	if _, err := db.ExecContext(
+		ctx,
+		fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36) NOT NULL DEFAULT ''`, table),
+	); err != nil {
+		return fmt.Errorf("callback workspace migration failed for %s: %w", tableName, err)
+	}
 	indexes := []string{
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s_due_idx ON %s (status, next_attempt_at, locked_until, id)`, tableName, table),
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s_type_idx ON %s (event_type, status, created_at)`, tableName, table),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s_workspace_type_idx ON %s (workspace_id, event_type, status, created_at)`, tableName, table),
 	}
 	for _, statement := range indexes {
 		if _, err := db.ExecContext(ctx, statement); err != nil {
@@ -598,7 +647,7 @@ func leasedResult(rows int64, err error) error {
 }
 
 const eventColumns = `
-id, source_service, event_type, event_key, idempotency_key,
+id, workspace_id, source_service, event_type, event_key, idempotency_key,
 payload, payload_content_type, status, attempt_count, next_attempt_at,
 locked_by, locked_until, delivered_at, rejected_at, last_error,
 reject_reason, created_at, updated_at`
@@ -613,6 +662,7 @@ func scanEvent(scan scanFunc) (storedEvent, error) {
 	var value storedEvent
 	err := scan(
 		&value.ID,
+		&value.WorkspaceID,
 		&value.SourceService,
 		&value.EventType,
 		&value.EventKey,
@@ -640,6 +690,7 @@ func scanEvent(scan scanFunc) (storedEvent, error) {
 func mapEvent(value storedEvent) Event {
 	return Event{
 		ID:                 uint64(value.ID),
+		WorkspaceID:        value.WorkspaceID,
 		SourceService:      value.SourceService,
 		EventType:          value.EventType,
 		EventKey:           value.EventKey,

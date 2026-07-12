@@ -509,7 +509,7 @@ func (r *Repository) claimProgress(ctx context.Context, identity Identity, task 
 	eventKey := fmt.Sprintf("tasks.claimed:%d", progress.ID)
 	_, err = repositoryValue[uint64](ctx, r, func(ctx context.Context) (uint64, error) {
 		return r.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
-			SourceService: "tasks", EventType: CallbackEventClaimed,
+			WorkspaceID: identity.WorkspaceID, SourceService: "tasks", EventType: CallbackEventClaimed,
 			EventKey: eventKey, IdempotencyKey: eventKey,
 			Payload: payload, NextAttemptAt: now,
 		})

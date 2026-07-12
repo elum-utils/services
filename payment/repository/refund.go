@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
+	"strings"
+
 	json "github.com/goccy/go-json"
 
 	utils "github.com/elum-utils/services/internal/utils"
@@ -13,6 +16,7 @@ import (
 )
 
 type RefundCreateParams struct {
+	WorkspaceID      string
 	OrderID          uint64
 	AttemptID        uint64
 	ProviderCode     string
@@ -188,6 +192,7 @@ func (r *PaymentRepository) enqueuePaymentRefundedCallback(
 	}
 	eventKey := fmt.Sprintf("payment.order.refunded:%d", order.ID)
 	_, err = r.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
+		WorkspaceID:        order.WorkspaceID,
 		SourceService:      "payment",
 		EventType:          "payment.order.refunded",
 		EventKey:           eventKey,
@@ -225,9 +230,34 @@ func (r *PaymentRepository) GetRefundAttempt(ctx context.Context, workspaceID st
 }
 
 func (r *PaymentRepository) CreateRefund(ctx context.Context, params RefundCreateParams) (uint64, error) {
+	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	if params.OrderID == 0 || params.OrderID > math.MaxInt64 ||
+		params.AttemptID == 0 || params.AttemptID > math.MaxInt64 ||
+		params.AmountMinor == 0 || params.AmountMinor > math.MaxInt64 ||
+		strings.TrimSpace(params.ProviderCode) == "" || strings.TrimSpace(params.AssetCode) == "" {
+		return 0, ErrAttemptFieldsInvalid
+	}
+	attempt, err := r.q.AdminGetPaymentAttemptForWorkspace(ctx, sqlc.AdminGetPaymentAttemptForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(params.AttemptID),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if uint64(attempt.OrderID) != params.OrderID || attempt.ProviderCode != params.ProviderCode ||
+		attempt.AssetCode != params.AssetCode || params.AmountMinor > uint64(attempt.AmountMinor) {
+		return 0, ErrPaymentMismatch
+	}
+
 	status := params.Status
 	if status == "" {
 		status = string(sqlc.PaymentRefundStatusCreated)
+	}
+	if !validRefundStatus(status) {
+		return 0, ErrOrderStateInvalid
 	}
 	id, err := r.q.AdminCreateRefund(ctx, sqlc.AdminCreateRefundParams{
 		OrderID:          int64(params.OrderID),
@@ -240,6 +270,41 @@ func (r *PaymentRepository) CreateRefund(ctx context.Context, params RefundCreat
 		Reason:           sqlwrap.NullFromPtr(params.Reason, func(v string) sql.NullString { return sql.NullString{String: v, Valid: true} }),
 	})
 	return uint64(id), err
+}
+
+func (r *PaymentRepository) AdminUpdateRefundStatus(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	status string,
+	reason string,
+) (int64, error) {
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	if id == 0 || id > math.MaxInt64 || !validRefundStatus(status) {
+		return 0, ErrOrderStateInvalid
+	}
+	return r.q.AdminUpdateRefundStatusForWorkspace(ctx, sqlc.AdminUpdateRefundStatusForWorkspaceParams{
+		Status:      sqlc.PaymentRefundStatus(status),
+		Reason:      sql.NullString{String: reason, Valid: reason != ""},
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
+}
+
+func validRefundStatus(status string) bool {
+	switch sqlc.PaymentRefundStatus(status) {
+	case sqlc.PaymentRefundStatusCreated,
+		sqlc.PaymentRefundStatusPending,
+		sqlc.PaymentRefundStatusSucceeded,
+		sqlc.PaymentRefundStatusCanceled,
+		sqlc.PaymentRefundStatusFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *PaymentRepository) UpdateRefundStatus(ctx context.Context, id uint64, status string, reason string) (int64, error) {

@@ -1,41 +1,52 @@
 package repository
 
 import (
-	"sync"
+	"errors"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
-var calendarCacheKeys sync.Map
+const (
+	calendarCacheAdminCalendar      = "admin_calendar"
+	calendarCacheAdminList          = "admin_list"
+	calendarCacheAdminLocalization  = "admin_localization"
+	calendarCacheAdminLocalizations = "admin_localizations"
+	calendarCacheAdminReward        = "admin_reward"
+	calendarCacheUserCalendar       = "user_calendar"
+	calendarCacheUserCatalog        = "user_catalog"
+)
 
-func calendarCacheKey(parts ...any) string {
-	args := append([]any{"calendar"}, parts...)
+func calendarCacheKey(method, workspaceID string, parts ...any) string {
+	args := append([]any{"calendar", method, workspaceID}, parts...)
 	return sqlwrap.CreateKey(args...)
 }
 
-func rememberCalendarCacheKey(workspaceID, key string) {
-	if workspaceID == "" || key == "" {
-		return
-	}
-	calendarCacheKeys.Store(key, workspaceID)
+func calendarCacheScope(method, workspaceID string) []any {
+	return []any{"calendar", "cache", method, workspaceID}
 }
 
-func (r *Repository) invalidateCalendarCache(workspaceID string) error {
+func (r *Repository) invalidateCalendarCache(workspaceID string) {
 	if r == nil || r.db == nil || workspaceID == "" {
-		return nil
+		return
 	}
-	var outErr error
-	calendarCacheKeys.Range(func(rawKey, rawWorkspaceID any) bool {
-		key, keyOK := rawKey.(string)
-		cachedWorkspaceID, workspaceOK := rawWorkspaceID.(string)
-		if !keyOK || !workspaceOK || cachedWorkspaceID != workspaceID {
-			return true
-		}
-		if err := r.db.DeleteCache(key); err != nil && outErr == nil {
-			outErr = err
-		}
-		calendarCacheKeys.Delete(rawKey)
-		return true
-	})
-	return outErr
+	err := errors.Join(
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheAdminCalendar, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheAdminList, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheAdminLocalization, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheAdminLocalizations, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheAdminReward, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheUserCalendar, workspaceID)...),
+		r.db.BumpCacheVersion(calendarCacheScope(calendarCacheUserCatalog, workspaceID)...),
+	)
+	r.reportCacheInvalidationError(err)
+}
+
+func (r *Repository) reportCacheInvalidationError(err error) {
+	if err == nil || r == nil || r.onCacheInvalidationError == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	r.onCacheInvalidationError(err)
 }

@@ -2,40 +2,6 @@
   "package": {
     "format": "tasks.export.v1",
     "service": "tasks",
-    "items": [
-      {
-        "id": "stars",
-        "item_type": "quantity",
-        "rarity": "common",
-        "position": 10,
-        "localization": {
-          "ru": {
-            "title": "Stars",
-            "description": "Внутренняя валюта."
-          },
-          "en": {
-            "title": "Stars",
-            "description": "Internal currency."
-          }
-        }
-      },
-      {
-        "id": "gift.bear",
-        "item_type": "quantity",
-        "rarity": "rare",
-        "position": 20,
-        "localization": {
-          "ru": {
-            "title": "Подарок мишка",
-            "description": "Подарок: мишка."
-          },
-          "en": {
-            "title": "Bear gift",
-            "description": "Gift: bear."
-          }
-        }
-      }
-    ],
     "groups": [
       {
         "key": "daily",

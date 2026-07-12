@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	json "github.com/goccy/go-json"
+
+	importexport "github.com/elum-utils/services/internal/utils/importexport"
+	"github.com/elum-utils/services/internal/utils/target"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
@@ -83,18 +87,23 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	if strategy != ImportConflictFail && strategy != ImportConflictSkip && strategy != ImportConflictUpdate {
 		return ImportResult{}, fmt.Errorf("unsupported import conflict strategy: %s", strategy)
 	}
-	preview, err := r.PreviewImport(ctx, workspaceID, req.Package)
-	if err != nil {
-		return ImportResult{}, err
-	}
-	if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
-		return ImportResult{}, fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
-	}
 	if err := requireImportSecrets(req.Package, req.Secrets); err != nil {
 		return ImportResult{}, err
 	}
 	result := ImportResult{}
-	err = r.WithTx(ctx, func(txRepo *Repository) error {
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		preview, err := txRepo.PreviewImport(ctx, workspaceID, req.Package)
+		if err != nil {
+			return err
+		}
+		if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
+			return fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
+		}
+
 		return txRepo.importBulk(ctx, workspaceID, req, strategy, preview, &result)
 	})
 	if err != nil {
@@ -103,14 +112,42 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	return result, r.invalidateTaskCache(ctx, workspaceID)
 }
 
-func (r *Repository) importBulk(ctx context.Context, workspaceID string, req ImportRequest, strategy string, preview ImportPreview, result *ImportResult) error {
-	if err := r.importSequencesBulk(ctx, workspaceID, req.Package.Sequences, strategy, preview, result); err != nil {
+func (r *Repository) importBulk(
+	ctx context.Context,
+	workspaceID string,
+	req ImportRequest,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
+	if err := r.importSequencesBulk(
+		ctx,
+		workspaceID,
+		req.Package.Sequences,
+		strategy,
+		preview,
+		result,
+	); err != nil {
 		return err
 	}
-	if err := r.importGroupsBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result); err != nil {
+	if err := r.importGroupsBulk(
+		ctx,
+		workspaceID,
+		req.Package.Groups,
+		strategy,
+		preview,
+		result,
+	); err != nil {
 		return err
 	}
-	taskIDs, err := r.importTasksBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result)
+	taskIDs, err := r.importTasksBulk(
+		ctx,
+		workspaceID,
+		req.Package.Groups,
+		strategy,
+		preview,
+		result,
+	)
 	if err != nil {
 		return err
 	}
@@ -129,7 +166,14 @@ func (r *Repository) importBulk(ctx context.Context, workspaceID string, req Imp
 	return r.importPartnerRewardRulesBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result)
 }
 
-func (r *Repository) importSequencesBulk(ctx context.Context, workspaceID string, sequences []ExportSequence, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importSequencesBulk(
+	ctx context.Context,
+	workspaceID string,
+	sequences []ExportSequence,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0, len(sequences))
 	for _, sequence := range sequences {
 		exists := previewHasConflict(preview, "sequence", sequence.Key)
@@ -144,10 +188,18 @@ func (r *Repository) importSequencesBulk(ctx context.Context, workspaceID string
 		[]string{"workspace_id", "key", "position", "is_active"},
 		rows,
 		"ON CONFLICT (workspace_id, key) DO UPDATE SET position = EXCLUDED.position, is_active = EXCLUDED.is_active, deleted_at = NULL, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importGroupsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importGroupsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	groupRows := make([][]any, 0, len(groups))
 	localizationRows := make([][]any, 0, len(groups)*2)
 	for _, group := range groups {
@@ -167,6 +219,7 @@ func (r *Repository) importGroupsBulk(ctx context.Context, workspaceID string, g
 		[]string{"workspace_id", "key", "position", "is_active"},
 		groupRows,
 		"ON CONFLICT (workspace_id, key) DO UPDATE SET position = EXCLUDED.position, is_active = EXCLUDED.is_active, deleted_at = NULL, updated_at = now()",
+		strategy,
 	); err != nil {
 		return err
 	}
@@ -174,10 +227,18 @@ func (r *Repository) importGroupsBulk(ctx context.Context, workspaceID string, g
 		[]string{"workspace_id", "group_key", "locale", "title", "description"},
 		localizationRows,
 		"ON CONFLICT (workspace_id, group_key, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, preview ImportPreview, result *ImportResult) (map[string]uint64, error) {
+func (r *Repository) importTasksBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) (map[string]uint64, error) {
 	rows := make([][]any, 0)
 	needed := make(map[string]struct{})
 	for _, group := range groups {
@@ -234,6 +295,7 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 			"integration_kind = EXCLUDED.integration_kind, integration_provider = EXCLUDED.integration_provider, "+
 			"integration_payload = EXCLUDED.integration_payload, image_url = EXCLUDED.image_url, is_visible = EXCLUDED.is_visible, "+
 			"is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at, deleted_at = NULL, updated_at = now()",
+		strategy,
 	); err != nil {
 		return nil, err
 	}
@@ -253,7 +315,15 @@ func (r *Repository) importTasksBulk(ctx context.Context, workspaceID string, gr
 	return resultIDs, nil
 }
 
-func (r *Repository) importTaskLocalizationsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importTaskLocalizationsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	taskIDs map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, group := range groups {
 		for _, task := range group.Tasks {
@@ -274,10 +344,19 @@ func (r *Repository) importTaskLocalizationsBulk(ctx context.Context, workspaceI
 		[]string{"workspace_id", "task_id", "locale", "title", "description"},
 		rows,
 		"ON CONFLICT (workspace_id, task_id, locale) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importRewardsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	taskIDs map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, group := range groups {
 		for _, task := range group.Tasks {
@@ -303,10 +382,19 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 		"ON CONFLICT (workspace_id, task_id, reward_key) DO UPDATE SET "+
 			"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
 			"duration_unit = EXCLUDED.duration_unit, position = EXCLUDED.position, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importComplexConditionsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, taskIDs map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importComplexConditionsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	taskIDs map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, group := range groups {
 		for _, task := range group.Tasks {
@@ -340,10 +428,19 @@ func (r *Repository) importComplexConditionsBulk(ctx context.Context, workspaceI
 		"ON CONFLICT (workspace_id, parent_task_id, condition_task_id) DO UPDATE SET "+
 			"required_status = EXCLUDED.required_status, position = EXCLUDED.position, "+
 			"is_required = EXCLUDED.is_required, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importPartnerConfigsBulk(ctx context.Context, workspaceID string, groups []ExportGroup, strategy string, secrets map[string]string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importPartnerConfigsBulk(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	strategy string,
+	secrets map[string]string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, group := range groups {
 		for _, config := range group.PartnerConfigs {
@@ -368,6 +465,7 @@ func (r *Repository) importPartnerConfigsBulk(ctx context.Context, workspaceID s
 		"ON CONFLICT (workspace_id, provider, group_key, platform) DO UPDATE SET "+
 			"is_enabled = EXCLUDED.is_enabled, secret = EXCLUDED.secret, webhook_secret = EXCLUDED.webhook_secret, "+
 			"target = EXCLUDED.target, settings = EXCLUDED.settings, updated_at = now()",
+		strategy,
 	)
 }
 
@@ -400,18 +498,53 @@ func (r *Repository) importPartnerRewardRulesBulk(ctx context.Context, workspace
 		"ON CONFLICT (workspace_id, provider, group_key, external_type, reward_key) DO UPDATE SET "+
 			"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, "+
 			"duration_unit = EXCLUDED.duration_unit, position = EXCLUDED.position, is_enabled = EXCLUDED.is_enabled, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictUpdate string) error {
+func (r *Repository) execImportBulk(
+	ctx context.Context,
+	table string,
+	columns []string,
+	rows [][]any,
+	conflictUpdate string,
+	strategy string,
+) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, conflictUpdate)
-	return repositoryExec(ctx, r, func(ctx context.Context) error {
-		_, err := r.executor.ExecContext(ctx, query, args...)
-		return err
-	})
+	return importexport.ForEachBatch(
+		len(rows),
+		len(columns),
+		importexport.DefaultBatchLimits,
+		func(start, end int) error {
+			query, args := compileImportBulkUpsert(
+				table,
+				columns,
+				rows[start:end],
+				importConflictClause(conflictUpdate, strategy),
+			)
+			return repositoryExec(ctx, r, func(ctx context.Context) error {
+				_, err := r.executor.ExecContext(ctx, query, args...)
+				return err
+			})
+		},
+	)
+}
+
+func importConflictClause(updateClause, strategy string) string {
+	switch strategy {
+	case ImportConflictSkip:
+		index := strings.Index(updateClause, " DO UPDATE")
+		if index < 0 {
+			return ""
+		}
+		return updateClause[:index] + " DO NOTHING"
+	case ImportConflictUpdate:
+		return updateClause
+	default:
+		return ""
+	}
 }
 
 func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictUpdate string) (string, []any) {
@@ -542,7 +675,7 @@ func (r *Repository) importExistingKeys(ctx context.Context, workspaceID string)
 }
 
 func countPackage(pkg ExportPackage) ImportCounts {
-	out := ImportCounts{Items: len(pkg.Items), Groups: len(pkg.Groups), Sequences: len(pkg.Sequences)}
+	out := ImportCounts{Groups: len(pkg.Groups), Sequences: len(pkg.Sequences)}
 	for _, group := range pkg.Groups {
 		out.GroupLocalizations += len(group.Localization)
 		out.Tasks += len(group.Tasks)
@@ -561,38 +694,155 @@ func validateExportPackage(pkg ExportPackage) error {
 	if pkg.Format != ExportFormat {
 		return fmt.Errorf("unsupported tasks export format: %s", pkg.Format)
 	}
-	if pkg.Service != "" && pkg.Service != "tasks" {
+	if pkg.Service != "tasks" {
 		return fmt.Errorf("unsupported export service: %s", pkg.Service)
 	}
-	for _, item := range pkg.Items {
-		if item.ID == "" {
-			return fmt.Errorf("item id is required")
+	sequenceKeys := make(map[string]int, len(pkg.Sequences))
+	for index, sequence := range pkg.Sequences {
+		if strings.TrimSpace(sequence.Key) == "" {
+			return fmt.Errorf("tasks import sequences[%d].key is required", index)
+		}
+		if previous, exists := sequenceKeys[sequence.Key]; exists {
+			return fmt.Errorf("tasks import sequences[%d].key duplicates sequences[%d].key", index, previous)
+		}
+		sequenceKeys[sequence.Key] = index
+	}
+
+	groupKeys := make(map[string]int, len(pkg.Groups))
+	taskPaths := make(map[string]string)
+	conditionRefs := make(map[string][]string)
+	for groupIndex, group := range pkg.Groups {
+		groupPath := fmt.Sprintf("tasks import groups[%d]", groupIndex)
+		if strings.TrimSpace(group.Key) == "" {
+			return fmt.Errorf("%s.key is required", groupPath)
+		}
+		if previous, exists := groupKeys[group.Key]; exists {
+			return fmt.Errorf("%s.key duplicates groups[%d].key", groupPath, previous)
+		}
+		groupKeys[group.Key] = groupIndex
+
+		for locale, text := range group.Localization {
+			if strings.TrimSpace(locale) == "" || strings.TrimSpace(text.Title) == "" {
+				return fmt.Errorf("%s.localization requires locale and title", groupPath)
+			}
+		}
+
+		for configIndex, config := range group.PartnerConfigs {
+			if strings.TrimSpace(config.Provider) == "" || strings.TrimSpace(config.Platform) == "" {
+				return fmt.Errorf("%s.partner_configs[%d] requires provider and platform", groupPath, configIndex)
+			}
+			if err := target.Validate(config.Target); err != nil {
+				return fmt.Errorf("%s.partner_configs[%d].target: %w", groupPath, configIndex, err)
+			}
+			if len(config.Settings) > 0 && !json.Valid(config.Settings) {
+				return fmt.Errorf("%s.partner_configs[%d].settings must be valid JSON", groupPath, configIndex)
+			}
+		}
+
+		for ruleIndex, rule := range group.PartnerRewardRules {
+			if strings.TrimSpace(rule.Provider) == "" {
+				return fmt.Errorf("%s.partner_reward_rules[%d].provider is required", groupPath, ruleIndex)
+			}
+			if err := validateRewardDefinition(rule.Reward); err != nil {
+				return fmt.Errorf("%s.partner_reward_rules[%d].reward: %w", groupPath, ruleIndex, err)
+			}
+		}
+
+		sequencePositions := make(map[string]map[uint32]string)
+		for taskIndex, task := range group.Tasks {
+			taskPath := fmt.Sprintf("%s.tasks[%d]", groupPath, taskIndex)
+			if previous, exists := taskPaths[task.Key]; exists {
+				return fmt.Errorf("%s.key duplicates %s.key", taskPath, previous)
+			}
+			taskPaths[task.Key] = taskPath
+
+			params := normalizeSaveTaskParams(SaveTaskParams{
+				WorkspaceID:         "import",
+				Key:                 task.Key,
+				GroupKey:            group.Key,
+				SequenceKey:         task.SequenceKey,
+				SequencePosition:    task.SequencePosition,
+				TaskKind:            task.TaskKind,
+				ActionKey:           task.ActionKey,
+				ActionKind:          task.ActionKind,
+				ClaimMode:           task.ClaimMode,
+				StartMode:           task.StartMode,
+				TargetCount:         task.TargetCount,
+				ResetUnit:           task.Reset.Unit,
+				ResetEvery:          task.Reset.Every,
+				Position:            task.Position,
+				Payload:             task.Payload,
+				Target:              task.Target,
+				IntegrationKind:     task.Integration.Kind,
+				IntegrationProvider: task.Integration.Provider,
+				IntegrationPayload:  task.Integration.Payload,
+				ImageURL:            task.ImageURL,
+				IsVisible:           task.IsVisible,
+				IsActive:            task.IsActive,
+				StartAt:             task.StartAt,
+				EndAt:               task.EndAt,
+			})
+			if err := validateSaveTask(params); err != nil {
+				return fmt.Errorf("%s: %w", taskPath, err)
+			}
+
+			if task.SequenceKey != nil && task.SequencePosition != nil {
+				if sequencePositions[*task.SequenceKey] == nil {
+					sequencePositions[*task.SequenceKey] = make(map[uint32]string)
+				}
+				if previous := sequencePositions[*task.SequenceKey][*task.SequencePosition]; previous != "" {
+					return fmt.Errorf("%s sequence position duplicates task %s", taskPath, previous)
+				}
+				sequencePositions[*task.SequenceKey][*task.SequencePosition] = task.Key
+			}
+
+			for locale, text := range task.Localization {
+				if strings.TrimSpace(locale) == "" || strings.TrimSpace(text.Title) == "" {
+					return fmt.Errorf("%s.localization requires locale and title", taskPath)
+				}
+			}
+
+			rewardKeys := make(map[string]int, len(task.Rewards))
+			for rewardIndex, reward := range task.Rewards {
+				if previous, exists := rewardKeys[reward.Key]; exists {
+					return fmt.Errorf("%s.rewards[%d].key duplicates rewards[%d].key", taskPath, rewardIndex, previous)
+				}
+				rewardKeys[reward.Key] = rewardIndex
+				if err := validateRewardDefinition(reward); err != nil {
+					return fmt.Errorf("%s.rewards[%d]: %w", taskPath, rewardIndex, err)
+				}
+			}
+
+			conditionKeys := make(map[string]int, len(task.Conditions))
+			for conditionIndex, condition := range task.Conditions {
+				if strings.TrimSpace(condition.TaskKey) == "" || condition.TaskKey == task.Key {
+					return fmt.Errorf("%s.conditions[%d].task_key is invalid", taskPath, conditionIndex)
+				}
+				if previous, exists := conditionKeys[condition.TaskKey]; exists {
+					return fmt.Errorf("%s.conditions[%d] duplicates conditions[%d]", taskPath, conditionIndex, previous)
+				}
+				conditionKeys[condition.TaskKey] = conditionIndex
+				if condition.RequiredStatus != "" &&
+					condition.RequiredStatus != ComplexRequiredStatusReady &&
+					condition.RequiredStatus != ComplexRequiredStatusClaimed {
+					return fmt.Errorf("%s.conditions[%d].required_status is unsupported", taskPath, conditionIndex)
+				}
+				conditionRefs[task.Key] = append(conditionRefs[task.Key], condition.TaskKey)
+			}
 		}
 	}
-	for _, group := range pkg.Groups {
-		if group.Key == "" {
-			return fmt.Errorf("group key is required")
-		}
-		for _, task := range group.Tasks {
-			if task.Key == "" {
-				return fmt.Errorf("task key is required")
-			}
-			if task.SequenceKey == nil && task.SequencePosition != nil {
-				return fmt.Errorf("task %s has sequence_position without sequence_key", task.Key)
-			}
-			if task.SequenceKey != nil && task.SequencePosition == nil {
-				return fmt.Errorf("task %s has sequence_key without sequence_position", task.Key)
-			}
-			for _, condition := range task.Conditions {
-				if condition.TaskKey == "" {
-					return fmt.Errorf("task %s condition task_key is required", task.Key)
-				}
-				if condition.TaskKey == task.Key {
-					return fmt.Errorf("task %s cannot reference itself as condition", task.Key)
-				}
+
+	for parent, children := range conditionRefs {
+		for _, child := range children {
+			if _, exists := taskPaths[child]; !exists {
+				return fmt.Errorf("tasks import task %s references missing condition task %s", parent, child)
 			}
 		}
 	}
+	if hasDirectedCycle(conditionRefs) {
+		return fmt.Errorf("tasks import complex conditions contain a cycle")
+	}
+
 	return nil
 }
 

@@ -37,7 +37,7 @@ func (a *Admin) DeleteTONWallet(ctx context.Context, workspaceID string) (int64,
 	return a.repository.DeleteTONWallet(mergedCtx, workspaceID)
 }
 
-func (a *Admin) GetTONWallet(ctx context.Context, workspaceID string) (paymentsqlc.PaymentTonWallet, error) {
+func (a *Admin) GetTONWallet(ctx context.Context, workspaceID string) (TONWalletModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	return a.repository.AdminGetTONWallet(mergedCtx, workspaceID)

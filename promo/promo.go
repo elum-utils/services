@@ -10,6 +10,7 @@ import (
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -27,7 +28,7 @@ type Promo struct {
 	ownsClient bool
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
-	background sync.WaitGroup
+	goroutines *goroutinemanager.Manager
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -75,12 +76,11 @@ func (p *Promo) Run(ctx context.Context) error {
 	defer p.Close()
 
 	errCh := make(chan error, len(registrations))
-	p.background.Add(len(registrations))
 	for _, registration := range registrations {
-		go func() {
-			defer p.background.Done()
+		registration := registration
+		p.goroutines.Go("promo.callback", func() {
 			errCh <- p.runCallback(registration.ctx, registration.handler, registration.options...)
-		}()
+		})
 	}
 	select {
 	case <-p.rootCtx.Done():
@@ -110,9 +110,10 @@ func open(ctx context.Context, params DatabaseParams) (*Promo, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "promo sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
-		QueryTimeout: params.Options.QueryTimeout,
-		CacheL1Delay: params.Options.CacheL1Delay,
-		CacheL2Delay: params.Options.CacheL2Delay,
+		QueryTimeout:             params.Options.QueryTimeout,
+		CacheL1Delay:             params.Options.CacheL1Delay,
+		CacheL2Delay:             params.Options.CacheL2Delay,
+		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
 	})
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
@@ -153,20 +154,26 @@ func (p *Promo) adopt(running *Promo) {
 	p.Admin, p.User = running.Admin, running.User
 	p.callbacks, p.client, p.ownsClient = running.callbacks, running.client, running.ownsClient
 	p.rootCtx, p.rootCancel = running.rootCtx, running.rootCancel
+	p.goroutines = running.goroutines
 }
 
 func newPromo(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Promo {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 	return &Promo{
-		Admin:     admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
-		User:      user.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
-		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.PromoTable), client: db, ownsClient: ownsClient,
-		rootCtx: rootCtx, rootCancel: cancel,
+		Admin:      admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
+		User:       user.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
+		callbacks:  callbackutil.NewWithTable(db.DB(), callbackutil.PromoTable),
+		client:     db,
+		ownsClient: ownsClient,
+		rootCtx:    rootCtx,
+		rootCancel: cancel,
+		goroutines: goroutinemanager.New(),
 	}
 }
 
@@ -177,7 +184,9 @@ func (p *Promo) Close() error {
 	if p.rootCancel != nil {
 		p.rootCancel()
 	}
-	p.background.Wait()
+	if p.goroutines != nil {
+		p.goroutines.Close()
+	}
 	var err error
 	if p.Admin != nil {
 		err = errors.Join(err, p.Admin.Close())

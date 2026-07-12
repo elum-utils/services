@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	json "github.com/goccy/go-json"
+	"math"
+	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
 
 	serviceerrors "github.com/elum-utils/services/errors"
 	utils "github.com/elum-utils/services/internal/utils"
@@ -18,11 +21,14 @@ import (
 )
 
 var (
-	ErrProductLocked         = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product limit is locked")
-	ErrPaymentMismatch       = serviceerrors.New(serviceerrors.CodeConflict, "payment data mismatch")
-	ErrOrderStateInvalid     = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment order state is invalid")
-	ErrPaymentAmountOverflow = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment amount overflow")
-	ErrProductQuantityFixed  = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product quantity is fixed")
+	ErrProductLocked          = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product limit is locked")
+	ErrPaymentMismatch        = serviceerrors.New(serviceerrors.CodeConflict, "payment data mismatch")
+	ErrOrderStateInvalid      = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment order state is invalid")
+	ErrPaymentAmountOverflow  = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment amount overflow")
+	ErrProductQuantityFixed   = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "payment product quantity is fixed")
+	ErrOrderExpirationInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment order expiration is invalid")
+	ErrOrderFieldsInvalid     = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment order fields are invalid")
+	ErrAttemptFieldsInvalid   = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment attempt fields are invalid")
 )
 
 type OrderCreateParams struct {
@@ -90,8 +96,6 @@ type AttemptCreateParams struct {
 	ConfirmationURL        *string
 	ReturnURL              *string
 	ExpiresAt              *time.Time
-	KnownAssetCode         *string
-	KnownAmountMinor       *uint64
 }
 
 type Attempt struct {
@@ -164,6 +168,19 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 	if err != nil {
 		return Order{}, err
 	}
+	if params.AppID <= 0 || params.PlatformID <= 0 ||
+		strings.TrimSpace(params.PlatformUserID) == "" ||
+		strings.TrimSpace(params.ProductID) == "" ||
+		strings.TrimSpace(params.AssetCode) == "" {
+		return Order{}, ErrOrderFieldsInvalid
+	}
+	now := time.Now().UTC()
+	if (params.ReservedUntil != nil && !params.ReservedUntil.After(now)) ||
+		(params.ExpiresAt != nil && !params.ExpiresAt.After(now)) ||
+		(params.ReservedUntil != nil && params.ExpiresAt != nil && params.ReservedUntil.After(*params.ExpiresAt)) {
+		return Order{}, ErrOrderExpirationInvalid
+	}
+
 	var order Order
 	err = r.inTransaction(ctx, func(txRepo *PaymentRepository) error {
 		product, err := txRepo.getCheckoutProduct(ctx, ProductGetParams{
@@ -174,7 +191,7 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 			ProductID:      params.ProductID,
 			AssetCode:      params.AssetCode,
 			Locale:         params.Locale,
-			Now:            time.Now().UTC(),
+			Now:            now,
 		})
 		if err != nil {
 			return err
@@ -317,7 +334,7 @@ func multiplyMinorAmount(amount uint64, quantity uint64) (uint64, error) {
 	if quantity > uint64(1<<63-1) {
 		return 0, ErrPaymentAmountOverflow
 	}
-	if amount != 0 && quantity > ^uint64(0)/amount {
+	if amount != 0 && quantity > uint64(math.MaxInt64)/amount {
 		return 0, ErrPaymentAmountOverflow
 	}
 	return amount * quantity, nil
@@ -380,11 +397,14 @@ func (r *PaymentRepository) GetAttemptByProviderPaymentID(ctx context.Context, p
 }
 
 func (r *PaymentRepository) CreateAttempt(ctx context.Context, params AttemptCreateParams) (Attempt, error) {
+	params.ProviderCode = strings.TrimSpace(params.ProviderCode)
+	if params.OrderID == 0 || params.ProviderCode == "" {
+		return Attempt{}, ErrAttemptFieldsInvalid
+	}
+
 	var attempt Attempt
 	err := r.WithTx(ctx, func(txRepo *PaymentRepository) error {
-		useKnownOrderData := params.KnownAssetCode != nil && params.KnownAmountMinor != nil
-
-		id, err := txRepo.q.CreatePaymentAttemptFromOrder(ctx, sqlc.CreatePaymentAttemptFromOrderParams{
+		created, err := txRepo.q.CreatePaymentAttemptFromOrder(ctx, sqlc.CreatePaymentAttemptFromOrderParams{
 			ProviderCode: params.ProviderCode,
 			Status:       sqlc.PaymentAttemptStatusPending,
 			ProviderPaymentID: sqlwrap.NullFromPtr(params.ProviderPaymentID, func(v string) sql.NullString {
@@ -418,14 +438,14 @@ func (r *PaymentRepository) CreateAttempt(ctx context.Context, params AttemptCre
 			}
 			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
 			if orderErr != nil {
-				return err
+				return orderErr
 			}
 			if order.Status != sqlc.PaymentOrderStatusDraft && order.Status != sqlc.PaymentOrderStatusPendingPayment {
 				return ErrOrderStateInvalid
 			}
 			return err
 		}
-		if id == 0 {
+		if created.ID == 0 {
 			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
 			if orderErr != nil {
 				return orderErr
@@ -440,23 +460,12 @@ func (r *PaymentRepository) CreateAttempt(ctx context.Context, params AttemptCre
 			return err
 		}
 
-		assetCode := sqlwrap.ValueFromPtr(params.KnownAssetCode)
-		amountMinor := sqlwrap.ValueFromPtr(params.KnownAmountMinor)
-		if !useKnownOrderData {
-			order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
-			if orderErr != nil {
-				return orderErr
-			}
-			assetCode = order.AssetCode
-			amountMinor = uint64(order.PayableAmountMinor)
-		}
-
 		attempt = Attempt{
-			ID:                uint64(id),
+			ID:                uint64(created.ID),
 			OrderID:           params.OrderID,
 			ProviderCode:      params.ProviderCode,
-			AssetCode:         assetCode,
-			AmountMinor:       amountMinor,
+			AssetCode:         created.AssetCode,
+			AmountMinor:       uint64(created.AmountMinor),
 			Status:            string(sqlc.PaymentAttemptStatusPending),
 			ProviderPaymentID: params.ProviderPaymentID,
 		}
@@ -508,6 +517,12 @@ func (r *PaymentRepository) SetAttemptProviderChargeID(ctx context.Context, atte
 }
 
 func (r *PaymentRepository) CompleteAttempt(ctx context.Context, params CompleteAttemptParams) (CompleteAttemptResult, error) {
+	params.ProviderCode = strings.TrimSpace(params.ProviderCode)
+	params.AssetCode = strings.TrimSpace(params.AssetCode)
+	if params.AttemptID == 0 || params.ProviderCode == "" || params.AssetCode == "" || params.AmountMinor > math.MaxInt64 {
+		return CompleteAttemptResult{}, ErrAttemptFieldsInvalid
+	}
+
 	fulfilled, err := r.q.GetFulfilledAttemptResult(ctx, int64(params.AttemptID))
 	if err == nil {
 		return CompleteAttemptResult{
@@ -633,6 +648,7 @@ func (r *PaymentRepository) enqueuePaymentFulfilledCallback(
 	}
 	eventKey := fmt.Sprintf("payment.order.fulfilled:%d", order.ID)
 	_, err = r.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
+		WorkspaceID:        order.WorkspaceID,
 		SourceService:      "payment",
 		EventType:          "payment.order.fulfilled",
 		EventKey:           eventKey,

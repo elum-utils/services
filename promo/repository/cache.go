@@ -1,41 +1,51 @@
 package repository
 
 import (
-	"sync"
+	"errors"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
-var promoCacheKeys sync.Map
+const (
+	promoCacheAdminPromo         = "admin_promo"
+	promoCacheAdminList          = "admin_list"
+	promoCacheAdminLocalization  = "admin_localization"
+	promoCacheAdminLocalizations = "admin_localizations"
+	promoCacheAdminReward        = "admin_reward"
+	promoCacheAdminRewards       = "admin_rewards"
+)
 
-func promoCacheKey(parts ...any) string {
-	args := append([]any{"promo"}, parts...)
+func promoCacheKey(method, workspaceID string, parts ...any) string {
+	args := append([]any{"promo", method, workspaceID}, parts...)
 	return sqlwrap.CreateKey(args...)
 }
 
-func rememberPromoCacheKey(workspaceID, key string) {
-	if workspaceID == "" || key == "" {
-		return
-	}
-	promoCacheKeys.Store(key, workspaceID)
+func promoCacheScope(method, workspaceID string) []any {
+	return []any{"promo", "cache", method, workspaceID}
 }
 
 func (r *Repository) invalidatePromoCache(workspaceID string) error {
 	if r == nil || r.db == nil || workspaceID == "" {
 		return nil
 	}
-	var outErr error
-	promoCacheKeys.Range(func(rawKey, rawWorkspaceID any) bool {
-		key, keyOK := rawKey.(string)
-		cachedWorkspaceID, workspaceOK := rawWorkspaceID.(string)
-		if !keyOK || !workspaceOK || cachedWorkspaceID != workspaceID {
-			return true
-		}
-		if err := r.db.DeleteCache(key); err != nil && outErr == nil {
-			outErr = err
-		}
-		promoCacheKeys.Delete(rawKey)
-		return true
-	})
-	return outErr
+	err := errors.Join(
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminPromo, workspaceID)...),
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminList, workspaceID)...),
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminLocalization, workspaceID)...),
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminLocalizations, workspaceID)...),
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminReward, workspaceID)...),
+		r.db.BumpCacheVersion(promoCacheScope(promoCacheAdminRewards, workspaceID)...),
+	)
+	r.reportCacheInvalidationError(err)
+	return nil
+}
+
+func (r *Repository) reportCacheInvalidationError(err error) {
+	if err == nil || r == nil || r.onCacheInvalidationError == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	r.onCacheInvalidationError(err)
 }

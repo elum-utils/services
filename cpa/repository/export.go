@@ -13,8 +13,19 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	bundles, err := r.ListAllOfferBundles(ctx, workspaceID)
-	if err != nil {
+	var bundles []OfferBundle
+	if err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		var err error
+		bundles, err = txRepo.ListAllOfferBundles(ctx, workspaceID)
+		return err
+	}); err != nil {
 		return ExportPackage{}, err
 	}
 	out := ExportPackage{

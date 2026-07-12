@@ -1,5 +1,6 @@
 -- name: CreateEvent :one
 INSERT INTO clb_event (
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -8,7 +9,7 @@ INSERT INTO clb_event (
     payload_content_type,
     next_attempt_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (idempotency_key) DO UPDATE SET
     idempotency_key = EXCLUDED.idempotency_key
 RETURNING id;
@@ -16,6 +17,7 @@ RETURNING id;
 -- name: GetEvent :one
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -34,12 +36,14 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
 LIMIT 1;
 
 -- name: ListDueEventsForUpdate :many
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -116,6 +120,7 @@ WHERE id = $3
 -- name: AdminListEvents :many
 SELECT
     id,
+    workspace_id,
     source_service,
     event_type,
     event_key,
@@ -134,11 +139,12 @@ SELECT
     created_at,
     updated_at
 FROM clb_event
-WHERE ($1 = '' OR source_service = $2)
-  AND ($3 = '' OR event_type = $4)
-  AND ($5 = '' OR status = $6)
+WHERE workspace_id = $1
+  AND ($2 = '' OR source_service = $3)
+  AND ($4 = '' OR event_type = $5)
+  AND ($6 = '' OR status = $7)
 ORDER BY created_at DESC, id DESC
-LIMIT $7 OFFSET $8;
+LIMIT $8 OFFSET $9;
 
 -- name: AdminRetryEventNow :execrows
 UPDATE clb_event
@@ -148,7 +154,8 @@ SET status = 'pending',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
   AND status IN ('pending', 'processing');
 
 -- name: AdminMarkEventOK :execrows
@@ -159,7 +166,8 @@ SET status = 'ok',
     locked_until = NULL,
     last_error = NULL,
     updated_at = NOW()
-WHERE id = $1
+WHERE workspace_id = $1
+  AND id = $2
   AND status IN ('pending', 'processing');
 
 -- name: AdminMarkEventReject :execrows
@@ -170,7 +178,8 @@ SET status = 'reject',
     locked_by = NULL,
     locked_until = NULL,
     updated_at = NOW()
-WHERE id = $2
+WHERE workspace_id = $2
+  AND id = $3
   AND status IN ('pending', 'processing');
 
 -- name: AdminResetExpiredProcessing :execrows
@@ -180,6 +189,7 @@ SET status = 'pending',
     locked_until = NULL,
     next_attempt_at = NOW(),
     updated_at = NOW()
-WHERE status = 'processing'
+WHERE workspace_id = $1
+  AND status = 'processing'
   AND locked_until IS NOT NULL
   AND locked_until <= NOW();

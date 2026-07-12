@@ -42,38 +42,6 @@ func (a *Admin) ListPartnerConfigs(ctx context.Context, workspaceID string) ([]P
 	return result, nil
 }
 
-func (a *Admin) SavePartnerScript(ctx context.Context, params PartnerScriptModel) error {
-	mergedCtx, cancel := a.withContext(ctx)
-	defer cancel()
-	return a.repository.SavePartnerScript(mergedCtx, repository.SavePartnerScriptParams{
-		Provider: params.Provider, IsEnabled: params.IsEnabled, Version: params.Version, Source: params.Source,
-	})
-}
-
-func (a *Admin) GetPartnerScript(ctx context.Context, provider string) (PartnerScriptModel, bool, error) {
-	mergedCtx, cancel := a.withContext(ctx)
-	defer cancel()
-	script, found, err := a.repository.GetPartnerScript(mergedCtx, provider)
-	if err != nil || !found {
-		return PartnerScriptModel{}, found, err
-	}
-	return mapPartnerScript(script), true, nil
-}
-
-func (a *Admin) ListPartnerScripts(ctx context.Context) ([]PartnerScriptModel, error) {
-	mergedCtx, cancel := a.withContext(ctx)
-	defer cancel()
-	scripts, err := a.repository.ListPartnerScripts(mergedCtx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]PartnerScriptModel, 0, len(scripts))
-	for _, script := range scripts {
-		result = append(result, mapPartnerScript(script))
-	}
-	return result, nil
-}
-
 func (a *Admin) SavePartnerRewardRule(ctx context.Context, params SavePartnerRewardRuleParams) error {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
@@ -123,12 +91,5 @@ func mapPartnerConfig(config repository.PartnerConfig) PartnerConfigModel {
 		WorkspaceID: config.WorkspaceID, Provider: config.Provider, GroupKey: config.GroupKey,
 		Platform: config.Platform, IsEnabled: config.IsEnabled, Secret: config.Secret, WebhookSecret: config.WebhookSecret,
 		Target: config.Target, Settings: config.Settings, CreatedAt: config.CreatedAt, UpdatedAt: config.UpdatedAt,
-	}
-}
-
-func mapPartnerScript(script repository.PartnerScript) PartnerScriptModel {
-	return PartnerScriptModel{
-		Provider: script.Provider, IsEnabled: script.IsEnabled, Version: script.Version, Source: script.Source,
-		CreatedAt: script.CreatedAt, UpdatedAt: script.UpdatedAt,
 	}
 }

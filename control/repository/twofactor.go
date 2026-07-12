@@ -10,7 +10,9 @@ import (
 	"encoding/base32"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,9 +30,6 @@ func (r *Repository) BeginTwoFactor(ctx context.Context, accountID, issuer strin
 	if err := required(accountID); err != nil {
 		return TwoFactorSetup{}, err
 	}
-	if _, err := r.GetAccount(ctx, accountID); err != nil {
-		return TwoFactorSetup{}, err
-	}
 	secret, err := randomSecret()
 	if err != nil {
 		return TwoFactorSetup{}, err
@@ -38,10 +37,53 @@ func (r *Repository) BeginTwoFactor(ctx context.Context, accountID, issuer strin
 	if issuer = strings.TrimSpace(issuer); issuer == "" {
 		issuer = "Elum"
 	}
-	if err := r.q.UpsertTwoFactor(ctx, controlsqlc.UpsertTwoFactorParams{AccountID: accountID, Secret: secret, BackupHashes: json.RawMessage(`[]`)}); err != nil {
+	err = sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries {
+			return controlsqlc.New(tx)
+		},
+		func(tx *sql.Tx, q *controlsqlc.Queries) error {
+			if _, err := tx.ExecContext(
+				ctx,
+				"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+				"control:two-factor:"+accountID,
+			); err != nil {
+				return err
+			}
+
+			account, err := q.GetAccount(ctx, accountID)
+			if err != nil {
+				return noRows(err, ErrAccountNotFound)
+			}
+			if account.Status != "active" {
+				return ErrForbidden
+			}
+
+			active, err := q.HasActiveTwoFactor(ctx, accountID)
+			if err != nil {
+				return err
+			}
+			if active {
+				return ErrTwoFactorEnabled
+			}
+
+			return q.UpsertTwoFactor(ctx, controlsqlc.UpsertTwoFactorParams{
+				AccountID:    accountID,
+				Secret:       secret,
+				BackupHashes: json.RawMessage(`[]`),
+			})
+		},
+	)
+	if err != nil {
 		return TwoFactorSetup{}, err
 	}
-	uri := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&period=30&digits=6", issuer, accountID, secret, issuer)
+	uri := fmt.Sprintf(
+		"otpauth://totp/%s?secret=%s&issuer=%s&period=30&digits=6",
+		url.PathEscape(issuer+":"+accountID),
+		url.QueryEscape(secret),
+		url.QueryEscape(issuer),
+	)
 	return TwoFactorSetup{Secret: secret, URI: uri}, nil
 }
 
@@ -91,22 +133,34 @@ func (r *Repository) VerifyTwoFactor(ctx context.Context, accountID, code string
 func (r *Repository) CompleteTwoFactorChallenge(ctx context.Context, rawChallenge, code, ip string, now time.Time) (Session, string, error) {
 	var session Session
 	var rawSession string
+	var rejected error
 	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
 		challenge, err := q.GetTwoFactorChallengeWithFactorForUpdate(ctx, tokenHash(rawChallenge))
 		if err != nil {
 			return noRows(err, ErrNotFound)
 		}
 		if challenge.BindToIp && challenge.Ip != ip {
-			return ErrForbidden
+			rejected = ErrForbidden
+			return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
 		}
 		if err := verifyTwoFactorData(ctx, q, challenge.AccountID, challenge.Secret, challenge.BackupHashes, challenge.ActivatedAt, code, now); err != nil {
+			if errors.Is(err, ErrForbidden) {
+				rejected = err
+				return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
+			}
 			return err
 		}
-		if rows, err := q.DeleteTwoFactorChallenge(ctx, challenge.ChallengeID); err != nil || rows != 1 {
-			if err != nil {
-				return err
-			}
-			return ErrNotFound
+
+		account, err := q.GetAccount(ctx, challenge.AccountID)
+		if err != nil {
+			return noRows(err, ErrAccountNotFound)
+		}
+		if account.Status != "active" {
+			rejected = ErrForbidden
+			return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
+		}
+		if err := consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID); err != nil {
+			return err
 		}
 		rawSession, err = randomToken()
 		if err != nil {
@@ -119,7 +173,21 @@ func (r *Repository) CompleteTwoFactorChallenge(ctx context.Context, rawChalleng
 	if err != nil {
 		return Session{}, "", err
 	}
+	if rejected != nil {
+		return Session{}, "", rejected
+	}
 	return session, rawSession, nil
+}
+
+func consumeTwoFactorChallenge(ctx context.Context, q *controlsqlc.Queries, challengeID string) error {
+	rows, err := q.DeleteTwoFactorChallenge(ctx, challengeID)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func verifyTwoFactorWithQueries(ctx context.Context, q *controlsqlc.Queries, accountID, code string, now time.Time) error {

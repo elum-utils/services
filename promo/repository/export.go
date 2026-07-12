@@ -2,8 +2,9 @@ package repository
 
 import (
 	"context"
-	"sort"
 	"time"
+
+	promosqlc "github.com/elum-utils/services/promo/sqlc"
 )
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
@@ -11,16 +12,31 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	promoRows, err := r.q.ListExportPromos(ctx, workspaceID)
-	if err != nil {
-		return ExportPackage{}, err
-	}
-	localizationRows, err := r.q.ListExportLocalizations(ctx, workspaceID)
-	if err != nil {
-		return ExportPackage{}, err
-	}
-	rewardRows, err := r.q.ListExportRewards(ctx, workspaceID)
-	if err != nil {
+	var promoRows []promosqlc.PromoOffer
+	var localizationRows []promosqlc.PromoLocalization
+	var rewardRows []promosqlc.PromoReward
+	if err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		var err error
+		promoRows, err = txRepo.q.ListExportPromos(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		localizationRows, err = txRepo.q.ListExportLocalizations(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		rewardRows, err = txRepo.q.ListExportRewards(ctx, workspaceID)
+		return err
+	}); err != nil {
 		return ExportPackage{}, err
 	}
 	out := ExportPackage{
@@ -29,8 +45,6 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		CreatedAt: now.UTC(),
 		Promos:    make([]ExportPromo, 0, len(promoRows)),
 	}
-	items := make(exportItemCollector)
-
 	promoIndexByID := make(map[int64]int, len(promoRows))
 	for _, row := range promoRows {
 		promo := mapPromo(row)
@@ -72,7 +86,6 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			Scale:    uint16(reward.Scale),
 			Unit:     promoDurationUnitPtr(reward.DurationUnit),
 		})
-		items.add(reward.RewardKey)
 	}
 
 	for index := range out.Promos {
@@ -84,7 +97,6 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		}
 	}
 
-	out.Items = items.list()
 	return out, nil
 }
 
@@ -93,32 +105,4 @@ func nullableJSON(value []byte) []byte {
 		return nil
 	}
 	return value
-}
-
-type exportItemCollector map[string]struct{}
-
-func (c exportItemCollector) add(id string) {
-	if id == "" {
-		return
-	}
-	c[id] = struct{}{}
-}
-
-func (c exportItemCollector) list() []ExportItem {
-	if len(c) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(c))
-	for id := range c {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	items := make([]ExportItem, 0, len(ids))
-	for index, id := range ids {
-		items = append(items, ExportItem{
-			ID:       id,
-			Position: int32((index + 1) * 10),
-		})
-	}
-	return items
 }

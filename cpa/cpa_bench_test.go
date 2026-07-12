@@ -199,7 +199,7 @@ func benchmarkCPAAdminListAssignments(b *testing.B) {
 	env := newCPATestEnvironment(b, testCPAOptions())
 	upsertSharedOffer(b, env, "assignments_offer", true)
 	seedCPAAssignments(b, env, "assignments_offer", 100)
-	params := admin.AuditListParams{
+	params := admin.AssignmentListParams{
 		WorkspaceID: "workspace",
 		CPAID:       "assignments_offer",
 		Page:        admin.Page{Limit: 100},
@@ -220,7 +220,7 @@ func benchmarkCPAAdminRefreshDailyStats(b *testing.B) {
 	until := from.Add(2 * time.Hour)
 	b.ResetTimer()
 	for b.Loop() {
-		if err := env.Service.Admin.RefreshDailyStats(env.Context, from, until); err != nil {
+		if err := env.Service.Admin.RefreshDailyStats(env.Context, "workspace", from, until); err != nil {
 			b.Fatalf("refresh daily stats: %v", err)
 		}
 	}

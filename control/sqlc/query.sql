@@ -202,6 +202,9 @@ ON CONFLICT (service, group_key) DO UPDATE SET
     position = EXCLUDED.position,
     updated_at = now();
 
+-- name: LockMethodRegistry :exec
+SELECT pg_advisory_xact_lock(hashtextextended('control:method-registry', 0));
+
 -- name: ListMethodGroups :many
 SELECT service, group_key, position, created_at, updated_at
 FROM control_method_group

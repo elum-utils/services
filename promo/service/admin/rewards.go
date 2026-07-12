@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"math"
 
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
@@ -24,6 +25,13 @@ func (a *Admin) UpsertReward(ctx context.Context, params SaveRewardParams) error
 	if err != nil {
 		return err
 	}
+	if params.WorkspaceID == "" || params.PromoID == 0 {
+		return ErrRewardRequired
+	}
+	if params.PromoID > math.MaxInt64 || params.Scale > math.MaxInt16 {
+		return ErrPromoNumberOutOfRange
+	}
+
 	return a.repository.UpsertReward(mergedCtx, params.WorkspaceID, params.PromoID, repository.Reward{
 		Key: params.Key, Type: rewardType, Quantity: params.Quantity, Scale: params.Scale, Unit: params.Unit,
 	})
@@ -58,6 +66,13 @@ func (a *Admin) ListRewards(ctx context.Context, workspaceID string, promoID uin
 func (a *Admin) DeleteReward(ctx context.Context, workspaceID string, promoID uint64, key string) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+	if workspaceID == "" || promoID == 0 || key == "" {
+		return 0, ErrRewardRequired
+	}
+	if promoID > math.MaxInt64 {
+		return 0, ErrPromoNumberOutOfRange
+	}
+
 	return a.repository.DeleteReward(mergedCtx, workspaceID, promoID, key)
 }
 

@@ -65,7 +65,10 @@
 
 ### 1. Catalog
 
-`payment_product_group`, `payment_product`, `payment_item`, `payment_product_item`, `payment_localization`, `payment_price`.
+`payment_product_group`, `payment_product`, `payment_product_item`, `payment_localization`, `payment_price`.
+
+`payment_product_item.item_id` хранит непрозрачный ключ. Метаданными item владеет
+сервис `reference`; payment не дублирует название, описание, редкость или тип.
 
 Этот слой сохраняет текущий функционал: группы, товары, предметы выдачи, локализация, периоды доступности, скидки и цены в разных активах. Суммы всегда хранятся в minor units:
 

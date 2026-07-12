@@ -15,11 +15,6 @@ func mapProduct(product repository.Product) *ProductModel {
 			Quantity:     item.Quantity,
 			Scale:        item.Scale,
 			DurationUnit: item.DurationUnit,
-			Type:         sqlwrap.NullStringPtr(item.Type),
-			Title:        item.Title,
-			Description:  item.Description,
-			Rarity:       sqlwrap.NullStringPtr(item.Rarity),
-			Position:     sqlwrap.NullInt32Ptr(item.Position),
 		})
 	}
 

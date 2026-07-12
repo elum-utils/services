@@ -6,6 +6,7 @@ import (
 	json "github.com/goccy/go-json"
 
 	services "github.com/elum-utils/services"
+	"github.com/elum-utils/services/cpa/model"
 )
 
 type Identity = services.Identity
@@ -31,11 +32,11 @@ type RewardModel struct {
 }
 
 type AssignmentModel struct {
-	ID          uint64     `json:"id"`
-	CPAID       string     `json:"cpa_id"`
-	Code        string     `json:"code"`
-	CodeMode    string     `json:"code_mode"`
-	Status      string     `json:"status"`
-	IssuedAt    time.Time  `json:"issued_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	ID          uint64                 `json:"id"`
+	CPAID       string                 `json:"cpa_id"`
+	Code        string                 `json:"code"`
+	CodeMode    string                 `json:"code_mode"`
+	Status      model.AssignmentStatus `json:"status"`
+	IssuedAt    time.Time              `json:"issued_at"`
+	CompletedAt *time.Time             `json:"completed_at,omitempty"`
 }

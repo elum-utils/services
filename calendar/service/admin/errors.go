@@ -12,6 +12,7 @@ var (
 	ErrCalendarIntervalTypeInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin interval type is invalid")
 	ErrCalendarIntervalUnitInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin interval unit is invalid")
 	ErrCalendarEndBehaviorInvalid  = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin end behavior is invalid")
+	ErrCalendarNumberOutOfRange    = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin numeric value is out of database range")
 	ErrStepCreateInvalid           = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin step scope and positive position are required")
 	ErrStepUpdateInvalid           = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin step id and positive position are required")
 	ErrRewardIDRequired            = serviceerrors.New(serviceerrors.CodeInvalidFields, "calendar admin reward id is required")

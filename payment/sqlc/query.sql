@@ -13,6 +13,9 @@ SELECT
 FROM payment_provider
 ORDER BY code;
 
+-- name: DatabaseNow :one
+SELECT now()::timestamptz;
+
 -- name: ListAssets :many
 SELECT
     code,
@@ -228,36 +231,6 @@ ON CONFLICT (workspace_id, id) DO UPDATE SET
 DELETE FROM payment_product
 WHERE workspace_id = $1
   AND id = $2;
-
--- name: UpsertItem :exec
-INSERT INTO payment_item (
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (workspace_id, id) DO UPDATE SET
-    item_type = EXCLUDED.item_type,
-    title_key = EXCLUDED.title_key,
-    description_key = EXCLUDED.description_key,
-    rarity = EXCLUDED.rarity,
-    position = EXCLUDED.position,
-    updated_at = now();
-
--- name: DeleteItem :execrows
-DELETE FROM payment_item
-WHERE workspace_id = $1
-  AND id = $2;
-
--- name: ListProductIDsForItem :many
-SELECT product_id
-FROM payment_product_item
-WHERE workspace_id = $1
-  AND item_id = $2;
 
 -- name: UpsertProductItem :exec
 INSERT INTO payment_product_item (
@@ -603,12 +576,7 @@ INSERT INTO payment_product_cache (
     item_quantity,
     item_scale,
     reward_type,
-    duration_unit,
-    item_type,
-    item_title,
-    item_description,
-    item_rarity,
-    item_position
+    duration_unit
 )
 SELECT
     p.workspace_id,
@@ -646,12 +614,7 @@ SELECT
     COALESCE(pi.quantity, 0) AS item_quantity,
     COALESCE(pi.scale, 0) AS item_scale,
     (COALESCE(pi.reward_type::text, 'quantity'))::payment_product_cache_reward_type AS reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp
     ON pp.workspace_id = p.workspace_id
@@ -677,17 +640,6 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = loc.locale
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = loc.locale
-   AND li_description.workspace_id = p.workspace_id
 WHERE p.workspace_id = $2;
 
 -- name: RebuildProductCache :exec
@@ -727,12 +679,7 @@ INSERT INTO payment_product_cache (
     item_quantity,
     item_scale,
     reward_type,
-    duration_unit,
-    item_type,
-    item_title,
-    item_description,
-    item_rarity,
-    item_position
+    duration_unit
 )
 SELECT
     p.workspace_id,
@@ -770,12 +717,7 @@ SELECT
     COALESCE(pi.quantity, 0) AS item_quantity,
     COALESCE(pi.scale, 0) AS item_scale,
     (COALESCE(pi.reward_type::text, 'quantity'))::payment_product_cache_reward_type AS reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp
     ON pp.workspace_id = p.workspace_id
@@ -801,17 +743,6 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = loc.locale
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = loc.locale
-   AND li_description.workspace_id = p.workspace_id
 WHERE p.workspace_id = $2
   AND p.id = $3;
 
@@ -843,12 +774,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -872,7 +798,7 @@ WHERE pc.product_id = $1
       ORDER BY pc2.is_promotion DESC, pc2.price_starts_at DESC, pc2.price_id DESC
       LIMIT 1
   )
-ORDER BY pc.item_position, pc.item_id;
+ORDER BY pc.item_id;
 
 -- name: ListProductCatalogCacheRows :many
 SELECT
@@ -909,12 +835,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -924,7 +845,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id;
 
 -- name: ListProductsCatalogCacheRows :many
@@ -963,12 +883,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.workspace_id = $1
   AND pc.asset_code = $2
@@ -980,7 +895,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id;
 
 -- name: GetCheckoutProduct :one
@@ -1054,12 +968,7 @@ SELECT
     pi.quantity AS item_quantity,
     pi.scale AS item_scale,
     pi.reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp ON pp.id = (
     SELECT pp2.id
@@ -1082,19 +991,8 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = $4
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = $5
-   AND li_description.workspace_id = p.workspace_id
-WHERE p.id = $6
-  AND p.workspace_id = $7
+WHERE p.id = $4
+  AND p.workspace_id = $5
   AND p.is_visible = true
   AND p.is_closed = false
   AND now() BETWEEN p.available_from AND p.available_until;
@@ -1122,12 +1020,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -1149,7 +1042,7 @@ WHERE pc.product_id = $1
       ORDER BY pc2.is_promotion DESC, pc2.price_starts_at DESC, pc2.price_id DESC
       LIMIT 1
   )
-ORDER BY pc.item_position, pc.item_id;
+ORDER BY pc.item_id;
 
 -- name: ListProductPreviewCatalogCacheRows :many
 SELECT
@@ -1182,12 +1075,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -1196,7 +1084,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id;
 
 -- name: GetProductPreviewRowsRaw :many
@@ -1222,12 +1109,7 @@ SELECT
     pi.quantity AS item_quantity,
     pi.scale AS item_scale,
     pi.reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 LEFT JOIN payment_localization lp_title
     ON lp_title.localization_key = p.title_key
@@ -1240,23 +1122,12 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = $3
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = $4
-   AND li_description.workspace_id = p.workspace_id
-WHERE p.id = $5
-  AND p.workspace_id = $6
+WHERE p.id = $3
+  AND p.workspace_id = $4
   AND p.is_visible = true
   AND p.is_closed = false
   AND now() BETWEEN p.available_from AND p.available_until
-ORDER BY i.position, i.id;
+ORDER BY pi.item_id;
 
 -- name: ListProductPriceOptions :many
 SELECT
@@ -1749,7 +1620,8 @@ JOIN payment_provider_asset ppa
  AND ppa.is_active = true
 WHERE po.id = $12
   AND po.status IN ('draft', 'pending_payment')
-RETURNING id;
+  AND (po.expires_at IS NULL OR po.expires_at > now())
+RETURNING id, asset_code, amount_minor;
 -- name: GetPaymentAttemptByProviderPaymentID :one
 SELECT
     id,
@@ -2596,39 +2468,6 @@ WHERE workspace_id = $1
 ORDER BY position, id
 LIMIT $6 OFFSET $7;
 
--- name: AdminGetItem :one
-SELECT
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position,
-    created_at,
-    updated_at
-FROM payment_item
-WHERE workspace_id = $1
-  AND id = $2
-LIMIT 1;
-
--- name: AdminListItems :many
-SELECT
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position,
-    created_at,
-    updated_at
-FROM payment_item
-WHERE workspace_id = $1
-  AND ($2 = '' OR item_type = $3)
-ORDER BY position, id
-LIMIT $4 OFFSET $5;
-
 -- name: AdminListProductItems :many
 SELECT
     id,
@@ -3331,7 +3170,8 @@ SELECT
     SUM(CASE WHEN e.event_type = 'refund' THEN 1 ELSE 0 END),
     SUM(CASE WHEN e.event_type = 'refund' THEN e.amount_minor ELSE 0 END)
 FROM payment_stats_event e
-WHERE e.occurred_at >= $1 AND e.occurred_at < $2
+WHERE e.workspace_id = sqlc.arg(workspace_id)
+  AND e.occurred_at >= $1 AND e.occurred_at < $2
 GROUP BY GROUPING SETS (
     (e.workspace_id, e.product_id, e.asset_code, DATE(e.occurred_at)),
     (e.workspace_id, e.asset_code, DATE(e.occurred_at))
@@ -3390,11 +3230,13 @@ SELECT
 FROM (
     SELECT order_dates.workspace_id, DATE(order_dates.occurred_at) AS stats_date
     FROM payment_stats_order_event order_dates
-    WHERE order_dates.occurred_at >= $1 AND order_dates.occurred_at < $2
+    WHERE order_dates.workspace_id = sqlc.arg(workspace_id)
+      AND order_dates.occurred_at >= $1 AND order_dates.occurred_at < $2
     UNION
     SELECT payment_dates.workspace_id, DATE(payment_dates.occurred_at) AS stats_date
     FROM payment_stats_event payment_dates
-    WHERE payment_dates.occurred_at >= $3 AND payment_dates.occurred_at < $4
+    WHERE payment_dates.workspace_id = sqlc.arg(workspace_id)
+      AND payment_dates.occurred_at >= $3 AND payment_dates.occurred_at < $4
 ) dates
 LEFT JOIN (
     SELECT
@@ -3403,6 +3245,7 @@ LEFT JOIN (
         SUM(CASE WHEN is_closed = FALSE AND available_from <= now() AND available_until > now() THEN 1 ELSE 0 END) AS active_products,
         SUM(CASE WHEN is_visible = TRUE AND is_closed = FALSE AND available_from <= now() AND available_until > now() THEN 1 ELSE 0 END) AS visible_products
     FROM payment_product
+    WHERE workspace_id = sqlc.arg(workspace_id)
     GROUP BY workspace_id
 ) products ON products.workspace_id = dates.workspace_id
 LEFT JOIN (
@@ -3420,7 +3263,8 @@ LEFT JOIN (
         SUM(CASE WHEN event_type = 'status' AND order_status = 'chargebacked' THEN 1 ELSE 0 END) AS chargebacked_orders,
         SUM(CASE WHEN event_type = 'status' AND order_status = 'failed' THEN 1 ELSE 0 END) AS failed_orders
     FROM payment_stats_order_event overview_orders
-    WHERE overview_orders.occurred_at >= $5 AND overview_orders.occurred_at < $6
+    WHERE overview_orders.workspace_id = sqlc.arg(workspace_id)
+      AND overview_orders.occurred_at >= $5 AND overview_orders.occurred_at < $6
     GROUP BY overview_orders.workspace_id, DATE(overview_orders.occurred_at)
 ) orders
     ON orders.workspace_id = dates.workspace_id
@@ -3434,7 +3278,8 @@ LEFT JOIN (
         COUNT(DISTINCT CASE WHEN event_type = 'purchase' THEN CONCAT_WS(':', app_id, platform_id, platform_user_id) ELSE NULL END) AS unique_buyers,
         SUM(CASE WHEN event_type = 'refund' THEN 1 ELSE 0 END) AS refund_count
     FROM payment_stats_event overview_payments
-    WHERE overview_payments.occurred_at >= $7 AND overview_payments.occurred_at < $8
+    WHERE overview_payments.workspace_id = sqlc.arg(workspace_id)
+      AND overview_payments.occurred_at >= $7 AND overview_payments.occurred_at < $8
     GROUP BY overview_payments.workspace_id, DATE(overview_payments.occurred_at)
 ) payments
     ON payments.workspace_id = dates.workspace_id
@@ -3622,3 +3467,156 @@ WHERE po.workspace_id = plc.workspace_id
       OR
       (plc.counter_scope = 'user' AND plc.platform_user_id = po.platform_user_id)
   );
+-- name: ExportListProductGroups :many
+SELECT *
+FROM payment_product_group
+WHERE workspace_id = $1
+ORDER BY position, code;
+
+-- name: ExportListProducts :many
+SELECT *
+FROM payment_product
+WHERE workspace_id = $1
+ORDER BY position, id;
+
+-- name: ExportListProductItems :many
+SELECT *
+FROM payment_product_item
+WHERE workspace_id = $1
+ORDER BY product_id, item_id;
+
+-- name: ExportListPrices :many
+SELECT *
+FROM payment_price
+WHERE workspace_id = $1
+ORDER BY product_id, asset_code, starts_at, id;
+
+-- name: ExportListLocalizations :many
+SELECT *
+FROM payment_localization
+WHERE workspace_id = $1
+ORDER BY localization_key, locale;
+
+-- name: ExportListTONWallets :many
+SELECT *
+FROM payment_ton_wallet
+WHERE workspace_id = $1
+ORDER BY network, wallet_address;
+
+-- name: ImportListProductGroupCodes :many
+SELECT code
+FROM payment_product_group
+WHERE workspace_id = $1
+ORDER BY code;
+
+-- name: ImportListProductIDs :many
+SELECT id
+FROM payment_product
+WHERE workspace_id = $1
+ORDER BY id;
+
+-- name: ImportHasTONWallet :one
+SELECT EXISTS (
+    SELECT 1
+    FROM payment_ton_wallet
+    WHERE workspace_id = $1
+);
+-- name: AdminGetOrderForWorkspace :one
+SELECT *
+FROM payment_order
+WHERE workspace_id = $1
+  AND id = $2
+LIMIT 1;
+
+-- name: AdminGetOrderByPublicIDForWorkspace :one
+SELECT *
+FROM payment_order
+WHERE workspace_id = $1
+  AND public_id = $2
+LIMIT 1;
+
+-- name: AdminGetPaymentAttemptForWorkspace :one
+SELECT pa.*
+FROM payment_attempt pa
+JOIN payment_order po ON po.id = pa.order_id
+WHERE po.workspace_id = $1
+  AND pa.id = $2
+LIMIT 1;
+
+-- name: AdminUpdatePaymentAttemptStatusForWorkspace :execrows
+UPDATE payment_attempt pa
+SET status = $1,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pa.order_id
+  AND po.workspace_id = $2
+  AND pa.id = $3;
+
+-- name: AdminGetPaymentEventForWorkspace :one
+SELECT pe.*
+FROM payment_event pe
+LEFT JOIN payment_attempt pa ON pa.id = pe.attempt_id
+JOIN payment_order po ON po.id = COALESCE(pe.order_id, pa.order_id)
+WHERE po.workspace_id = $1
+  AND pe.id = $2
+LIMIT 1;
+
+-- name: AdminUpdatePaymentEventStatusForWorkspace :execrows
+UPDATE payment_event pe
+SET processing_status = $1,
+    processing_error = $2,
+    processed_at = CASE WHEN $1 = 'processed' THEN COALESCE(processed_at, now()) ELSE processed_at END,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = COALESCE(
+        pe.order_id,
+        (SELECT pa.order_id FROM payment_attempt pa WHERE pa.id = pe.attempt_id)
+    )
+  AND po.workspace_id = $3
+  AND pe.id = $4;
+
+-- name: AdminGetSubscriptionByProviderIDForWorkspace :one
+SELECT *
+FROM payment_subscription
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_subscription_id = $3
+LIMIT 1;
+
+-- name: AdminGetFulfillmentForWorkspace :one
+SELECT pf.*
+FROM payment_fulfillment pf
+JOIN payment_order po ON po.id = pf.order_id
+WHERE po.workspace_id = $1
+  AND pf.id = $2
+LIMIT 1;
+
+-- name: AdminUpdateFulfillmentStatusForWorkspace :execrows
+UPDATE payment_fulfillment pf
+SET status = $1,
+    error = $2,
+    fulfilled_at = CASE WHEN $1 = 'succeeded' AND fulfilled_at IS NULL THEN now() ELSE fulfilled_at END,
+    revoked_at = CASE WHEN $1 = 'revoked' AND revoked_at IS NULL THEN now() ELSE revoked_at END,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pf.order_id
+  AND po.workspace_id = $3
+  AND pf.id = $4;
+
+-- name: AdminGetRefundForWorkspace :one
+SELECT pr.*
+FROM payment_refund pr
+JOIN payment_order po ON po.id = pr.order_id
+WHERE po.workspace_id = $1
+  AND pr.id = $2
+LIMIT 1;
+
+-- name: AdminUpdateRefundStatusForWorkspace :execrows
+UPDATE payment_refund pr
+SET status = $1,
+    reason = $2,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pr.order_id
+  AND po.workspace_id = $3
+  AND pr.id = $4;

@@ -23,22 +23,25 @@ var (
 	ErrRoleNotFound      = serviceerrors.New(serviceerrors.CodeNotFound, "control role not found")
 	ErrAccountNotFound   = serviceerrors.New(serviceerrors.CodeNotFound, "control account not found")
 	ErrWorkspaceNotFound = serviceerrors.New(serviceerrors.CodeNotFound, "control workspace not found")
+	ErrTwoFactorEnabled  = serviceerrors.New(serviceerrors.CodeConflict, "control two-factor authentication is already enabled")
 )
 
 const bootstrapQueryTimeout = 30 * time.Second
 
 type Options struct {
-	QueryTimeout time.Duration
-	CacheL1Delay time.Duration
-	CacheL2Delay time.Duration
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	OnCacheInvalidationError func(error)
 }
 
 type Repository struct {
-	db      *sqlwrap.Client
-	q       *controlsqlc.Queries
-	timeout time.Duration
-	cacheL1 time.Duration
-	cacheL2 time.Duration
+	db                       *sqlwrap.Client
+	q                        *controlsqlc.Queries
+	timeout                  time.Duration
+	cacheL1                  time.Duration
+	cacheL2                  time.Duration
+	onCacheInvalidationError func(error)
 }
 
 func New(db *sqlwrap.Client) *Repository { return NewWithOptions(db, Options{}) }
@@ -55,7 +58,14 @@ func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	if cacheL2 <= 0 {
 		cacheL2 = time.Second
 	}
-	return &Repository{db: db, q: controlsqlc.New(db.WithQueryTimeout(timeout)), timeout: timeout, cacheL1: cacheL1, cacheL2: cacheL2}
+	return &Repository{
+		db:                       db,
+		q:                        controlsqlc.New(db.WithQueryTimeout(timeout)),
+		timeout:                  timeout,
+		cacheL1:                  cacheL1,
+		cacheL2:                  cacheL2,
+		onCacheInvalidationError: options.OnCacheInvalidationError,
+	}
 }
 
 func (r *Repository) Close() error {
@@ -72,11 +82,31 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.execBootstrapSQL(ctx, controlsqlc.CatalogSQL, "catalog"); err != nil {
 		return err
 	}
-	return r.db.BumpCacheVersion("control", "access-catalog")
+	r.bumpCacheVersion("control", "access-catalog")
+	return nil
+}
+
+func (r *Repository) bumpCacheVersion(parts ...any) {
+	if r == nil || r.db == nil {
+		return
+	}
+	if err := r.db.BumpCacheVersion(parts...); err != nil && r.onCacheInvalidationError != nil {
+		func() {
+			defer func() {
+				_ = recover()
+			}()
+			r.onCacheInvalidationError(err)
+		}()
+	}
 }
 
 func (r *Repository) execBootstrapSQL(ctx context.Context, raw, name string) error {
-	for _, statement := range splitSQLStatements(raw) {
+	statements, err := sqlwrap.SplitStatements(raw)
+	if err != nil {
+		return fmt.Errorf("control %s SQL parse failed: %w", name, err)
+	}
+
+	for _, statement := range statements {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
@@ -85,17 +115,6 @@ func (r *Repository) execBootstrapSQL(ctx context.Context, raw, name string) err
 		}
 	}
 	return nil
-}
-
-func splitSQLStatements(raw string) []string {
-	parts := strings.Split(raw, ";")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if statement := strings.TrimSpace(part); statement != "" {
-			result = append(result, statement)
-		}
-	}
-	return result
 }
 
 func normalizeID(value string) string { return strings.TrimSpace(value) }

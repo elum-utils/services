@@ -212,9 +212,10 @@ func integrationOptions(options Options, repositoryOptions repository.Options) i
 
 func repositoryOptions(options Options) repository.Options {
 	return repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 }
 

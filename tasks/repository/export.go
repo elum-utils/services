@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	json "github.com/goccy/go-json"
@@ -29,6 +28,23 @@ func (r *Repository) ExportManifest() ExportManifest {
 }
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
+	var result ExportPackage
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		var err error
+		result, err = txRepo.exportSnapshot(ctx, workspaceID, req)
+		return err
+	})
+	return result, err
+}
+
+func (r *Repository) exportSnapshot(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
 	now := req.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -118,7 +134,6 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 		Format: ExportFormat, Service: "tasks", CreatedAt: now.UTC(),
 		Groups: make([]ExportGroup, 0, len(groups)), Sequences: make([]ExportSequence, 0, len(sequences)),
 	}
-	items := make(exportItemCollector)
 	for _, group := range groups {
 		exportGroup := ExportGroup{Key: group.Key, Position: group.Position, IsActive: group.IsActive}
 		if sections[ExportSectionLocalization] {
@@ -158,7 +173,6 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			Key: reward.RewardKey, Type: string(reward.RewardType), Quantity: reward.Quantity,
 			Scale: uint16(reward.Scale), Unit: taskDurationUnitPtr(reward.DurationUnit), Position: reward.Position,
 		})
-		items.add(reward.RewardKey)
 	}
 	taskKeyByID := make(map[uint64]string, len(taskRows))
 	for _, row := range taskRows {
@@ -242,9 +256,7 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 				Scale: uint16(row.Scale), Unit: nullPartnerDurationUnit(row.DurationUnit), Position: row.Position,
 			},
 		})
-		items.add(row.RewardKey)
 	}
-	out.Items = items.list()
 	return out, nil
 }
 
@@ -266,31 +278,6 @@ func exportSections(values []string) map[string]bool {
 	}
 	out[ExportSectionGroups] = true
 	return out
-}
-
-type exportItemCollector map[string]struct{}
-
-func (c exportItemCollector) add(id string) {
-	if id == "" {
-		return
-	}
-	c[id] = struct{}{}
-}
-
-func (c exportItemCollector) list() []ExportItem {
-	if len(c) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(c))
-	for id := range c {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	items := make([]ExportItem, 0, len(ids))
-	for index, id := range ids {
-		items = append(items, ExportItem{ID: id, Position: int32((index + 1) * 10)})
-	}
-	return items
 }
 
 func exportSecret(config PartnerConfig, includeValue bool) *ExportSecret {

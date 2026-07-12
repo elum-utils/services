@@ -219,41 +219,34 @@ func (q *Queries) AdminGetFulfillment(ctx context.Context, id int64) (PaymentFul
 	return i, err
 }
 
-const adminGetItem = `-- name: AdminGetItem :one
-SELECT
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position,
-    created_at,
-    updated_at
-FROM payment_item
-WHERE workspace_id = $1
-  AND id = $2
+const adminGetFulfillmentForWorkspace = `-- name: AdminGetFulfillmentForWorkspace :one
+SELECT pf.id, pf.order_id, pf.attempt_id, pf.internal_user_id, pf.status, pf.error, pf.created_at, pf.updated_at, pf.fulfilled_at, pf.revoked_at
+FROM payment_fulfillment pf
+JOIN payment_order po ON po.id = pf.order_id
+WHERE po.workspace_id = $1
+  AND pf.id = $2
 LIMIT 1
 `
 
-type AdminGetItemParams struct {
+type AdminGetFulfillmentForWorkspaceParams struct {
 	WorkspaceID string `json:"workspace_id"`
-	ID          string `json:"id"`
+	ID          int64  `json:"id"`
 }
 
-func (q *Queries) AdminGetItem(ctx context.Context, arg AdminGetItemParams) (PaymentItem, error) {
-	row := q.queryRow(ctx, q.adminGetItemStmt, adminGetItem, arg.WorkspaceID, arg.ID)
-	var i PaymentItem
+func (q *Queries) AdminGetFulfillmentForWorkspace(ctx context.Context, arg AdminGetFulfillmentForWorkspaceParams) (PaymentFulfillment, error) {
+	row := q.queryRow(ctx, q.adminGetFulfillmentForWorkspaceStmt, adminGetFulfillmentForWorkspace, arg.WorkspaceID, arg.ID)
+	var i PaymentFulfillment
 	err := row.Scan(
-		&i.WorkspaceID,
 		&i.ID,
-		&i.ItemType,
-		&i.TitleKey,
-		&i.DescriptionKey,
-		&i.Rarity,
-		&i.Position,
+		&i.OrderID,
+		&i.AttemptID,
+		&i.InternalUserID,
+		&i.Status,
+		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FulfilledAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -289,6 +282,102 @@ func (q *Queries) AdminGetLocalization(ctx context.Context, arg AdminGetLocaliza
 		&i.Locale,
 		&i.LocalizationKey,
 		&i.Value,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const adminGetOrderByPublicIDForWorkspace = `-- name: AdminGetOrderByPublicIDForWorkspace :one
+SELECT id, public_id, workspace_id, app_id, platform_id, platform_user_id, internal_user_id, payer_platform_id, payer_platform_user_id, payer_internal_user_id, purchase_key_id, product_id, quantity, price_id, asset_code, locale, list_amount_minor, discount_amount_minor, payable_amount_minor, status, reserved_until, paid_at, fulfilled_at, canceled_at, expires_at, created_at, updated_at
+FROM payment_order
+WHERE workspace_id = $1
+  AND public_id = $2
+LIMIT 1
+`
+
+type AdminGetOrderByPublicIDForWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	PublicID    string `json:"public_id"`
+}
+
+func (q *Queries) AdminGetOrderByPublicIDForWorkspace(ctx context.Context, arg AdminGetOrderByPublicIDForWorkspaceParams) (PaymentOrder, error) {
+	row := q.queryRow(ctx, q.adminGetOrderByPublicIDForWorkspaceStmt, adminGetOrderByPublicIDForWorkspace, arg.WorkspaceID, arg.PublicID)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.InternalUserID,
+		&i.PayerPlatformID,
+		&i.PayerPlatformUserID,
+		&i.PayerInternalUserID,
+		&i.PurchaseKeyID,
+		&i.ProductID,
+		&i.Quantity,
+		&i.PriceID,
+		&i.AssetCode,
+		&i.Locale,
+		&i.ListAmountMinor,
+		&i.DiscountAmountMinor,
+		&i.PayableAmountMinor,
+		&i.Status,
+		&i.ReservedUntil,
+		&i.PaidAt,
+		&i.FulfilledAt,
+		&i.CanceledAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const adminGetOrderForWorkspace = `-- name: AdminGetOrderForWorkspace :one
+SELECT id, public_id, workspace_id, app_id, platform_id, platform_user_id, internal_user_id, payer_platform_id, payer_platform_user_id, payer_internal_user_id, purchase_key_id, product_id, quantity, price_id, asset_code, locale, list_amount_minor, discount_amount_minor, payable_amount_minor, status, reserved_until, paid_at, fulfilled_at, canceled_at, expires_at, created_at, updated_at
+FROM payment_order
+WHERE workspace_id = $1
+  AND id = $2
+LIMIT 1
+`
+
+type AdminGetOrderForWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminGetOrderForWorkspace(ctx context.Context, arg AdminGetOrderForWorkspaceParams) (PaymentOrder, error) {
+	row := q.queryRow(ctx, q.adminGetOrderForWorkspaceStmt, adminGetOrderForWorkspace, arg.WorkspaceID, arg.ID)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.WorkspaceID,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.InternalUserID,
+		&i.PayerPlatformID,
+		&i.PayerPlatformUserID,
+		&i.PayerInternalUserID,
+		&i.PurchaseKeyID,
+		&i.ProductID,
+		&i.Quantity,
+		&i.PriceID,
+		&i.AssetCode,
+		&i.Locale,
+		&i.ListAmountMinor,
+		&i.DiscountAmountMinor,
+		&i.PayableAmountMinor,
+		&i.Status,
+		&i.ReservedUntil,
+		&i.PaidAt,
+		&i.FulfilledAt,
+		&i.CanceledAt,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -342,6 +431,44 @@ func (q *Queries) AdminGetPaymentAttempt(ctx context.Context, id int64) (Payment
 	return i, err
 }
 
+const adminGetPaymentAttemptForWorkspace = `-- name: AdminGetPaymentAttemptForWorkspace :one
+SELECT pa.id, pa.order_id, pa.provider_code, pa.asset_code, pa.amount_minor, pa.status, pa.provider_payment_id, pa.provider_invoice_id, pa.provider_charge_id, pa.provider_subscription_id, pa.idempotency_key, pa.confirmation_url, pa.return_url, pa.expires_at, pa.created_at, pa.updated_at
+FROM payment_attempt pa
+JOIN payment_order po ON po.id = pa.order_id
+WHERE po.workspace_id = $1
+  AND pa.id = $2
+LIMIT 1
+`
+
+type AdminGetPaymentAttemptForWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminGetPaymentAttemptForWorkspace(ctx context.Context, arg AdminGetPaymentAttemptForWorkspaceParams) (PaymentAttempt, error) {
+	row := q.queryRow(ctx, q.adminGetPaymentAttemptForWorkspaceStmt, adminGetPaymentAttemptForWorkspace, arg.WorkspaceID, arg.ID)
+	var i PaymentAttempt
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ProviderCode,
+		&i.AssetCode,
+		&i.AmountMinor,
+		&i.Status,
+		&i.ProviderPaymentID,
+		&i.ProviderInvoiceID,
+		&i.ProviderChargeID,
+		&i.ProviderSubscriptionID,
+		&i.IdempotencyKey,
+		&i.ConfirmationUrl,
+		&i.ReturnUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const adminGetPaymentEvent = `-- name: AdminGetPaymentEvent :one
 SELECT
     id,
@@ -365,6 +492,43 @@ LIMIT 1
 
 func (q *Queries) AdminGetPaymentEvent(ctx context.Context, id int64) (PaymentEvent, error) {
 	row := q.queryRow(ctx, q.adminGetPaymentEventStmt, adminGetPaymentEvent, id)
+	var i PaymentEvent
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderCode,
+		&i.AttemptID,
+		&i.OrderID,
+		&i.ProviderEventID,
+		&i.ProviderPaymentID,
+		&i.EventType,
+		&i.EventStatus,
+		&i.PayloadHash,
+		&i.SignatureValid,
+		&i.ProcessingStatus,
+		&i.ProcessingError,
+		&i.ReceivedAt,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
+const adminGetPaymentEventForWorkspace = `-- name: AdminGetPaymentEventForWorkspace :one
+SELECT pe.id, pe.provider_code, pe.attempt_id, pe.order_id, pe.provider_event_id, pe.provider_payment_id, pe.event_type, pe.event_status, pe.payload_hash, pe.signature_valid, pe.processing_status, pe.processing_error, pe.received_at, pe.processed_at
+FROM payment_event pe
+LEFT JOIN payment_attempt pa ON pa.id = pe.attempt_id
+JOIN payment_order po ON po.id = COALESCE(pe.order_id, pa.order_id)
+WHERE po.workspace_id = $1
+  AND pe.id = $2
+LIMIT 1
+`
+
+type AdminGetPaymentEventForWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminGetPaymentEventForWorkspace(ctx context.Context, arg AdminGetPaymentEventForWorkspaceParams) (PaymentEvent, error) {
+	row := q.queryRow(ctx, q.adminGetPaymentEventForWorkspaceStmt, adminGetPaymentEventForWorkspace, arg.WorkspaceID, arg.ID)
 	var i PaymentEvent
 	err := row.Scan(
 		&i.ID,
@@ -901,6 +1065,39 @@ func (q *Queries) AdminGetRefund(ctx context.Context, id int64) (PaymentRefund, 
 	return i, err
 }
 
+const adminGetRefundForWorkspace = `-- name: AdminGetRefundForWorkspace :one
+SELECT pr.id, pr.order_id, pr.attempt_id, pr.provider_code, pr.provider_refund_id, pr.amount_minor, pr.asset_code, pr.status, pr.reason, pr.created_at, pr.updated_at
+FROM payment_refund pr
+JOIN payment_order po ON po.id = pr.order_id
+WHERE po.workspace_id = $1
+  AND pr.id = $2
+LIMIT 1
+`
+
+type AdminGetRefundForWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) AdminGetRefundForWorkspace(ctx context.Context, arg AdminGetRefundForWorkspaceParams) (PaymentRefund, error) {
+	row := q.queryRow(ctx, q.adminGetRefundForWorkspaceStmt, adminGetRefundForWorkspace, arg.WorkspaceID, arg.ID)
+	var i PaymentRefund
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.AttemptID,
+		&i.ProviderCode,
+		&i.ProviderRefundID,
+		&i.AmountMinor,
+		&i.AssetCode,
+		&i.Status,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const adminGetSubscription = `-- name: AdminGetSubscription :one
 SELECT
     id,
@@ -933,6 +1130,46 @@ type AdminGetSubscriptionParams struct {
 
 func (q *Queries) AdminGetSubscription(ctx context.Context, arg AdminGetSubscriptionParams) (PaymentSubscription, error) {
 	row := q.queryRow(ctx, q.adminGetSubscriptionStmt, adminGetSubscription, arg.WorkspaceID, arg.ID)
+	var i PaymentSubscription
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProviderCode,
+		&i.ProviderSubscriptionID,
+		&i.AppID,
+		&i.PlatformID,
+		&i.PlatformUserID,
+		&i.InternalUserID,
+		&i.ProductID,
+		&i.OrderID,
+		&i.AttemptID,
+		&i.Status,
+		&i.CancelReason,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const adminGetSubscriptionByProviderIDForWorkspace = `-- name: AdminGetSubscriptionByProviderIDForWorkspace :one
+SELECT id, workspace_id, provider_code, provider_subscription_id, app_id, platform_id, platform_user_id, internal_user_id, product_id, order_id, attempt_id, status, cancel_reason, started_at, ended_at, created_at, updated_at
+FROM payment_subscription
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_subscription_id = $3
+LIMIT 1
+`
+
+type AdminGetSubscriptionByProviderIDForWorkspaceParams struct {
+	WorkspaceID            string `json:"workspace_id"`
+	ProviderCode           string `json:"provider_code"`
+	ProviderSubscriptionID string `json:"provider_subscription_id"`
+}
+
+func (q *Queries) AdminGetSubscriptionByProviderIDForWorkspace(ctx context.Context, arg AdminGetSubscriptionByProviderIDForWorkspaceParams) (PaymentSubscription, error) {
+	row := q.queryRow(ctx, q.adminGetSubscriptionByProviderIDForWorkspaceStmt, adminGetSubscriptionByProviderIDForWorkspace, arg.WorkspaceID, arg.ProviderCode, arg.ProviderSubscriptionID)
 	var i PaymentSubscription
 	err := row.Scan(
 		&i.ID,
@@ -1177,71 +1414,6 @@ func (q *Queries) AdminListFulfillments(ctx context.Context, arg AdminListFulfil
 			&i.UpdatedAt,
 			&i.FulfilledAt,
 			&i.RevokedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const adminListItems = `-- name: AdminListItems :many
-SELECT
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position,
-    created_at,
-    updated_at
-FROM payment_item
-WHERE workspace_id = $1
-  AND ($2 = '' OR item_type = $3)
-ORDER BY position, id
-LIMIT $4 OFFSET $5
-`
-
-type AdminListItemsParams struct {
-	WorkspaceID string         `json:"workspace_id"`
-	Column2     interface{}    `json:"column_2"`
-	ItemType    sql.NullString `json:"item_type"`
-	Limit       int32          `json:"limit"`
-	Offset      int32          `json:"offset"`
-}
-
-func (q *Queries) AdminListItems(ctx context.Context, arg AdminListItemsParams) ([]PaymentItem, error) {
-	rows, err := q.query(ctx, q.adminListItemsStmt, adminListItems,
-		arg.WorkspaceID,
-		arg.Column2,
-		arg.ItemType,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []PaymentItem
-	for rows.Next() {
-		var i PaymentItem
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.ID,
-			&i.ItemType,
-			&i.TitleKey,
-			&i.DescriptionKey,
-			&i.Rarity,
-			&i.Position,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2825,6 +2997,39 @@ func (q *Queries) AdminUpdateFulfillmentStatus(ctx context.Context, arg AdminUpd
 	return result.RowsAffected()
 }
 
+const adminUpdateFulfillmentStatusForWorkspace = `-- name: AdminUpdateFulfillmentStatusForWorkspace :execrows
+UPDATE payment_fulfillment pf
+SET status = $1,
+    error = $2,
+    fulfilled_at = CASE WHEN $1 = 'succeeded' AND fulfilled_at IS NULL THEN now() ELSE fulfilled_at END,
+    revoked_at = CASE WHEN $1 = 'revoked' AND revoked_at IS NULL THEN now() ELSE revoked_at END,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pf.order_id
+  AND po.workspace_id = $3
+  AND pf.id = $4
+`
+
+type AdminUpdateFulfillmentStatusForWorkspaceParams struct {
+	Status      PaymentFulfillmentStatus `json:"status"`
+	Error       sql.NullString           `json:"error"`
+	WorkspaceID string                   `json:"workspace_id"`
+	ID          int64                    `json:"id"`
+}
+
+func (q *Queries) AdminUpdateFulfillmentStatusForWorkspace(ctx context.Context, arg AdminUpdateFulfillmentStatusForWorkspaceParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminUpdateFulfillmentStatusForWorkspaceStmt, adminUpdateFulfillmentStatusForWorkspace,
+		arg.Status,
+		arg.Error,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const adminUpdateOrderStatus = `-- name: AdminUpdateOrderStatus :execrows
 UPDATE payment_order
 SET status = $1,
@@ -2851,6 +3056,65 @@ func (q *Queries) AdminUpdateOrderStatus(ctx context.Context, arg AdminUpdateOrd
 		arg.Column2,
 		arg.Column3,
 		arg.Column4,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const adminUpdatePaymentAttemptStatusForWorkspace = `-- name: AdminUpdatePaymentAttemptStatusForWorkspace :execrows
+UPDATE payment_attempt pa
+SET status = $1,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pa.order_id
+  AND po.workspace_id = $2
+  AND pa.id = $3
+`
+
+type AdminUpdatePaymentAttemptStatusForWorkspaceParams struct {
+	Status      PaymentAttemptStatus `json:"status"`
+	WorkspaceID string               `json:"workspace_id"`
+	ID          int64                `json:"id"`
+}
+
+func (q *Queries) AdminUpdatePaymentAttemptStatusForWorkspace(ctx context.Context, arg AdminUpdatePaymentAttemptStatusForWorkspaceParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminUpdatePaymentAttemptStatusForWorkspaceStmt, adminUpdatePaymentAttemptStatusForWorkspace, arg.Status, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const adminUpdatePaymentEventStatusForWorkspace = `-- name: AdminUpdatePaymentEventStatusForWorkspace :execrows
+UPDATE payment_event pe
+SET processing_status = $1,
+    processing_error = $2,
+    processed_at = CASE WHEN $1 = 'processed' THEN COALESCE(processed_at, now()) ELSE processed_at END,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = COALESCE(
+        pe.order_id,
+        (SELECT pa.order_id FROM payment_attempt pa WHERE pa.id = pe.attempt_id)
+    )
+  AND po.workspace_id = $3
+  AND pe.id = $4
+`
+
+type AdminUpdatePaymentEventStatusForWorkspaceParams struct {
+	ProcessingStatus PaymentEventProcessingStatus `json:"processing_status"`
+	ProcessingError  sql.NullString               `json:"processing_error"`
+	WorkspaceID      string                       `json:"workspace_id"`
+	ID               int64                        `json:"id"`
+}
+
+func (q *Queries) AdminUpdatePaymentEventStatusForWorkspace(ctx context.Context, arg AdminUpdatePaymentEventStatusForWorkspaceParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminUpdatePaymentEventStatusForWorkspaceStmt, adminUpdatePaymentEventStatusForWorkspace,
+		arg.ProcessingStatus,
+		arg.ProcessingError,
 		arg.WorkspaceID,
 		arg.ID,
 	)
@@ -2926,6 +3190,37 @@ type AdminUpdateRefundStatusParams struct {
 
 func (q *Queries) AdminUpdateRefundStatus(ctx context.Context, arg AdminUpdateRefundStatusParams) (int64, error) {
 	result, err := q.exec(ctx, q.adminUpdateRefundStatusStmt, adminUpdateRefundStatus, arg.Status, arg.Reason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const adminUpdateRefundStatusForWorkspace = `-- name: AdminUpdateRefundStatusForWorkspace :execrows
+UPDATE payment_refund pr
+SET status = $1,
+    reason = $2,
+    updated_at = now()
+FROM payment_order po
+WHERE po.id = pr.order_id
+  AND po.workspace_id = $3
+  AND pr.id = $4
+`
+
+type AdminUpdateRefundStatusForWorkspaceParams struct {
+	Status      PaymentRefundStatus `json:"status"`
+	Reason      sql.NullString      `json:"reason"`
+	WorkspaceID string              `json:"workspace_id"`
+	ID          int64               `json:"id"`
+}
+
+func (q *Queries) AdminUpdateRefundStatusForWorkspace(ctx context.Context, arg AdminUpdateRefundStatusForWorkspaceParams) (int64, error) {
+	result, err := q.exec(ctx, q.adminUpdateRefundStatusForWorkspaceStmt, adminUpdateRefundStatusForWorkspace,
+		arg.Status,
+		arg.Reason,
+		arg.WorkspaceID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -3497,7 +3792,8 @@ JOIN payment_provider_asset ppa
  AND ppa.is_active = true
 WHERE po.id = $12
   AND po.status IN ('draft', 'pending_payment')
-RETURNING id
+  AND (po.expires_at IS NULL OR po.expires_at > now())
+RETURNING id, asset_code, amount_minor
 `
 
 type CreatePaymentAttemptFromOrderParams struct {
@@ -3515,7 +3811,13 @@ type CreatePaymentAttemptFromOrderParams struct {
 	ID                     int64                `json:"id"`
 }
 
-func (q *Queries) CreatePaymentAttemptFromOrder(ctx context.Context, arg CreatePaymentAttemptFromOrderParams) (int64, error) {
+type CreatePaymentAttemptFromOrderRow struct {
+	ID          int64  `json:"id"`
+	AssetCode   string `json:"asset_code"`
+	AmountMinor int64  `json:"amount_minor"`
+}
+
+func (q *Queries) CreatePaymentAttemptFromOrder(ctx context.Context, arg CreatePaymentAttemptFromOrderParams) (CreatePaymentAttemptFromOrderRow, error) {
 	row := q.queryRow(ctx, q.createPaymentAttemptFromOrderStmt, createPaymentAttemptFromOrder,
 		arg.ProviderCode,
 		arg.Status,
@@ -3530,9 +3832,9 @@ func (q *Queries) CreatePaymentAttemptFromOrder(ctx context.Context, arg CreateP
 		arg.ProviderCode_2,
 		arg.ID,
 	)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	var i CreatePaymentAttemptFromOrderRow
+	err := row.Scan(&i.ID, &i.AssetCode, &i.AmountMinor)
+	return i, err
 }
 
 const createPaymentEvent = `-- name: CreatePaymentEvent :one
@@ -3877,6 +4179,17 @@ func (q *Queries) CreatePurchaseKey(ctx context.Context, arg CreatePurchaseKeyPa
 	return id, err
 }
 
+const databaseNow = `-- name: DatabaseNow :one
+SELECT now()::timestamptz
+`
+
+func (q *Queries) DatabaseNow(ctx context.Context) (time.Time, error) {
+	row := q.queryRow(ctx, q.databaseNowStmt, databaseNow)
+	var column_1 time.Time
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const decrementProductLimitCountersForRefund = `-- name: DecrementProductLimitCountersForRefund :execrows
 UPDATE payment_product_limit_counter plc
 SET paid_count = GREATEST(plc.paid_count - po.quantity, 0),
@@ -3930,25 +4243,6 @@ type DeleteAssetRatesForAssetParams struct {
 
 func (q *Queries) DeleteAssetRatesForAsset(ctx context.Context, arg DeleteAssetRatesForAssetParams) (int64, error) {
 	result, err := q.exec(ctx, q.deleteAssetRatesForAssetStmt, deleteAssetRatesForAsset, arg.AssetCode, arg.ReferenceAssetCode)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const deleteItem = `-- name: DeleteItem :execrows
-DELETE FROM payment_item
-WHERE workspace_id = $1
-  AND id = $2
-`
-
-type DeleteItemParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	ID          string `json:"id"`
-}
-
-func (q *Queries) DeleteItem(ctx context.Context, arg DeleteItemParams) (int64, error) {
-	result, err := q.exec(ctx, q.deleteItemStmt, deleteItem, arg.WorkspaceID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -4157,6 +4451,265 @@ func (q *Queries) EnsureProductLimitCounter(ctx context.Context, arg EnsureProdu
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const exportListLocalizations = `-- name: ExportListLocalizations :many
+SELECT id, workspace_id, locale, localization_key, value, created_at, updated_at
+FROM payment_localization
+WHERE workspace_id = $1
+ORDER BY localization_key, locale
+`
+
+func (q *Queries) ExportListLocalizations(ctx context.Context, workspaceID string) ([]PaymentLocalization, error) {
+	rows, err := q.query(ctx, q.exportListLocalizationsStmt, exportListLocalizations, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentLocalization
+	for rows.Next() {
+		var i PaymentLocalization
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Locale,
+			&i.LocalizationKey,
+			&i.Value,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportListPrices = `-- name: ExportListPrices :many
+SELECT id, workspace_id, product_id, asset_code, list_amount_minor, discount_amount_minor, pricing_mode, reference_asset_code, reference_list_amount_minor, reference_discount_amount_minor, coefficient, is_promotion, starts_at, ends_at, created_at, updated_at
+FROM payment_price
+WHERE workspace_id = $1
+ORDER BY product_id, asset_code, starts_at, id
+`
+
+func (q *Queries) ExportListPrices(ctx context.Context, workspaceID string) ([]PaymentPrice, error) {
+	rows, err := q.query(ctx, q.exportListPricesStmt, exportListPrices, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentPrice
+	for rows.Next() {
+		var i PaymentPrice
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ProductID,
+			&i.AssetCode,
+			&i.ListAmountMinor,
+			&i.DiscountAmountMinor,
+			&i.PricingMode,
+			&i.ReferenceAssetCode,
+			&i.ReferenceListAmountMinor,
+			&i.ReferenceDiscountAmountMinor,
+			&i.Coefficient,
+			&i.IsPromotion,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportListProductGroups = `-- name: ExportListProductGroups :many
+SELECT workspace_id, code, title_key, description_key, position, is_active, created_at, updated_at
+FROM payment_product_group
+WHERE workspace_id = $1
+ORDER BY position, code
+`
+
+func (q *Queries) ExportListProductGroups(ctx context.Context, workspaceID string) ([]PaymentProductGroup, error) {
+	rows, err := q.query(ctx, q.exportListProductGroupsStmt, exportListProductGroups, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentProductGroup
+	for rows.Next() {
+		var i PaymentProductGroup
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Code,
+			&i.TitleKey,
+			&i.DescriptionKey,
+			&i.Position,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportListProductItems = `-- name: ExportListProductItems :many
+SELECT id, workspace_id, product_id, item_id, reward_type, quantity, scale, duration_unit, created_at, updated_at
+FROM payment_product_item
+WHERE workspace_id = $1
+ORDER BY product_id, item_id
+`
+
+func (q *Queries) ExportListProductItems(ctx context.Context, workspaceID string) ([]PaymentProductItem, error) {
+	rows, err := q.query(ctx, q.exportListProductItemsStmt, exportListProductItems, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentProductItem
+	for rows.Next() {
+		var i PaymentProductItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ProductID,
+			&i.ItemID,
+			&i.RewardType,
+			&i.Quantity,
+			&i.Scale,
+			&i.DurationUnit,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportListProducts = `-- name: ExportListProducts :many
+SELECT workspace_id, id, group_code, title_key, description_key, target, image_url, link_url, size_label, period_seconds, trial_duration_seconds, quantity_mode, position, global_limit, global_interval, global_interval_count, user_limit, user_interval, user_interval_count, available_from, available_until, is_visible, is_closed, created_at, updated_at
+FROM payment_product
+WHERE workspace_id = $1
+ORDER BY position, id
+`
+
+func (q *Queries) ExportListProducts(ctx context.Context, workspaceID string) ([]PaymentProduct, error) {
+	rows, err := q.query(ctx, q.exportListProductsStmt, exportListProducts, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentProduct
+	for rows.Next() {
+		var i PaymentProduct
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ID,
+			&i.GroupCode,
+			&i.TitleKey,
+			&i.DescriptionKey,
+			&i.Target,
+			&i.ImageUrl,
+			&i.LinkUrl,
+			&i.SizeLabel,
+			&i.PeriodSeconds,
+			&i.TrialDurationSeconds,
+			&i.QuantityMode,
+			&i.Position,
+			&i.GlobalLimit,
+			&i.GlobalInterval,
+			&i.GlobalIntervalCount,
+			&i.UserLimit,
+			&i.UserInterval,
+			&i.UserIntervalCount,
+			&i.AvailableFrom,
+			&i.AvailableUntil,
+			&i.IsVisible,
+			&i.IsClosed,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportListTONWallets = `-- name: ExportListTONWallets :many
+SELECT workspace_id, network, wallet_address, network_config_url, is_enabled, created_at, updated_at
+FROM payment_ton_wallet
+WHERE workspace_id = $1
+ORDER BY network, wallet_address
+`
+
+func (q *Queries) ExportListTONWallets(ctx context.Context, workspaceID string) ([]PaymentTonWallet, error) {
+	rows, err := q.query(ctx, q.exportListTONWalletsStmt, exportListTONWallets, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentTonWallet
+	for rows.Next() {
+		var i PaymentTonWallet
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Network,
+			&i.WalletAddress,
+			&i.NetworkConfigUrl,
+			&i.IsEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failAssetRateUpdate = `-- name: FailAssetRateUpdate :execrows
@@ -5073,12 +5626,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -5100,7 +5648,7 @@ WHERE pc.product_id = $1
       ORDER BY pc2.is_promotion DESC, pc2.price_starts_at DESC, pc2.price_id DESC
       LIMIT 1
   )
-ORDER BY pc.item_position, pc.item_id
+ORDER BY pc.item_id
 `
 
 type GetProductPreviewRowsParams struct {
@@ -5132,11 +5680,6 @@ type GetProductPreviewRowsRow struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 }
 
 func (q *Queries) GetProductPreviewRows(ctx context.Context, arg GetProductPreviewRowsParams) ([]GetProductPreviewRowsRow, error) {
@@ -5171,11 +5714,6 @@ func (q *Queries) GetProductPreviewRows(ctx context.Context, arg GetProductPrevi
 			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -5213,12 +5751,7 @@ SELECT
     pi.quantity AS item_quantity,
     pi.scale AS item_scale,
     pi.reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 LEFT JOIN payment_localization lp_title
     ON lp_title.localization_key = p.title_key
@@ -5231,30 +5764,17 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = $3
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = $4
-   AND li_description.workspace_id = p.workspace_id
-WHERE p.id = $5
-  AND p.workspace_id = $6
+WHERE p.id = $3
+  AND p.workspace_id = $4
   AND p.is_visible = true
   AND p.is_closed = false
   AND now() BETWEEN p.available_from AND p.available_until
-ORDER BY i.position, i.id
+ORDER BY pi.item_id
 `
 
 type GetProductPreviewRowsRawParams struct {
 	Locale      string `json:"locale"`
 	Locale_2    string `json:"locale_2"`
-	Locale_3    string `json:"locale_3"`
-	Locale_4    string `json:"locale_4"`
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 }
@@ -5282,19 +5802,12 @@ type GetProductPreviewRowsRawRow struct {
 	ItemScale            sql.NullInt16                     `json:"item_scale"`
 	RewardType           NullPaymentProductItemRewardType  `json:"reward_type"`
 	Column22             PaymentProductCacheDurationUnit   `json:"column_22"`
-	ItemType             sql.NullString                    `json:"item_type"`
-	ItemTitle            string                            `json:"item_title"`
-	ItemDescription      string                            `json:"item_description"`
-	ItemRarity           sql.NullString                    `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                     `json:"item_position"`
 }
 
 func (q *Queries) GetProductPreviewRowsRaw(ctx context.Context, arg GetProductPreviewRowsRawParams) ([]GetProductPreviewRowsRawRow, error) {
 	rows, err := q.query(ctx, q.getProductPreviewRowsRawStmt, getProductPreviewRowsRaw,
 		arg.Locale,
 		arg.Locale_2,
-		arg.Locale_3,
-		arg.Locale_4,
 		arg.ID,
 		arg.WorkspaceID,
 	)
@@ -5328,11 +5841,6 @@ func (q *Queries) GetProductPreviewRowsRaw(ctx context.Context, arg GetProductPr
 			&i.ItemScale,
 			&i.RewardType,
 			&i.Column22,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -5395,12 +5903,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -5424,7 +5927,7 @@ WHERE pc.product_id = $1
       ORDER BY pc2.is_promotion DESC, pc2.price_starts_at DESC, pc2.price_id DESC
       LIMIT 1
   )
-ORDER BY pc.item_position, pc.item_id
+ORDER BY pc.item_id
 `
 
 type GetProductRowsParams struct {
@@ -5462,11 +5965,6 @@ type GetProductRowsRow struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 }
 
 func (q *Queries) GetProductRows(ctx context.Context, arg GetProductRowsParams) ([]GetProductRowsRow, error) {
@@ -5511,11 +6009,6 @@ func (q *Queries) GetProductRows(ctx context.Context, arg GetProductRowsParams) 
 			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -5557,12 +6050,7 @@ SELECT
     pi.quantity AS item_quantity,
     pi.scale AS item_scale,
     pi.reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp ON pp.id = (
     SELECT pp2.id
@@ -5585,19 +6073,8 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = $4
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = $5
-   AND li_description.workspace_id = p.workspace_id
-WHERE p.id = $6
-  AND p.workspace_id = $7
+WHERE p.id = $4
+  AND p.workspace_id = $5
   AND p.is_visible = true
   AND p.is_closed = false
   AND now() BETWEEN p.available_from AND p.available_until
@@ -5607,8 +6084,6 @@ type GetProductRowsRawParams struct {
 	AssetCode   string `json:"asset_code"`
 	Locale      string `json:"locale"`
 	Locale_2    string `json:"locale_2"`
-	Locale_3    string `json:"locale_3"`
-	Locale_4    string `json:"locale_4"`
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 }
@@ -5640,11 +6115,6 @@ type GetProductRowsRawRow struct {
 	ItemScale            sql.NullInt16                     `json:"item_scale"`
 	RewardType           NullPaymentProductItemRewardType  `json:"reward_type"`
 	Column26             PaymentProductCacheDurationUnit   `json:"column_26"`
-	ItemType             sql.NullString                    `json:"item_type"`
-	ItemTitle            string                            `json:"item_title"`
-	ItemDescription      string                            `json:"item_description"`
-	ItemRarity           sql.NullString                    `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                     `json:"item_position"`
 }
 
 func (q *Queries) GetProductRowsRaw(ctx context.Context, arg GetProductRowsRawParams) ([]GetProductRowsRawRow, error) {
@@ -5652,8 +6122,6 @@ func (q *Queries) GetProductRowsRaw(ctx context.Context, arg GetProductRowsRawPa
 		arg.AssetCode,
 		arg.Locale,
 		arg.Locale_2,
-		arg.Locale_3,
-		arg.Locale_4,
 		arg.ID,
 		arg.WorkspaceID,
 	)
@@ -5691,11 +6159,6 @@ func (q *Queries) GetProductRowsRaw(ctx context.Context, arg GetProductRowsRawPa
 			&i.ItemScale,
 			&i.RewardType,
 			&i.Column26,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -5903,6 +6366,81 @@ func (q *Queries) GetPurchaseKeyByHash(ctx context.Context, keyHash string) (Pay
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const importHasTONWallet = `-- name: ImportHasTONWallet :one
+SELECT EXISTS (
+    SELECT 1
+    FROM payment_ton_wallet
+    WHERE workspace_id = $1
+)
+`
+
+func (q *Queries) ImportHasTONWallet(ctx context.Context, workspaceID string) (bool, error) {
+	row := q.queryRow(ctx, q.importHasTONWalletStmt, importHasTONWallet, workspaceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const importListProductGroupCodes = `-- name: ImportListProductGroupCodes :many
+SELECT code
+FROM payment_product_group
+WHERE workspace_id = $1
+ORDER BY code
+`
+
+func (q *Queries) ImportListProductGroupCodes(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.query(ctx, q.importListProductGroupCodesStmt, importListProductGroupCodes, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		items = append(items, code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const importListProductIDs = `-- name: ImportListProductIDs :many
+SELECT id
+FROM payment_product
+WHERE workspace_id = $1
+ORDER BY id
+`
+
+func (q *Queries) ImportListProductIDs(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.query(ctx, q.importListProductIDsStmt, importListProductIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const incrementProductLimitCounter = `-- name: IncrementProductLimitCounter :execrows
@@ -6391,12 +6929,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -6406,7 +6939,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id
 `
 
@@ -6452,11 +6984,6 @@ type ListProductCatalogCacheRowsRow struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 }
 
 func (q *Queries) ListProductCatalogCacheRows(ctx context.Context, arg ListProductCatalogCacheRowsParams) ([]ListProductCatalogCacheRowsRow, error) {
@@ -6508,50 +7035,10 @@ func (q *Queries) ListProductCatalogCacheRows(ctx context.Context, arg ListProdu
 			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProductIDsForItem = `-- name: ListProductIDsForItem :many
-SELECT product_id
-FROM payment_product_item
-WHERE workspace_id = $1
-  AND item_id = $2
-`
-
-type ListProductIDsForItemParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	ItemID      string `json:"item_id"`
-}
-
-func (q *Queries) ListProductIDsForItem(ctx context.Context, arg ListProductIDsForItemParams) ([]string, error) {
-	rows, err := q.query(ctx, q.listProductIDsForItemStmt, listProductIDsForItem, arg.WorkspaceID, arg.ItemID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var product_id string
-		if err := rows.Scan(&product_id); err != nil {
-			return nil, err
-		}
-		items = append(items, product_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -6629,12 +7116,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.product_id = $1
   AND pc.workspace_id = $2
@@ -6643,7 +7125,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id
 `
 
@@ -6684,11 +7165,6 @@ type ListProductPreviewCatalogCacheRowsRow struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 }
 
 func (q *Queries) ListProductPreviewCatalogCacheRows(ctx context.Context, arg ListProductPreviewCatalogCacheRowsParams) ([]ListProductPreviewCatalogCacheRowsRow, error) {
@@ -6731,11 +7207,6 @@ func (q *Queries) ListProductPreviewCatalogCacheRows(ctx context.Context, arg Li
 			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -6989,12 +7460,7 @@ SELECT
     pc.item_quantity,
     pc.item_scale,
     pc.reward_type,
-    pc.duration_unit,
-    pc.item_type,
-    pc.item_title,
-    pc.item_description,
-    pc.item_rarity,
-    pc.item_position
+    pc.duration_unit
 FROM payment_product_cache pc
 WHERE pc.workspace_id = $1
   AND pc.asset_code = $2
@@ -7006,7 +7472,6 @@ ORDER BY
     pc.is_promotion DESC,
     pc.price_starts_at DESC,
     pc.price_id DESC,
-    pc.item_position,
     pc.item_id
 `
 
@@ -7054,11 +7519,6 @@ type ListProductsCatalogCacheRowsRow struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 }
 
 func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProductsCatalogCacheRowsParams) ([]ListProductsCatalogCacheRowsRow, error) {
@@ -7112,11 +7572,6 @@ func (q *Queries) ListProductsCatalogCacheRows(ctx context.Context, arg ListProd
 			&i.ItemScale,
 			&i.RewardType,
 			&i.DurationUnit,
-			&i.ItemType,
-			&i.ItemTitle,
-			&i.ItemDescription,
-			&i.ItemRarity,
-			&i.ItemPosition,
 		); err != nil {
 			return nil, err
 		}
@@ -7676,12 +8131,7 @@ INSERT INTO payment_product_cache (
     item_quantity,
     item_scale,
     reward_type,
-    duration_unit,
-    item_type,
-    item_title,
-    item_description,
-    item_rarity,
-    item_position
+    duration_unit
 )
 SELECT
     p.workspace_id,
@@ -7719,12 +8169,7 @@ SELECT
     COALESCE(pi.quantity, 0) AS item_quantity,
     COALESCE(pi.scale, 0) AS item_scale,
     (COALESCE(pi.reward_type::text, 'quantity'))::payment_product_cache_reward_type AS reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp
     ON pp.workspace_id = p.workspace_id
@@ -7750,17 +8195,6 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = loc.locale
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = loc.locale
-   AND li_description.workspace_id = p.workspace_id
 WHERE p.workspace_id = $2
   AND p.id = $3
 `
@@ -7813,12 +8247,7 @@ INSERT INTO payment_product_cache (
     item_quantity,
     item_scale,
     reward_type,
-    duration_unit,
-    item_type,
-    item_title,
-    item_description,
-    item_rarity,
-    item_position
+    duration_unit
 )
 SELECT
     p.workspace_id,
@@ -7856,12 +8285,7 @@ SELECT
     COALESCE(pi.quantity, 0) AS item_quantity,
     COALESCE(pi.scale, 0) AS item_scale,
     (COALESCE(pi.reward_type::text, 'quantity'))::payment_product_cache_reward_type AS reward_type,
-    (pi.duration_unit::text)::payment_product_cache_duration_unit,
-    i.item_type,
-    COALESCE(li_title.value, i.title_key, '') AS item_title,
-    COALESCE(li_description.value, i.description_key, '') AS item_description,
-    i.rarity AS item_rarity,
-    i.position AS item_position
+    (pi.duration_unit::text)::payment_product_cache_duration_unit
 FROM payment_product p
 JOIN payment_price pp
     ON pp.workspace_id = p.workspace_id
@@ -7887,17 +8311,6 @@ LEFT JOIN payment_localization lp_description
 LEFT JOIN payment_product_item pi
     ON pi.product_id = p.id
    AND pi.workspace_id = p.workspace_id
-LEFT JOIN payment_item i
-    ON i.id = pi.item_id
-   AND i.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_title
-    ON li_title.localization_key = i.title_key
-   AND li_title.locale = loc.locale
-   AND li_title.workspace_id = p.workspace_id
-LEFT JOIN payment_localization li_description
-    ON li_description.localization_key = i.description_key
-   AND li_description.locale = loc.locale
-   AND li_description.workspace_id = p.workspace_id
 WHERE p.workspace_id = $2
 `
 
@@ -7956,11 +8369,13 @@ SELECT
 FROM (
     SELECT order_dates.workspace_id, DATE(order_dates.occurred_at) AS stats_date
     FROM payment_stats_order_event order_dates
-    WHERE order_dates.occurred_at >= $1 AND order_dates.occurred_at < $2
+    WHERE order_dates.workspace_id = $9
+      AND order_dates.occurred_at >= $1 AND order_dates.occurred_at < $2
     UNION
     SELECT payment_dates.workspace_id, DATE(payment_dates.occurred_at) AS stats_date
     FROM payment_stats_event payment_dates
-    WHERE payment_dates.occurred_at >= $3 AND payment_dates.occurred_at < $4
+    WHERE payment_dates.workspace_id = $9
+      AND payment_dates.occurred_at >= $3 AND payment_dates.occurred_at < $4
 ) dates
 LEFT JOIN (
     SELECT
@@ -7969,6 +8384,7 @@ LEFT JOIN (
         SUM(CASE WHEN is_closed = FALSE AND available_from <= now() AND available_until > now() THEN 1 ELSE 0 END) AS active_products,
         SUM(CASE WHEN is_visible = TRUE AND is_closed = FALSE AND available_from <= now() AND available_until > now() THEN 1 ELSE 0 END) AS visible_products
     FROM payment_product
+    WHERE workspace_id = $9
     GROUP BY workspace_id
 ) products ON products.workspace_id = dates.workspace_id
 LEFT JOIN (
@@ -7986,7 +8402,8 @@ LEFT JOIN (
         SUM(CASE WHEN event_type = 'status' AND order_status = 'chargebacked' THEN 1 ELSE 0 END) AS chargebacked_orders,
         SUM(CASE WHEN event_type = 'status' AND order_status = 'failed' THEN 1 ELSE 0 END) AS failed_orders
     FROM payment_stats_order_event overview_orders
-    WHERE overview_orders.occurred_at >= $5 AND overview_orders.occurred_at < $6
+    WHERE overview_orders.workspace_id = $9
+      AND overview_orders.occurred_at >= $5 AND overview_orders.occurred_at < $6
     GROUP BY overview_orders.workspace_id, DATE(overview_orders.occurred_at)
 ) orders
     ON orders.workspace_id = dates.workspace_id
@@ -8000,7 +8417,8 @@ LEFT JOIN (
         COUNT(DISTINCT CASE WHEN event_type = 'purchase' THEN CONCAT_WS(':', app_id, platform_id, platform_user_id) ELSE NULL END) AS unique_buyers,
         SUM(CASE WHEN event_type = 'refund' THEN 1 ELSE 0 END) AS refund_count
     FROM payment_stats_event overview_payments
-    WHERE overview_payments.occurred_at >= $7 AND overview_payments.occurred_at < $8
+    WHERE overview_payments.workspace_id = $9
+      AND overview_payments.occurred_at >= $7 AND overview_payments.occurred_at < $8
     GROUP BY overview_payments.workspace_id, DATE(overview_payments.occurred_at)
 ) payments
     ON payments.workspace_id = dates.workspace_id
@@ -8033,6 +8451,7 @@ type RefreshPaymentDailyOverviewParams struct {
 	OccurredAt_6 time.Time `json:"occurred_at_6"`
 	OccurredAt_7 time.Time `json:"occurred_at_7"`
 	OccurredAt_8 time.Time `json:"occurred_at_8"`
+	WorkspaceID  string    `json:"workspace_id"`
 }
 
 func (q *Queries) RefreshPaymentDailyOverview(ctx context.Context, arg RefreshPaymentDailyOverviewParams) error {
@@ -8045,6 +8464,7 @@ func (q *Queries) RefreshPaymentDailyOverview(ctx context.Context, arg RefreshPa
 		arg.OccurredAt_6,
 		arg.OccurredAt_7,
 		arg.OccurredAt_8,
+		arg.WorkspaceID,
 	)
 	return err
 }
@@ -8067,7 +8487,8 @@ SELECT
     SUM(CASE WHEN e.event_type = 'refund' THEN 1 ELSE 0 END),
     SUM(CASE WHEN e.event_type = 'refund' THEN e.amount_minor ELSE 0 END)
 FROM payment_stats_event e
-WHERE e.occurred_at >= $1 AND e.occurred_at < $2
+WHERE e.workspace_id = $3
+  AND e.occurred_at >= $1 AND e.occurred_at < $2
 GROUP BY GROUPING SETS (
     (e.workspace_id, e.product_id, e.asset_code, DATE(e.occurred_at)),
     (e.workspace_id, e.asset_code, DATE(e.occurred_at))
@@ -8085,10 +8506,11 @@ ON CONFLICT (workspace_id, product_id, asset_code, stats_date) DO UPDATE SET
 type RefreshPaymentDailyStatsParams struct {
 	OccurredAt   time.Time `json:"occurred_at"`
 	OccurredAt_2 time.Time `json:"occurred_at_2"`
+	WorkspaceID  string    `json:"workspace_id"`
 }
 
 func (q *Queries) RefreshPaymentDailyStats(ctx context.Context, arg RefreshPaymentDailyStatsParams) error {
-	_, err := q.exec(ctx, q.refreshPaymentDailyStatsStmt, refreshPaymentDailyStats, arg.OccurredAt, arg.OccurredAt_2)
+	_, err := q.exec(ctx, q.refreshPaymentDailyStatsStmt, refreshPaymentDailyStats, arg.OccurredAt, arg.OccurredAt_2, arg.WorkspaceID)
 	return err
 }
 
@@ -8498,49 +8920,6 @@ func (q *Queries) UpsertAssetRate(ctx context.Context, arg UpsertAssetRateParams
 		arg.ReferencePerAssetMinor,
 		arg.Source,
 		arg.ObservedAt,
-	)
-	return err
-}
-
-const upsertItem = `-- name: UpsertItem :exec
-INSERT INTO payment_item (
-    workspace_id,
-    id,
-    item_type,
-    title_key,
-    description_key,
-    rarity,
-    position
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (workspace_id, id) DO UPDATE SET
-    item_type = EXCLUDED.item_type,
-    title_key = EXCLUDED.title_key,
-    description_key = EXCLUDED.description_key,
-    rarity = EXCLUDED.rarity,
-    position = EXCLUDED.position,
-    updated_at = now()
-`
-
-type UpsertItemParams struct {
-	WorkspaceID    string         `json:"workspace_id"`
-	ID             string         `json:"id"`
-	ItemType       sql.NullString `json:"item_type"`
-	TitleKey       string         `json:"title_key"`
-	DescriptionKey sql.NullString `json:"description_key"`
-	Rarity         string         `json:"rarity"`
-	Position       int32          `json:"position"`
-}
-
-func (q *Queries) UpsertItem(ctx context.Context, arg UpsertItemParams) error {
-	_, err := q.exec(ctx, q.upsertItemStmt, upsertItem,
-		arg.WorkspaceID,
-		arg.ID,
-		arg.ItemType,
-		arg.TitleKey,
-		arg.DescriptionKey,
-		arg.Rarity,
-		arg.Position,
 	)
 	return err
 }

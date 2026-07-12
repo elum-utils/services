@@ -14,8 +14,6 @@ func (a *Checkout) CreateAttempt(ctx context.Context, params CreateAttemptParams
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:                params.OrderID,
 		ProviderCode:           params.ProviderCode,
-		KnownAssetCode:         params.AssetCode,
-		KnownAmountMinor:       params.AmountMinor,
 		ProviderPaymentID:      params.ProviderPaymentID,
 		ProviderInvoiceID:      params.ProviderInvoiceID,
 		ProviderChargeID:       params.ProviderChargeID,

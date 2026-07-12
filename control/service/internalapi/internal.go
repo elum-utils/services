@@ -44,14 +44,16 @@ func (i *Internal) withContext(ctx context.Context) (context.Context, context.Ca
 func (i *Internal) RegisterManifest(ctx context.Context, values []MethodManifest) error {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
+	methods := make([]repository.Method, 0, len(values))
 	for _, value := range values {
-		if err := i.repository.RegisterMethod(mergedCtx, repository.Method{
-			Key: strings.TrimSpace(value.Key), Service: strings.TrimSpace(value.Service), GroupKey: strings.TrimSpace(value.GroupKey),
-		}); err != nil {
-			return err
-		}
+		methods = append(methods, repository.Method{
+			Key:      strings.TrimSpace(value.Key),
+			Service:  strings.TrimSpace(value.Service),
+			GroupKey: strings.TrimSpace(value.GroupKey),
+		})
 	}
-	return nil
+
+	return i.repository.RegisterMethods(mergedCtx, methods)
 }
 
 func (i *Internal) CheckAccess(ctx context.Context, value AccessRequest) (bool, error) {

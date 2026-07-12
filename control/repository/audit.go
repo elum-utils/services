@@ -5,20 +5,67 @@ import (
 	"database/sql"
 
 	controlsqlc "github.com/elum-utils/services/control/sqlc"
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/google/uuid"
 )
+
+type auditContextKey struct{}
+
+func WithAudit(ctx context.Context, event AuditEvent) context.Context {
+	return context.WithValue(ctx, auditContextKey{}, event)
+}
+
+func auditFromContext(ctx context.Context) (AuditEvent, bool) {
+	event, ok := ctx.Value(auditContextKey{}).(AuditEvent)
+	return event, ok
+}
+
+func (r *Repository) withAuditTx(ctx context.Context, write func(*controlsqlc.Queries) error) error {
+	event, hasAudit := auditFromContext(ctx)
+
+	return sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries {
+			return controlsqlc.New(tx)
+		},
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			if err := write(q); err != nil {
+				return err
+			}
+			if !hasAudit {
+				return nil
+			}
+			return appendAudit(ctx, q, event)
+		},
+	)
+}
 
 func (r *Repository) AppendAudit(ctx context.Context, event AuditEvent) error {
 	if err := required(event.MethodKey, event.Result); err != nil {
 		return err
 	}
+	return appendAudit(ctx, r.q, event)
+}
+
+func appendAudit(ctx context.Context, q *controlsqlc.Queries, event AuditEvent) error {
+	if event.Result == "" {
+		event.Result = "succeeded"
+	}
 	if event.ID == "" {
 		event.ID = uuid.NewString()
 	}
-	return r.q.CreateAuditEvent(ctx, controlsqlc.CreateAuditEventParams{
-		ID: event.ID, WorkspaceID: nullableString(event.WorkspaceID), ActorID: nullableString(event.ActorID), MethodKey: event.MethodKey,
-		TargetType: event.TargetType, TargetID: event.TargetID, BeforeData: rawMessageParam(event.BeforeData), AfterData: rawMessageParam(event.AfterData),
-		Result: event.Result, RequestID: event.RequestID,
+	return q.CreateAuditEvent(ctx, controlsqlc.CreateAuditEventParams{
+		ID:          event.ID,
+		WorkspaceID: nullableString(event.WorkspaceID),
+		ActorID:     nullableString(event.ActorID),
+		MethodKey:   event.MethodKey,
+		TargetType:  event.TargetType,
+		TargetID:    event.TargetID,
+		BeforeData:  rawMessageParam(event.BeforeData),
+		AfterData:   rawMessageParam(event.AfterData),
+		Result:      event.Result,
+		RequestID:   event.RequestID,
 	})
 }
 

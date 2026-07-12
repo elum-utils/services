@@ -21,6 +21,11 @@ type ApplyResult struct {
 func (u *User) Apply(ctx context.Context, params ApplyParams) (ApplyResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return ApplyResult{}, err
+	}
+
 	result, err := u.repository.Apply(mergedCtx, repository.Identity{
 		WorkspaceID: params.Identity.WorkspaceID, AppID: params.Identity.AppID,
 		PlatformID: params.Identity.PlatformID, PlatformUserID: params.Identity.PlatformUserID,

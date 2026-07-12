@@ -137,6 +137,7 @@ func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordRes
 			}
 			eventKey := fmt.Sprintf("calendar.reward_granted:%d", result.OperationRowID)
 			if _, err := txRepo.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
+				WorkspaceID:        params.Identity.WorkspaceID,
 				SourceService:      "calendar",
 				EventType:          "calendar.reward_granted",
 				EventKey:           eventKey,

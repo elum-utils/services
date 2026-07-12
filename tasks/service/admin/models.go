@@ -156,15 +156,6 @@ type PartnerConfigModel struct {
 	UpdatedAt     time.Time       `json:"updated_at,omitempty"`
 }
 
-type PartnerScriptModel struct {
-	Provider  string    `json:"provider"`
-	IsEnabled bool      `json:"is_enabled"`
-	Version   string    `json:"version"`
-	Source    string    `json:"source"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
-}
-
 type SavePartnerRewardRuleParams struct {
 	WorkspaceID  string      `json:"workspace_id"`
 	Provider     string      `json:"provider"`
@@ -198,7 +189,6 @@ type ExportPackage = repository.ExportPackage
 type ExportRequest = repository.ExportRequest
 type ExportManifest = repository.ExportManifest
 type ExportManifestSection = repository.ExportManifestSection
-type ExportItem = repository.ExportItem
 type ExportGroup = repository.ExportGroup
 type ExportText = repository.ExportText
 type ExportSequence = repository.ExportSequence

@@ -9,9 +9,12 @@ import (
 func (a *Checkout) CreateOrder(ctx context.Context, params CreateOrderParams) (*Order, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
-	ctx = mergedCtx
 
-	order, err := a.repository.CreateOrder(ctx, repository.OrderCreateParams{
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
+	order, err := a.repository.CreateOrder(mergedCtx, repository.OrderCreateParams{
 		AppID:               params.Identity.AppID,
 		WorkspaceID:         params.Identity.WorkspaceID,
 		PlatformID:          params.Identity.PlatformID,

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	controlsqlc "github.com/elum-utils/services/control/sqlc"
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +14,21 @@ func (r *Repository) UpdateWorkspace(ctx context.Context, actorID, workspaceID, 
 	if err := required(actorID, workspaceID, slug, title, status); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{Slug: slug, Title: title, Status: status, ID: workspaceID, AccountID: actorID})
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessWorkspaceUpdate); err != nil {
+		return 0, err
+	}
+	var rows int64
+	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{
+			Slug:      slug,
+			Title:     title,
+			Status:    status,
+			ID:        workspaceID,
+			AccountID: actorID,
+		})
+		return writeErr
+	})
 	if err != nil || rows > 0 {
 		return rows, err
 	}
@@ -38,17 +51,27 @@ func (r *Repository) ListMembers(ctx context.Context, workspaceID string, limit,
 	}
 	result := make([]Member, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, Member{WorkspaceID: row.WorkspaceID, AccountID: row.AccountID, DisplayName: row.DisplayName, Position: coercePosition(row.Position), JoinedAt: row.JoinedAt, UpdatedAt: row.UpdatedAt})
+		result = append(result, Member{
+			WorkspaceID: row.WorkspaceID,
+			AccountID:   row.AccountID,
+			DisplayName: row.DisplayName,
+			Position:    coercePosition(row.Position),
+			JoinedAt:    row.JoinedAt,
+			UpdatedAt:   row.UpdatedAt,
+		})
 	}
 	return result, nil
 }
 
 func (r *Repository) RemoveMember(ctx context.Context, actorID, workspaceID, accountID string) (int64, error) {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessMemberRemove); err != nil {
+		return 0, err
+	}
 	if err := r.requireActorHigher(ctx, actorID, workspaceID, accountID, 2147483647); err != nil {
 		return 0, err
 	}
 	var rows int64
-	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
+	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
 		var err error
 		rows, err = q.RemoveWorkspaceMember(ctx, controlsqlc.RemoveWorkspaceMemberParams{WorkspaceID: workspaceID, AccountID: accountID})
 		if err != nil || rows == 0 {
@@ -63,11 +86,18 @@ func (r *Repository) RemoveMember(ctx context.Context, actorID, workspaceID, acc
 	return rows, r.touchAuthVersion(ctx, workspaceID)
 }
 
-func (r *Repository) CreateInvite(ctx context.Context, actorID, workspaceID string, roleIDs []string, expiresAt *time.Time, maxUses *uint32) (Invite, string, error) {
+func (r *Repository) CreateInvite(
+	ctx context.Context,
+	actorID string,
+	workspaceID string,
+	roleIDs []string,
+	expiresAt *time.Time,
+	maxUses *uint32,
+) (Invite, string, error) {
 	if err := required(actorID, workspaceID); err != nil {
 		return Invite{}, "", err
 	}
-	if err := r.requireActiveMember(ctx, actorID, workspaceID); err != nil {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessInviteCreate); err != nil {
 		return Invite{}, "", err
 	}
 	for _, roleID := range roleIDs {
@@ -86,8 +116,15 @@ func (r *Repository) CreateInvite(ctx context.Context, actorID, workspaceID stri
 	if err != nil {
 		return Invite{}, "", err
 	}
-	invite := Invite{ID: uuid.NewString(), WorkspaceID: workspaceID, CreatedBy: actorID, ExpiresAt: expiresAt, MaxUses: maxUses, RoleIDs: append([]string(nil), roleIDs...)}
-	err = sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
+	invite := Invite{
+		ID:          uuid.NewString(),
+		WorkspaceID: workspaceID,
+		CreatedBy:   actorID,
+		ExpiresAt:   expiresAt,
+		MaxUses:     maxUses,
+		RoleIDs:     append([]string(nil), roleIDs...),
+	}
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
 		var sqlMaxUses sql.NullInt32
 		if maxUses != nil {
 			sqlMaxUses = sql.NullInt32{Int32: int32(*maxUses), Valid: true}
@@ -96,7 +133,14 @@ func (r *Repository) CreateInvite(ctx context.Context, actorID, workspaceID stri
 		if expiresAt != nil {
 			sqlExpiresAt = sql.NullTime{Time: *expiresAt, Valid: true}
 		}
-		if err := q.CreateInvite(ctx, controlsqlc.CreateInviteParams{ID: invite.ID, WorkspaceID: workspaceID, CreatedBy: actorID, TokenHash: tokenHash(rawToken), MaxUses: sqlMaxUses, ExpiresAt: sqlExpiresAt}); err != nil {
+		if err := q.CreateInvite(ctx, controlsqlc.CreateInviteParams{
+			ID:          invite.ID,
+			WorkspaceID: workspaceID,
+			CreatedBy:   actorID,
+			TokenHash:   tokenHash(rawToken),
+			MaxUses:     sqlMaxUses,
+			ExpiresAt:   sqlExpiresAt,
+		}); err != nil {
 			return err
 		}
 		for _, roleID := range roleIDs {
@@ -117,7 +161,7 @@ func (r *Repository) AcceptInvite(ctx context.Context, accountID, rawToken strin
 		return Invite{}, err
 	}
 	var invite Invite
-	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) }, func(_ *sql.Tx, q *controlsqlc.Queries) error {
+	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
 		row, err := q.GetActiveInviteByHashForUpdate(ctx, tokenHash(rawToken))
 		if err != nil {
 			return noRows(err, ErrNotFound)
@@ -173,7 +217,19 @@ func (r *Repository) RevokeInvite(ctx context.Context, actorID, workspaceID, inv
 	if err := required(actorID, workspaceID, inviteID); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.RevokeInviteAsActiveMember(ctx, controlsqlc.RevokeInviteAsActiveMemberParams{ID: inviteID, WorkspaceID: workspaceID, AccountID: actorID})
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessInviteRevoke); err != nil {
+		return 0, err
+	}
+	var rows int64
+	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.RevokeInviteAsActiveMember(ctx, controlsqlc.RevokeInviteAsActiveMemberParams{
+			ID:          inviteID,
+			WorkspaceID: workspaceID,
+			AccountID:   actorID,
+		})
+		return writeErr
+	})
 	if err != nil || rows > 0 {
 		return rows, err
 	}
@@ -184,7 +240,14 @@ func (r *Repository) RevokeInvite(ctx context.Context, actorID, workspaceID, inv
 }
 
 func mapInvite(row controlsqlc.ControlWorkspaceInvite, roleIDs []string) Invite {
-	result := Invite{ID: row.ID, WorkspaceID: row.WorkspaceID, CreatedBy: row.CreatedBy, UsedCount: uint32Pointer(row.UsedCount), CreatedAt: row.CreatedAt, RoleIDs: append([]string(nil), roleIDs...)}
+	result := Invite{
+		ID:          row.ID,
+		WorkspaceID: row.WorkspaceID,
+		CreatedBy:   row.CreatedBy,
+		UsedCount:   uint32Pointer(row.UsedCount),
+		CreatedAt:   row.CreatedAt,
+		RoleIDs:     append([]string(nil), roleIDs...),
+	}
 	if row.MaxUses.Valid {
 		result.MaxUses = uint32Pointer(row.MaxUses.Int32)
 	}

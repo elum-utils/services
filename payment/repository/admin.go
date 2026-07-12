@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"strings"
 
+	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -11,6 +13,9 @@ func (r *PaymentRepository) AdminGetProvider(ctx context.Context, code string) (
 }
 
 func (r *PaymentRepository) AdminUpsertProvider(ctx context.Context, params paymentsqlc.AdminUpsertProviderParams) error {
+	if strings.TrimSpace(params.Code) == "" || strings.TrimSpace(params.Title) == "" || !validProviderKind(params.ProviderKind) {
+		return ErrInvalidProvider
+	}
 	if err := r.q.AdminUpsertProvider(ctx, params); err != nil {
 		return err
 	}
@@ -30,10 +35,16 @@ func (r *PaymentRepository) AdminGetAsset(ctx context.Context, code string) (pay
 }
 
 func (r *PaymentRepository) AdminUpsertAsset(ctx context.Context, params paymentsqlc.UpsertAssetParams) error {
-	if err := r.q.UpsertAsset(ctx, params); err != nil {
-		return err
-	}
-	return r.invalidateAllCache()
+	return r.UpsertAsset(ctx, AssetUpsertParams{
+		Code:            params.Code,
+		Title:           params.Title,
+		AssetKind:       params.AssetKind,
+		Scale:           uint16(params.Scale),
+		Chain:           sqlwrap.NullStringPtr(params.Chain),
+		Network:         sqlwrap.NullStringPtr(params.Network),
+		ContractAddress: sqlwrap.NullStringPtr(params.ContractAddress),
+		IsActive:        params.IsActive,
+	})
 }
 
 func (r *PaymentRepository) AdminDeleteAsset(ctx context.Context, code string) (int64, error) {
@@ -63,10 +74,25 @@ func (r *PaymentRepository) AdminListProviderAssets(ctx context.Context, params 
 }
 
 func (r *PaymentRepository) AdminUpsertProviderAsset(ctx context.Context, params paymentsqlc.UpsertProviderAssetParams) error {
-	if err := r.q.UpsertProviderAsset(ctx, params); err != nil {
-		return err
+	return r.UpsertProviderAsset(ctx, ProviderAssetUpsertParams{
+		ProviderCode:    params.ProviderCode,
+		AssetCode:       params.AssetCode,
+		MinAmountMinor:  nullInt64Ptr(params.MinAmountMinor),
+		MaxAmountMinor:  nullInt64Ptr(params.MaxAmountMinor),
+		MerchantAccount: sqlwrap.NullStringPtr(params.MerchantAccount),
+		IsActive:        params.IsActive,
+	})
+}
+
+func validProviderKind(value paymentsqlc.PaymentProviderProviderKind) bool {
+	switch value {
+	case paymentsqlc.PaymentProviderProviderKindPlatformInternal,
+		paymentsqlc.PaymentProviderProviderKindFiatGateway,
+		paymentsqlc.PaymentProviderProviderKindCryptoChain:
+		return true
+	default:
+		return false
 	}
-	return r.invalidateAllCache()
 }
 
 func (r *PaymentRepository) AdminDeleteProviderAsset(ctx context.Context, params paymentsqlc.DeleteProviderAssetParams) (int64, error) {
@@ -99,14 +125,6 @@ func (r *PaymentRepository) AdminListProducts(ctx context.Context, params paymen
 
 func (r *PaymentRepository) AdminGetProduct(ctx context.Context, params paymentsqlc.AdminGetProductParams) (paymentsqlc.PaymentProduct, error) {
 	return r.q.AdminGetProduct(ctx, params)
-}
-
-func (r *PaymentRepository) AdminListItems(ctx context.Context, params paymentsqlc.AdminListItemsParams) ([]paymentsqlc.PaymentItem, error) {
-	return r.q.AdminListItems(ctx, params)
-}
-
-func (r *PaymentRepository) AdminGetItem(ctx context.Context, params paymentsqlc.AdminGetItemParams) (paymentsqlc.PaymentItem, error) {
-	return r.q.AdminGetItem(ctx, params)
 }
 
 func (r *PaymentRepository) AdminListProductItems(ctx context.Context, params paymentsqlc.AdminListProductItemsParams) ([]paymentsqlc.PaymentProductItem, error) {
@@ -159,32 +177,60 @@ func (r *PaymentRepository) AdminListOrders(ctx context.Context, params payments
 	return r.q.AdminListOrders(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetOrder(ctx context.Context, id uint64) (paymentsqlc.PaymentOrder, error) {
-	return r.q.GetPaymentOrder(ctx, int64(id))
+func (r *PaymentRepository) AdminGetOrder(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentOrder, error) {
+	return r.q.AdminGetOrderForWorkspace(ctx, paymentsqlc.AdminGetOrderForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 }
 
-func (r *PaymentRepository) AdminGetOrderByPublicID(ctx context.Context, publicID string) (paymentsqlc.PaymentOrder, error) {
-	return r.q.GetPaymentOrderByPublicID(ctx, publicID)
+func (r *PaymentRepository) AdminGetOrderByPublicID(ctx context.Context, workspaceID string, publicID string) (paymentsqlc.PaymentOrder, error) {
+	return r.q.AdminGetOrderByPublicIDForWorkspace(ctx, paymentsqlc.AdminGetOrderByPublicIDForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		PublicID:    publicID,
+	})
 }
 
 func (r *PaymentRepository) AdminListPaymentAttempts(ctx context.Context, params paymentsqlc.AdminListPaymentAttemptsParams) ([]paymentsqlc.PaymentAttempt, error) {
 	return r.q.AdminListPaymentAttempts(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetPaymentAttempt(ctx context.Context, id uint64) (paymentsqlc.PaymentAttempt, error) {
-	return r.q.AdminGetPaymentAttempt(ctx, int64(id))
+func (r *PaymentRepository) AdminGetPaymentAttempt(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentAttempt, error) {
+	return r.q.AdminGetPaymentAttemptForWorkspace(ctx, paymentsqlc.AdminGetPaymentAttemptForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
+}
+
+func (r *PaymentRepository) AdminUpdatePaymentAttemptStatus(
+	ctx context.Context,
+	workspaceID string,
+	id uint64,
+	status paymentsqlc.PaymentAttemptStatus,
+) (int64, error) {
+	return r.q.AdminUpdatePaymentAttemptStatusForWorkspace(ctx, paymentsqlc.AdminUpdatePaymentAttemptStatusForWorkspaceParams{
+		Status:      status,
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 }
 
 func (r *PaymentRepository) AdminListPaymentEvents(ctx context.Context, params paymentsqlc.AdminListPaymentEventsParams) ([]paymentsqlc.PaymentEvent, error) {
 	return r.q.AdminListPaymentEvents(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetPaymentEvent(ctx context.Context, id uint64) (paymentsqlc.PaymentEvent, error) {
-	return r.q.AdminGetPaymentEvent(ctx, int64(id))
+func (r *PaymentRepository) AdminGetPaymentEvent(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentEvent, error) {
+	return r.q.AdminGetPaymentEventForWorkspace(ctx, paymentsqlc.AdminGetPaymentEventForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 }
 
-func (r *PaymentRepository) AdminUpdatePaymentEventProcessingStatus(ctx context.Context, params paymentsqlc.MarkPaymentEventProcessedParams) error {
-	return r.q.MarkPaymentEventProcessed(ctx, params)
+func (r *PaymentRepository) AdminUpdatePaymentEventProcessingStatus(
+	ctx context.Context,
+	params paymentsqlc.AdminUpdatePaymentEventStatusForWorkspaceParams,
+) (int64, error) {
+	return r.q.AdminUpdatePaymentEventStatusForWorkspace(ctx, params)
 }
 
 func (r *PaymentRepository) AdminListSubscriptions(ctx context.Context, params paymentsqlc.AdminListSubscriptionsParams) ([]paymentsqlc.PaymentSubscription, error) {
@@ -195,8 +241,8 @@ func (r *PaymentRepository) AdminGetSubscription(ctx context.Context, params pay
 	return r.q.AdminGetSubscription(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetSubscriptionByProviderID(ctx context.Context, params paymentsqlc.GetPaymentSubscriptionByProviderIDParams) (paymentsqlc.PaymentSubscription, error) {
-	return r.q.GetPaymentSubscriptionByProviderID(ctx, params)
+func (r *PaymentRepository) AdminGetSubscriptionByProviderID(ctx context.Context, params paymentsqlc.AdminGetSubscriptionByProviderIDForWorkspaceParams) (paymentsqlc.PaymentSubscription, error) {
+	return r.q.AdminGetSubscriptionByProviderIDForWorkspace(ctx, params)
 }
 
 func (r *PaymentRepository) AdminUpsertSubscription(ctx context.Context, params paymentsqlc.UpsertPaymentSubscriptionParams) (uint64, error) {
@@ -212,12 +258,15 @@ func (r *PaymentRepository) AdminListFulfillments(ctx context.Context, params pa
 	return r.q.AdminListFulfillments(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetFulfillment(ctx context.Context, id uint64) (paymentsqlc.PaymentFulfillment, error) {
-	return r.q.AdminGetFulfillment(ctx, int64(id))
+func (r *PaymentRepository) AdminGetFulfillment(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentFulfillment, error) {
+	return r.q.AdminGetFulfillmentForWorkspace(ctx, paymentsqlc.AdminGetFulfillmentForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 }
 
-func (r *PaymentRepository) AdminUpdateFulfillmentStatus(ctx context.Context, params paymentsqlc.AdminUpdateFulfillmentStatusParams) (int64, error) {
-	return r.q.AdminUpdateFulfillmentStatus(ctx, params)
+func (r *PaymentRepository) AdminUpdateFulfillmentStatus(ctx context.Context, params paymentsqlc.AdminUpdateFulfillmentStatusForWorkspaceParams) (int64, error) {
+	return r.q.AdminUpdateFulfillmentStatusForWorkspace(ctx, params)
 }
 
 func (r *PaymentRepository) AdminListFulfillmentItems(ctx context.Context, params paymentsqlc.AdminListFulfillmentItemsParams) ([]paymentsqlc.PaymentFulfillmentItem, error) {
@@ -228,6 +277,9 @@ func (r *PaymentRepository) AdminListRefunds(ctx context.Context, params payment
 	return r.q.AdminListRefunds(ctx, params)
 }
 
-func (r *PaymentRepository) AdminGetRefund(ctx context.Context, id uint64) (paymentsqlc.PaymentRefund, error) {
-	return r.q.AdminGetRefund(ctx, int64(id))
+func (r *PaymentRepository) AdminGetRefund(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentRefund, error) {
+	return r.q.AdminGetRefundForWorkspace(ctx, paymentsqlc.AdminGetRefundForWorkspaceParams{
+		WorkspaceID: workspaceID,
+		ID:          int64(id),
+	})
 }

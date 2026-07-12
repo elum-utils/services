@@ -56,5 +56,16 @@ func (r *Repository) bumpReferenceCacheVersions(workspaceID string, methods ...s
 			result = err
 		}
 	}
-	return result
+	r.reportCacheInvalidationError(result)
+	return nil
+}
+
+func (r *Repository) reportCacheInvalidationError(err error) {
+	if err == nil || r == nil || r.onCacheInvalidationError == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	r.onCacheInvalidationError(err)
 }

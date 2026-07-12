@@ -38,6 +38,7 @@ func (a *Refund) Execute(ctx context.Context, params Params) (*Result, error) {
 	}
 
 	id, err := a.repository.CreateRefund(ctx, repository.RefundCreateParams{
+		WorkspaceID:  order.WorkspaceID,
 		OrderID:      order.ID,
 		AttemptID:    attempt.ID,
 		ProviderCode: attempt.ProviderCode,

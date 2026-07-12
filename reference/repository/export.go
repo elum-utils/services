@@ -15,21 +15,36 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	items, err := r.q.ListExportItems(ctx, refsqlc.ListExportItemsParams{
-		WorkspaceID: workspaceID,
-		Column2:     req.OnlyNotDeleted,
-	})
-	if err != nil {
-		return ExportPackage{}, err
-	}
-	localizationRows, err := r.q.ListExportLocalizations(ctx, workspaceID)
-	if err != nil {
+	var items []refsqlc.ListExportItemsRow
+	var localizationRows []refsqlc.ReferenceLocalization
+	if err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		var err error
+		items, err = txRepo.q.ListExportItems(ctx, refsqlc.ListExportItemsParams{
+			WorkspaceID: workspaceID,
+			Column2:     req.OnlyNotDeleted,
+		})
+		if err != nil {
+			return err
+		}
+
+		localizationRows, err = txRepo.q.ListExportLocalizations(ctx, workspaceID)
+		return err
+	}); err != nil {
 		return ExportPackage{}, err
 	}
 	localizations := mapExportLocalizations(localizationRows)
 	out := ExportPackage{
-		Format: ExportFormat, Service: "reference", CreatedAt: now.UTC(),
-		Items: make([]ExportItem, 0, len(items)),
+		Format:    ExportFormat,
+		Service:   "reference",
+		CreatedAt: now.UTC(),
+		Items:     make([]ExportItem, 0, len(items)),
 	}
 	for _, item := range items {
 		value := ExportItem{

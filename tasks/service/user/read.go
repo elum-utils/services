@@ -10,6 +10,11 @@ import (
 func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]TaskGroupModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	tasks, err := u.repository.ListActive(mergedCtx, repositoryIdentity(params.Identity), params.Locale, params.GroupKey, params.Now)
 	if err != nil {
 		return nil, err
@@ -18,6 +23,10 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]TaskG
 }
 
 func (u *User) StartTask(ctx context.Context, params StartTaskParams) (StartTaskResult, error) {
+	if err := params.Identity.Validate(); err != nil {
+		return StartTaskResult{}, err
+	}
+
 	if _, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
 		result, err := u.StartPartner(ctx, PartnerStartParams{
 			Identity: params.Identity, IssueRef: params.TaskRef, Now: params.Now,
@@ -43,6 +52,11 @@ func (u *User) StartTask(ctx context.Context, params StartTaskParams) (StartTask
 func (u *User) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return ClaimResult{}, err
+	}
+
 	if issueID, ok := repository.ParsePartnerIssueRef(params.TaskRef); ok {
 		result, err := u.repository.ClaimPartnerIssue(mergedCtx, repositoryIdentity(params.Identity), issueID, params.OperationID, params.Now)
 		if err != nil {

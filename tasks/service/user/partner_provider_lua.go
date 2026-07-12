@@ -18,7 +18,17 @@ type LuaProvider struct {
 }
 
 func (p LuaProvider) ListPartnerTasks(ctx context.Context, params PartnerListProviderParams) ([]PartnerExternalTask, error) {
-	result, err := p.handle(ctx, "list", params.Identity, params.Config, repository.PartnerIssue{}, params.Variables, params.Locale, params.Limit, params.Now)
+	result, err := p.handle(
+		ctx,
+		"list",
+		params.Identity,
+		params.Config,
+		repository.PartnerIssue{},
+		params.Variables,
+		params.Locale,
+		params.Limit,
+		params.Now,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +56,17 @@ func (p LuaProvider) ListPartnerTasks(ctx context.Context, params PartnerListPro
 }
 
 func (p LuaProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckProviderParams) (PartnerCheckResult, error) {
-	result, err := p.handle(ctx, "check", params.Identity, params.Config, params.Issue, params.Variables, "", 0, params.Now)
+	result, err := p.handle(
+		ctx,
+		"check",
+		params.Identity,
+		params.Config,
+		params.Issue,
+		params.Variables,
+		"",
+		0,
+		params.Now,
+	)
 	if err != nil {
 		return PartnerCheckResult{}, err
 	}
@@ -61,7 +81,17 @@ func (p LuaProvider) CheckPartnerTask(ctx context.Context, params PartnerCheckPr
 }
 
 func (p LuaProvider) StartPartnerTask(ctx context.Context, params PartnerStartProviderParams) (PartnerStartResult, error) {
-	result, err := p.handle(ctx, "start", params.Identity, params.Config, params.Issue, params.Variables, "", 0, params.Now)
+	result, err := p.handle(
+		ctx,
+		"start",
+		params.Identity,
+		params.Config,
+		params.Issue,
+		params.Variables,
+		"",
+		0,
+		params.Now,
+	)
 	if err != nil {
 		return PartnerStartResult{}, err
 	}
@@ -79,7 +109,17 @@ func (p LuaProvider) StartPartnerTask(ctx context.Context, params PartnerStartPr
 	}, nil
 }
 
-func (p LuaProvider) handle(ctx context.Context, action string, identity Identity, config repository.PartnerConfig, issue repository.PartnerIssue, variables map[string]string, locale string, limit int32, now time.Time) (taskruntime.Result, error) {
+func (p LuaProvider) handle(
+	ctx context.Context,
+	action string,
+	identity Identity,
+	config repository.PartnerConfig,
+	issue repository.PartnerIssue,
+	variables map[string]string,
+	locale string,
+	limit int32,
+	now time.Time,
+) (taskruntime.Result, error) {
 	if p.Runtime == nil {
 		return nil, fmt.Errorf("lua partner runtime is nil")
 	}
@@ -102,28 +142,42 @@ func (p LuaProvider) handle(ctx context.Context, action string, identity Identit
 
 func identityMap(identity Identity) map[string]any {
 	return map[string]any{
-		"workspace_id": identity.WorkspaceID, "app_id": identity.AppID,
-		"platform_id": identity.PlatformID, "platform": identity.Platform,
-		"platform_user_id": identity.PlatformUserID, "is_premium": identity.IsPremium,
-		"sex": identity.Sex, "country": identity.Country,
+		"workspace_id":     identity.WorkspaceID,
+		"app_id":           identity.AppID,
+		"platform_id":      identity.PlatformID,
+		"platform":         identity.Platform,
+		"platform_user_id": identity.PlatformUserID,
+		"is_premium":       identity.IsPremium,
+		"sex":              identity.Sex,
+		"country":          identity.Country,
 	}
 }
 
 func configMap(config repository.PartnerConfig) map[string]any {
 	return map[string]any{
-		"workspace_id": config.WorkspaceID, "provider": config.Provider, "group_key": config.GroupKey,
-		"platform": config.Platform, "secret": stringPtrValue(config.Secret),
-		"settings": rawMap(config.Settings), "target": rawMap(config.Target),
+		"workspace_id": config.WorkspaceID,
+		"provider":     config.Provider,
+		"group_key":    config.GroupKey,
+		"platform":     config.Platform,
+		"secret":       stringPtrValue(config.Secret),
+		"settings":     rawMap(config.Settings),
+		"target":       rawMap(config.Target),
 	}
 }
 
 func issueMap(issue repository.PartnerIssue) map[string]any {
 	return map[string]any{
-		"id": issue.ID, "key": repository.PartnerIssueKey(issue.ID),
-		"provider": issue.Provider, "group_key": issue.GroupKey, "platform": issue.Platform,
-		"external_id": issue.ExternalID, "external_type": issue.ExternalType,
-		"external_click_id": stringPtrValue(issue.ExternalClickID), "status": issue.Status,
-		"public_payload": rawMap(issue.PublicPayload), "private_payload": rawMap(issue.PrivatePayload),
+		"id":                issue.ID,
+		"key":               repository.PartnerIssueKey(issue.ID),
+		"provider":          issue.Provider,
+		"group_key":         issue.GroupKey,
+		"platform":          issue.Platform,
+		"external_id":       issue.ExternalID,
+		"external_type":     issue.ExternalType,
+		"external_click_id": stringPtrValue(issue.ExternalClickID),
+		"status":            issue.Status,
+		"public_payload":    rawMap(issue.PublicPayload),
+		"private_payload":   rawMap(issue.PrivatePayload),
 	}
 }
 

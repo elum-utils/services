@@ -10,6 +10,10 @@ func (a *Product) List(ctx context.Context, params ListParams) ([]ProductModel, 
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	products, err := a.repository.ListProducts(mergedCtx, repository.ProductListParams{
 		WorkspaceID:    params.Identity.WorkspaceID,
 		AppID:          params.Identity.AppID,

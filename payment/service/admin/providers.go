@@ -6,72 +6,35 @@ import (
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
-func (a *Admin) ListProviders(ctx context.Context) ([]paymentsqlc.PaymentProvider, error) {
+func (a *Admin) ListProviders(ctx context.Context) ([]ProviderModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.ListProviders(ctx)
 }
 
-func (a *Admin) GetProvider(ctx context.Context, code string) (paymentsqlc.PaymentProvider, error) {
+func (a *Admin) GetProvider(ctx context.Context, code string) (ProviderModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminGetProvider(ctx, code)
 }
 
-func (a *Admin) UpsertProvider(ctx context.Context, params ProviderUpsertParams) error {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminUpsertProvider(ctx, paymentsqlc.AdminUpsertProviderParams{
-		Code:             params.Code,
-		Title:            params.Title,
-		ProviderKind:     params.ProviderKind,
-		SupportsCreate:   params.SupportsCreate,
-		SupportsRedirect: params.SupportsRedirect,
-		SupportsWebhook:  params.SupportsWebhook,
-		SupportsRefund:   params.SupportsRefund,
-		IsActive:         params.IsActive,
-	})
-}
-
-func (a *Admin) DeleteProvider(ctx context.Context, code string) (int64, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminDeleteProvider(ctx, code)
-}
-
-func (a *Admin) ListAssets(ctx context.Context) ([]paymentsqlc.PaymentAsset, error) {
+func (a *Admin) ListAssets(ctx context.Context) ([]AssetModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.ListAssets(ctx)
 }
 
-func (a *Admin) GetAsset(ctx context.Context, code string) (paymentsqlc.PaymentAsset, error) {
+func (a *Admin) GetAsset(ctx context.Context, code string) (AssetModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminGetAsset(ctx, code)
 }
 
-func (a *Admin) UpsertAsset(ctx context.Context, params paymentsqlc.UpsertAssetParams) error {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminUpsertAsset(ctx, params)
-}
-
-func (a *Admin) DeleteAsset(ctx context.Context, code string) (int64, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminDeleteAsset(ctx, code)
-}
-
-func (a *Admin) ListProviderAssets(ctx context.Context, params ProviderAssetListParams) ([]paymentsqlc.PaymentProviderAsset, error) {
+func (a *Admin) ListProviderAssets(ctx context.Context, params ProviderAssetListParams) ([]ProviderAssetModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -86,26 +49,9 @@ func (a *Admin) ListProviderAssets(ctx context.Context, params ProviderAssetList
 	})
 }
 
-func (a *Admin) GetProviderAsset(ctx context.Context, providerCode string, assetCode string) (paymentsqlc.PaymentProviderAsset, error) {
+func (a *Admin) GetProviderAsset(ctx context.Context, providerCode string, assetCode string) (ProviderAssetModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.GetProviderAsset(ctx, providerCode, assetCode)
-}
-
-func (a *Admin) UpsertProviderAsset(ctx context.Context, params paymentsqlc.UpsertProviderAssetParams) error {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminUpsertProviderAsset(ctx, params)
-}
-
-func (a *Admin) DeleteProviderAsset(ctx context.Context, providerCode string, assetCode string) (int64, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminDeleteProviderAsset(ctx, paymentsqlc.DeleteProviderAssetParams{
-		ProviderCode: providerCode,
-		AssetCode:    assetCode,
-	})
 }

@@ -1562,15 +1562,16 @@ INSERT INTO calendar_stats_daily (
     operation_count, grant_count, unique_users
 )
 SELECT
-    workspace_id,
-    calendar_id,
-    occurred_at::date,
+    o.workspace_id,
+    o.calendar_id,
+    o.occurred_at::date,
     COUNT(*)::bigint,
-    COUNT(*) FILTER (WHERE granted)::bigint,
-    COUNT(DISTINCT (app_id, platform_id, platform_user_id))::bigint
-FROM calendar_operation
-WHERE occurred_at >= $1 AND occurred_at < $2
-GROUP BY workspace_id, calendar_id, occurred_at::date
+    COUNT(*) FILTER (WHERE o.granted)::bigint,
+    COUNT(DISTINCT (o.app_id, o.platform_id, o.platform_user_id))::bigint
+FROM calendar_operation o
+WHERE o.workspace_id = $3
+  AND o.occurred_at >= $1 AND o.occurred_at < $2
+GROUP BY o.workspace_id, o.calendar_id, o.occurred_at::date
 ON CONFLICT (workspace_id, calendar_id, stats_date) DO UPDATE SET
     operation_count = EXCLUDED.operation_count,
     grant_count = EXCLUDED.grant_count,
@@ -1579,12 +1580,13 @@ ON CONFLICT (workspace_id, calendar_id, stats_date) DO UPDATE SET
 `
 
 type RefreshDailyStatsParams struct {
-	OccurredAt   time.Time `json:"occurred_at"`
-	OccurredAt_2 time.Time `json:"occurred_at_2"`
+	OccurredAt         time.Time `json:"occurred_at"`
+	OccurredAt_2       time.Time `json:"occurred_at_2"`
+	RefreshWorkspaceID string    `json:"refresh_workspace_id"`
 }
 
 func (q *Queries) RefreshDailyStats(ctx context.Context, arg RefreshDailyStatsParams) error {
-	_, err := q.exec(ctx, q.refreshDailyStatsStmt, refreshDailyStats, arg.OccurredAt, arg.OccurredAt_2)
+	_, err := q.exec(ctx, q.refreshDailyStatsStmt, refreshDailyStats, arg.OccurredAt, arg.OccurredAt_2, arg.RefreshWorkspaceID)
 	return err
 }
 

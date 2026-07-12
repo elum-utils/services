@@ -18,6 +18,7 @@ type GetCalendarParams struct {
 	Identity Identity
 	Ref      string
 	Locale   string
+	Now      time.Time
 }
 
 type GetProgressParams struct {

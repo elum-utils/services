@@ -90,8 +90,6 @@ WITH active AS MATERIALIZED (
     FROM cpa_offer o
     WHERE o.workspace_id = $2
       AND o.is_active = TRUE
-      AND (o.start_at IS NULL OR o.start_at <= now())
-      AND (o.end_at IS NULL OR o.end_at > now())
 )
 SELECT
     o.workspace_id,
@@ -359,16 +357,17 @@ INSERT INTO cpa_stats_daily (
     issued_count, completed_count, unique_users
 )
 SELECT
-    workspace_id,
-    cpa_id,
-    occurred_at::date,
-    SUM((event_type = 'issued')::int)::bigint,
-    SUM((event_type = 'completed')::int)::bigint,
-    COUNT(DISTINCT assignment_id)::bigint
-FROM cpa_assignment_event
-WHERE occurred_at >= $1
-  AND occurred_at < $2
-GROUP BY workspace_id, cpa_id, occurred_at::date
+    e.workspace_id,
+    e.cpa_id,
+    e.occurred_at::date,
+    SUM((e.event_type = 'issued')::int)::bigint,
+    SUM((e.event_type = 'completed')::int)::bigint,
+    COUNT(DISTINCT e.assignment_id)::bigint
+FROM cpa_assignment_event e
+WHERE e.workspace_id = sqlc.arg(refresh_workspace_id)
+  AND e.occurred_at >= $1
+  AND e.occurred_at < $2
+GROUP BY e.workspace_id, e.cpa_id, e.occurred_at::date
 ON CONFLICT (workspace_id, cpa_id, stats_date) DO UPDATE SET
     issued_count = EXCLUDED.issued_count,
     completed_count = EXCLUDED.completed_count,

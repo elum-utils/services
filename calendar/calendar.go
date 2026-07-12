@@ -13,6 +13,7 @@ import (
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -26,7 +27,7 @@ type Calendar struct {
 	ownsClient bool
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
-	background sync.WaitGroup
+	goroutines *goroutinemanager.Manager
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -74,13 +75,11 @@ func (c *Calendar) Run(ctx context.Context) error {
 	defer c.Close()
 
 	errCh := make(chan error, len(registrations))
-	c.background.Add(len(registrations))
 	for _, registration := range registrations {
 		registration := registration
-		go func() {
-			defer c.background.Done()
+		c.goroutines.Go("calendar.callback", func() {
 			errCh <- c.runCallback(registration.ctx, registration.handler, registration.options...)
-		}()
+		})
 	}
 	select {
 	case <-c.rootCtx.Done():
@@ -110,9 +109,10 @@ func open(ctx context.Context, params DatabaseParams) (*Calendar, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "calendar sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
-		QueryTimeout: params.Options.QueryTimeout,
-		CacheL1Delay: params.Options.CacheL1Delay,
-		CacheL2Delay: params.Options.CacheL2Delay,
+		QueryTimeout:             params.Options.QueryTimeout,
+		CacheL1Delay:             params.Options.CacheL1Delay,
+		CacheL2Delay:             params.Options.CacheL2Delay,
+		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
 	})
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
@@ -153,20 +153,26 @@ func (c *Calendar) adopt(running *Calendar) {
 	c.Admin, c.User = running.Admin, running.User
 	c.callbacks, c.client, c.ownsClient = running.callbacks, running.client, running.ownsClient
 	c.rootCtx, c.rootCancel = running.rootCtx, running.rootCancel
+	c.goroutines = running.goroutines
 }
 
 func newCalendar(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Calendar {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 	return &Calendar{
-		Admin:     admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
-		User:      user.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
-		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable), client: db, ownsClient: ownsClient,
-		rootCtx: rootCtx, rootCancel: cancel,
+		Admin:      admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
+		User:       user.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),
+		callbacks:  callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable),
+		client:     db,
+		ownsClient: ownsClient,
+		rootCtx:    rootCtx,
+		rootCancel: cancel,
+		goroutines: goroutinemanager.New(),
 	}
 }
 
@@ -177,7 +183,9 @@ func (c *Calendar) Close() error {
 	if c.rootCancel != nil {
 		c.rootCancel()
 	}
-	c.background.Wait()
+	if c.goroutines != nil {
+		c.goroutines.Close()
+	}
 	var err error
 	if c.Admin != nil {
 		err = errors.Join(err, c.Admin.Close())

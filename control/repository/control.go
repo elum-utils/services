@@ -13,11 +13,30 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	accessWorkspaceUpdate     = "control.workspace.update"
+	accessMemberRemove        = "control.member.remove"
+	accessInviteCreate        = "control.invite.create"
+	accessInviteRevoke        = "control.invite.revoke"
+	accessRoleCreate          = "control.role.create"
+	accessRoleUpdate          = "control.role.update"
+	accessRoleDelete          = "control.role.delete"
+	accessRoleMemberSet       = "control.role_member.set"
+	accessRoleMemberRemove    = "control.role_member.remove"
+	accessRolePermissionSet   = "control.role_permission.set"
+	accessRolePermissionClear = "control.role_permission.clear"
+)
+
 func (r *Repository) CreateAccount(ctx context.Context, id, displayName string) (Account, error) {
 	if id = normalizeID(id); id == "" {
 		id = uuid.NewString()
 	}
-	if err := r.q.CreateAccount(ctx, controlsqlc.CreateAccountParams{ID: id, DisplayName: displayName}); err != nil {
+	if err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		return q.CreateAccount(ctx, controlsqlc.CreateAccountParams{
+			ID:          id,
+			DisplayName: displayName,
+		})
+	}); err != nil {
 		return Account{}, err
 	}
 	now := time.Now()
@@ -36,9 +55,7 @@ func (r *Repository) CreateWorkspace(ctx context.Context, workspaceID, slug, tit
 	if err := required(workspaceID, slug, title, actorID); err != nil {
 		return Workspace{}, err
 	}
-	err := sqlwrap.WithTx(ctx, r.db.DB(), func(tx *sql.Tx) *controlsqlc.Queries {
-		return controlsqlc.New(tx)
-	}, func(_ *sql.Tx, q *controlsqlc.Queries) error {
+	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
 		if err := q.CreateWorkspace(ctx, controlsqlc.CreateWorkspaceParams{ID: workspaceID, Slug: slug, Title: title, CreatedBy: actorID}); err != nil {
 			return err
 		}
@@ -87,10 +104,23 @@ func (r *Repository) CreateRole(ctx context.Context, actorID string, role Role) 
 	if err := required(actorID, role.ID, role.WorkspaceID, role.Code, role.Title); err != nil {
 		return Role{}, err
 	}
+	if err := r.requireMethodAccess(ctx, actorID, role.WorkspaceID, accessRoleCreate); err != nil {
+		return Role{}, err
+	}
 	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, role.Position); err != nil {
 		return Role{}, err
 	}
-	if err := r.q.CreateRole(ctx, controlsqlc.CreateRoleParams{ID: role.ID, WorkspaceID: role.WorkspaceID, Code: role.Code, Title: role.Title, Description: role.Description, Position: role.Position, IsOwner: false}); err != nil {
+	if err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		return q.CreateRole(ctx, controlsqlc.CreateRoleParams{
+			ID:          role.ID,
+			WorkspaceID: role.WorkspaceID,
+			Code:        role.Code,
+			Title:       role.Title,
+			Description: role.Description,
+			Position:    role.Position,
+			IsOwner:     false,
+		})
+	}); err != nil {
 		return Role{}, err
 	}
 	_ = r.touchAuthVersion(ctx, role.WorkspaceID)
@@ -118,6 +148,10 @@ func (r *Repository) ListRoles(ctx context.Context, workspaceID string) ([]Role,
 }
 
 func (r *Repository) AssignRole(ctx context.Context, actorID, workspaceID, accountID, roleID string) error {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRoleMemberSet); err != nil {
+		return err
+	}
+
 	role, err := r.GetRole(ctx, workspaceID, roleID)
 	if err != nil {
 		return err
@@ -135,13 +169,22 @@ func (r *Repository) AssignRole(ctx context.Context, actorID, workspaceID, accou
 	if !active {
 		return ErrForbidden
 	}
-	if err := r.q.AddRoleMember(ctx, controlsqlc.AddRoleMemberParams{RoleID: roleID, AccountID: accountID}); err != nil {
+	if err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		return q.AddRoleMember(ctx, controlsqlc.AddRoleMemberParams{
+			RoleID:    roleID,
+			AccountID: accountID,
+		})
+	}); err != nil {
 		return err
 	}
 	return r.touchAuthVersion(ctx, workspaceID)
 }
 
 func (r *Repository) RemoveRole(ctx context.Context, actorID, workspaceID, accountID, roleID string) (int64, error) {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRoleMemberRemove); err != nil {
+		return 0, err
+	}
+
 	role, err := r.GetRole(ctx, workspaceID, roleID)
 	if err != nil {
 		return 0, err
@@ -152,7 +195,18 @@ func (r *Repository) RemoveRole(ctx context.Context, actorID, workspaceID, accou
 		}
 		return 0, ErrRoleHierarchy
 	}
-	rows, err := r.q.RemoveRoleMember(ctx, controlsqlc.RemoveRoleMemberParams{RoleID: roleID, AccountID: accountID})
+	var rows int64
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.RemoveRoleMember(ctx, controlsqlc.RemoveRoleMemberParams{
+			RoleID:    roleID,
+			AccountID: accountID,
+		})
+		if writeErr != nil || rows == 0 {
+			return writeErr
+		}
+		return nil
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
@@ -160,6 +214,10 @@ func (r *Repository) RemoveRole(ctx context.Context, actorID, workspaceID, accou
 }
 
 func (r *Repository) UpdateRole(ctx context.Context, actorID string, role Role) (int64, error) {
+	if err := r.requireMethodAccess(ctx, actorID, role.WorkspaceID, accessRoleUpdate); err != nil {
+		return 0, err
+	}
+
 	current, err := r.GetRole(ctx, role.WorkspaceID, role.ID)
 	if err != nil {
 		return 0, err
@@ -173,7 +231,21 @@ func (r *Repository) UpdateRole(ctx context.Context, actorID string, role Role) 
 	if err := r.requireHigherThanPosition(ctx, actorID, role.WorkspaceID, role.Position); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.UpdateRole(ctx, controlsqlc.UpdateRoleParams{Title: role.Title, Description: role.Description, Position: role.Position, ID: role.ID, WorkspaceID: role.WorkspaceID})
+	var rows int64
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.UpdateRole(ctx, controlsqlc.UpdateRoleParams{
+			Title:       role.Title,
+			Description: role.Description,
+			Position:    role.Position,
+			ID:          role.ID,
+			WorkspaceID: role.WorkspaceID,
+		})
+		if writeErr != nil || rows == 0 {
+			return writeErr
+		}
+		return nil
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
@@ -181,6 +253,10 @@ func (r *Repository) UpdateRole(ctx context.Context, actorID string, role Role) 
 }
 
 func (r *Repository) DeleteRole(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRoleDelete); err != nil {
+		return 0, err
+	}
+
 	role, err := r.GetRole(ctx, workspaceID, roleID)
 	if err != nil {
 		return 0, err
@@ -191,7 +267,18 @@ func (r *Repository) DeleteRole(ctx context.Context, actorID, workspaceID, roleI
 		}
 		return 0, ErrRoleHierarchy
 	}
-	rows, err := r.q.DeleteRole(ctx, controlsqlc.DeleteRoleParams{ID: roleID, WorkspaceID: workspaceID})
+	var rows int64
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.DeleteRole(ctx, controlsqlc.DeleteRoleParams{
+			ID:          roleID,
+			WorkspaceID: workspaceID,
+		})
+		if writeErr != nil || rows == 0 {
+			return writeErr
+		}
+		return nil
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
@@ -199,6 +286,15 @@ func (r *Repository) DeleteRole(ctx context.Context, actorID, workspaceID, roleI
 }
 
 func (r *Repository) SetPermission(ctx context.Context, actorID, workspaceID, roleID, methodKey string, enabled bool) error {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRolePermissionSet); err != nil {
+		return err
+	}
+	if enabled {
+		if err := r.requireMethodAccess(ctx, actorID, workspaceID, methodKey); err != nil {
+			return err
+		}
+	}
+
 	role, err := r.GetRole(ctx, workspaceID, roleID)
 	if err != nil {
 		return err
@@ -212,11 +308,19 @@ func (r *Repository) SetPermission(ctx context.Context, actorID, workspaceID, ro
 	if _, err := r.q.GetMethod(ctx, methodKey); err != nil {
 		return noRows(err, ErrMethodNotFound)
 	}
-	if enabled {
-		err = r.q.SetRolePermission(ctx, controlsqlc.SetRolePermissionParams{RoleID: roleID, MethodKey: methodKey})
-	} else {
-		_, err = r.q.DeleteRolePermission(ctx, controlsqlc.DeleteRolePermissionParams{RoleID: roleID, MethodKey: methodKey})
-	}
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		if enabled {
+			return q.SetRolePermission(ctx, controlsqlc.SetRolePermissionParams{
+				RoleID:    roleID,
+				MethodKey: methodKey,
+			})
+		}
+		_, deleteErr := q.DeleteRolePermission(ctx, controlsqlc.DeleteRolePermissionParams{
+			RoleID:    roleID,
+			MethodKey: methodKey,
+		})
+		return deleteErr
+	})
 	if err != nil {
 		return err
 	}
@@ -236,6 +340,10 @@ func (r *Repository) ListPermissions(ctx context.Context, workspaceID, roleID st
 }
 
 func (r *Repository) ClearPermissions(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessRolePermissionClear); err != nil {
+		return 0, err
+	}
+
 	role, err := r.GetRole(ctx, workspaceID, roleID)
 	if err != nil {
 		return 0, err
@@ -246,7 +354,15 @@ func (r *Repository) ClearPermissions(ctx context.Context, actorID, workspaceID,
 		}
 		return 0, ErrRoleHierarchy
 	}
-	rows, err := r.q.ClearRolePermissions(ctx, roleID)
+	var rows int64
+	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		var writeErr error
+		rows, writeErr = q.ClearRolePermissions(ctx, roleID)
+		if writeErr != nil || rows == 0 {
+			return writeErr
+		}
+		return nil
+	})
 	if err != nil || rows == 0 {
 		return rows, err
 	}
@@ -254,21 +370,66 @@ func (r *Repository) ClearPermissions(ctx context.Context, actorID, workspaceID,
 }
 
 func (r *Repository) RegisterMethod(ctx context.Context, method Method) error {
-	if err := required(method.Key, method.Service, method.GroupKey); err != nil {
+	return r.RegisterMethods(ctx, []Method{method})
+}
+
+func (r *Repository) RegisterMethods(ctx context.Context, methods []Method) error {
+	for _, method := range methods {
+		if err := required(method.Key, method.Service, method.GroupKey); err != nil {
+			return err
+		}
+	}
+	if len(methods) == 0 {
+		return nil
+	}
+
+	err := sqlwrap.WithTx(
+		ctx,
+		r.db.DB(),
+		func(tx *sql.Tx) *controlsqlc.Queries {
+			return controlsqlc.New(tx)
+		},
+		func(_ *sql.Tx, q *controlsqlc.Queries) error {
+			if err := q.LockMethodRegistry(ctx); err != nil {
+				return err
+			}
+
+			for _, method := range methods {
+				existing, err := q.GetMethod(ctx, method.Key)
+				if err == nil && existing.Service != method.Service {
+					return ErrMethodOwner
+				}
+				if err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return err
+				}
+
+				if err := q.UpsertMethodGroup(ctx, controlsqlc.UpsertMethodGroupParams{
+					Service:  method.Service,
+					GroupKey: method.GroupKey,
+					Position: method.Position,
+				}); err != nil {
+					return err
+				}
+
+				if err := q.UpsertMethod(ctx, controlsqlc.UpsertMethodParams{
+					MethodKey: method.Key,
+					Service:   method.Service,
+					GroupKey:  method.GroupKey,
+					Position:  method.Position,
+				}); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
 		return err
 	}
-	if existing, err := r.GetMethod(ctx, method.Key); err == nil && existing.Service != method.Service {
-		return ErrMethodOwner
-	} else if err != nil && !errors.Is(err, ErrMethodNotFound) {
-		return err
-	}
-	if err := r.q.UpsertMethodGroup(ctx, controlsqlc.UpsertMethodGroupParams{Service: method.Service, GroupKey: method.GroupKey, Position: method.Position}); err != nil {
-		return err
-	}
-	if err := r.q.UpsertMethod(ctx, controlsqlc.UpsertMethodParams{MethodKey: method.Key, Service: method.Service, GroupKey: method.GroupKey, Position: method.Position}); err != nil {
-		return err
-	}
-	return r.db.BumpCacheVersion("control", "method-registry")
+
+	r.bumpCacheVersion("control", "method-registry")
+	return nil
 }
 
 func (r *Repository) ListMethodGroups(ctx context.Context) ([]MethodGroup, error) {
@@ -363,8 +524,27 @@ func (r *Repository) ListAuthorizedMethods(ctx context.Context, accountID, works
 	})
 }
 
-func (r *Repository) touchAuthVersion(ctx context.Context, workspaceID string) error {
-	return r.db.BumpCacheVersion("control", "access", workspaceID)
+func (r *Repository) touchAuthVersion(_ context.Context, workspaceID string) error {
+	r.bumpCacheVersion("control", "access", workspaceID)
+	return nil
+}
+
+func (r *Repository) requireMethodAccess(ctx context.Context, accountID, workspaceID, methodKey string) error {
+	if err := required(accountID, workspaceID, methodKey); err != nil {
+		return err
+	}
+	allowed, err := r.q.CheckAccess(ctx, controlsqlc.CheckAccessParams{
+		AccountID:   accountID,
+		WorkspaceID: workspaceID,
+		MethodKey:   methodKey,
+	})
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (r *Repository) requireHigherThanPosition(ctx context.Context, actorID, workspaceID string, targetPosition int32) error {

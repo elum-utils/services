@@ -1447,18 +1447,6 @@ type PaymentFulfillmentItem struct {
 	CreatedAt     time.Time                              `json:"created_at"`
 }
 
-type PaymentItem struct {
-	WorkspaceID    string         `json:"workspace_id"`
-	ID             string         `json:"id"`
-	ItemType       sql.NullString `json:"item_type"`
-	TitleKey       string         `json:"title_key"`
-	DescriptionKey sql.NullString `json:"description_key"`
-	Rarity         string         `json:"rarity"`
-	Position       int32          `json:"position"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-}
-
 type PaymentLocalization struct {
 	ID              int64     `json:"id"`
 	WorkspaceID     string    `json:"workspace_id"`
@@ -1620,11 +1608,6 @@ type PaymentProductCache struct {
 	ItemScale            int16                               `json:"item_scale"`
 	RewardType           PaymentProductCacheRewardType       `json:"reward_type"`
 	DurationUnit         NullPaymentProductCacheDurationUnit `json:"duration_unit"`
-	ItemType             sql.NullString                      `json:"item_type"`
-	ItemTitle            string                              `json:"item_title"`
-	ItemDescription      string                              `json:"item_description"`
-	ItemRarity           sql.NullString                      `json:"item_rarity"`
-	ItemPosition         sql.NullInt32                       `json:"item_position"`
 	UpdatedAt            time.Time                           `json:"updated_at"`
 }
 

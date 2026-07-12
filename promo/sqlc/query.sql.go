@@ -571,6 +571,7 @@ created_event AS (
 ),
 created_callback AS (
     INSERT INTO promo_clb_event (
+        workspace_id,
         source_service,
         event_type,
         event_key,
@@ -580,6 +581,7 @@ created_callback AS (
         next_attempt_at
     )
     SELECT
+        i.workspace_id,
         'promo',
         'promo.applied',
         'promo.applied:' || i.id::text,
@@ -939,6 +941,73 @@ func (q *Queries) ListExportRewards(ctx context.Context, workspaceID string) ([]
 	return items, nil
 }
 
+const listImportPromoCodes = `-- name: ListImportPromoCodes :many
+SELECT code_normalized
+FROM promo_offer
+WHERE workspace_id = $1
+  AND deleted_at IS NULL
+ORDER BY code_normalized
+`
+
+func (q *Queries) ListImportPromoCodes(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.query(ctx, q.listImportPromoCodesStmt, listImportPromoCodes, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var code_normalized string
+		if err := rows.Scan(&code_normalized); err != nil {
+			return nil, err
+		}
+		items = append(items, code_normalized)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportPromoIDs = `-- name: ListImportPromoIDs :many
+SELECT id, code_normalized
+FROM promo_offer
+WHERE workspace_id = $1
+  AND deleted_at IS NULL
+ORDER BY code_normalized
+`
+
+type ListImportPromoIDsRow struct {
+	ID             int64  `json:"id"`
+	CodeNormalized string `json:"code_normalized"`
+}
+
+func (q *Queries) ListImportPromoIDs(ctx context.Context, workspaceID string) ([]ListImportPromoIDsRow, error) {
+	rows, err := q.query(ctx, q.listImportPromoIDsStmt, listImportPromoIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportPromoIDsRow
+	for rows.Next() {
+		var i ListImportPromoIDsRow
+		if err := rows.Scan(&i.ID, &i.CodeNormalized); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRewards = `-- name: ListRewards :many
 SELECT id, workspace_id, promo_id, reward_key, reward_type, quantity, scale, duration_unit, created_at, updated_at
 FROM promo_reward
@@ -996,7 +1065,8 @@ SELECT
     COUNT(*),
     COUNT(*)
 FROM promo_redemption_event e
-WHERE e.occurred_at >= $1 AND e.occurred_at < $2
+WHERE e.workspace_id = $3
+  AND e.occurred_at >= $1 AND e.occurred_at < $2
 GROUP BY e.workspace_id, e.promo_id, e.occurred_at::date
 ON CONFLICT (workspace_id, promo_id, stats_date) DO UPDATE SET
     redemption_count = EXCLUDED.redemption_count,
@@ -1007,9 +1077,10 @@ ON CONFLICT (workspace_id, promo_id, stats_date) DO UPDATE SET
 type RefreshDailyStatsParams struct {
 	OccurredAt   time.Time `json:"occurred_at"`
 	OccurredAt_2 time.Time `json:"occurred_at_2"`
+	WorkspaceID  string    `json:"workspace_id"`
 }
 
 func (q *Queries) RefreshDailyStats(ctx context.Context, arg RefreshDailyStatsParams) error {
-	_, err := q.exec(ctx, q.refreshDailyStatsStmt, refreshDailyStats, arg.OccurredAt, arg.OccurredAt_2)
+	_, err := q.exec(ctx, q.refreshDailyStatsStmt, refreshDailyStats, arg.OccurredAt, arg.OccurredAt_2, arg.WorkspaceID)
 	return err
 }

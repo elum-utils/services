@@ -11,6 +11,7 @@ import (
 
 type ClbEvent struct {
 	ID                 int64          `json:"id"`
+	WorkspaceID        string         `json:"workspace_id"`
 	SourceService      string         `json:"source_service"`
 	EventType          string         `json:"event_type"`
 	EventKey           string         `json:"event_key"`

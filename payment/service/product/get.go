@@ -17,9 +17,12 @@ type GetParams struct {
 func (a *Product) Get(ctx context.Context, params GetParams) (*ProductModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
-	ctx = mergedCtx
 
-	product, err := a.repository.GetProduct(ctx, repository.ProductGetParams{
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
+	product, err := a.repository.GetProduct(mergedCtx, repository.ProductGetParams{
 		AppID:          params.Identity.AppID,
 		WorkspaceID:    params.Identity.WorkspaceID,
 		PlatformID:     params.Identity.PlatformID,

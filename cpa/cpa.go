@@ -15,6 +15,7 @@ import (
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	"github.com/elum-utils/services/internal/utils/contextutil"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
 
@@ -27,7 +28,7 @@ type CPA struct {
 	ownsClient bool
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
-	background sync.WaitGroup
+	goroutines *goroutinemanager.Manager
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -76,12 +77,11 @@ func (c *CPA) Run(ctx context.Context) error {
 	defer c.Close()
 
 	errCh := make(chan error, len(registrations))
-	c.background.Add(len(registrations))
 	for _, registration := range registrations {
-		go func() {
-			defer c.background.Done()
+		registration := registration
+		c.goroutines.Go("cpa.callback", func() {
 			errCh <- c.runCallback(registration.ctx, registration.handler, registration.options...)
-		}()
+		})
 	}
 	select {
 	case <-c.rootCtx.Done():
@@ -156,6 +156,7 @@ func (c *CPA) adopt(running *CPA) {
 	c.Admin, c.User = running.Admin, running.User
 	c.callbacks, c.client, c.ownsClient = running.callbacks, running.client, running.ownsClient
 	c.rootCtx, c.rootCancel = running.rootCtx, running.rootCancel
+	c.goroutines = running.goroutines
 }
 
 func newCPA(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *CPA {
@@ -175,6 +176,7 @@ func newCPA(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 		ownsClient: ownsClient,
 		rootCtx:    rootCtx,
 		rootCancel: rootCancel,
+		goroutines: goroutinemanager.New(),
 	}
 }
 
@@ -185,7 +187,9 @@ func (c *CPA) Close() error {
 	if c.rootCancel != nil {
 		c.rootCancel()
 	}
-	c.background.Wait()
+	if c.goroutines != nil {
+		c.goroutines.Close()
+	}
 	var err error
 	if c.Admin != nil {
 		err = errors.Join(err, c.Admin.Close())

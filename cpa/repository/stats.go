@@ -68,13 +68,14 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, cpaID stri
 	return result, nil
 }
 
-func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
-	if from.IsZero() || until.IsZero() || from.After(until) {
+func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+	if workspaceID == "" || from.IsZero() || until.IsZero() || from.After(until) {
 		return ErrInvalidDateRange
 	}
 
 	return r.q.RefreshDailyStats(ctx, cpasqlc.RefreshDailyStatsParams{
-		OccurredAt:   from,
-		OccurredAt_2: until,
+		RefreshWorkspaceID: workspaceID,
+		OccurredAt:         from,
+		OccurredAt_2:       until,
 	})
 }

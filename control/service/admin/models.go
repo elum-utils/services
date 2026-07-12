@@ -137,7 +137,3 @@ type SetRolePermissionParams struct {
 	ActorID, WorkspaceID, RoleID, MethodKey string
 	Enabled                                 bool
 }
-
-type RegisterMethodParams struct {
-	Key, Service, GroupKey string
-}

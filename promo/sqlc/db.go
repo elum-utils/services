@@ -87,6 +87,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listExportRewardsStmt, err = db.PrepareContext(ctx, listExportRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query ListExportRewards: %w", err)
 	}
+	if q.listImportPromoCodesStmt, err = db.PrepareContext(ctx, listImportPromoCodes); err != nil {
+		return nil, fmt.Errorf("error preparing query ListImportPromoCodes: %w", err)
+	}
+	if q.listImportPromoIDsStmt, err = db.PrepareContext(ctx, listImportPromoIDs); err != nil {
+		return nil, fmt.Errorf("error preparing query ListImportPromoIDs: %w", err)
+	}
 	if q.listRewardsStmt, err = db.PrepareContext(ctx, listRewards); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRewards: %w", err)
 	}
@@ -203,6 +209,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listExportRewardsStmt: %w", cerr)
 		}
 	}
+	if q.listImportPromoCodesStmt != nil {
+		if cerr := q.listImportPromoCodesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listImportPromoCodesStmt: %w", cerr)
+		}
+	}
+	if q.listImportPromoIDsStmt != nil {
+		if cerr := q.listImportPromoIDsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listImportPromoIDsStmt: %w", cerr)
+		}
+	}
 	if q.listRewardsStmt != nil {
 		if cerr := q.listRewardsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRewardsStmt: %w", cerr)
@@ -273,6 +289,8 @@ type Queries struct {
 	listExportLocalizationsStmt *sql.Stmt
 	listExportPromosStmt        *sql.Stmt
 	listExportRewardsStmt       *sql.Stmt
+	listImportPromoCodesStmt    *sql.Stmt
+	listImportPromoIDsStmt      *sql.Stmt
 	listRewardsStmt             *sql.Stmt
 	refreshDailyStatsStmt       *sql.Stmt
 }
@@ -302,6 +320,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listExportLocalizationsStmt: q.listExportLocalizationsStmt,
 		listExportPromosStmt:        q.listExportPromosStmt,
 		listExportRewardsStmt:       q.listExportRewardsStmt,
+		listImportPromoCodesStmt:    q.listImportPromoCodesStmt,
+		listImportPromoIDsStmt:      q.listImportPromoIDsStmt,
 		listRewardsStmt:             q.listRewardsStmt,
 		refreshDailyStatsStmt:       q.refreshDailyStatsStmt,
 	}

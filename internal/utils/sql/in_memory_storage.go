@@ -3,6 +3,8 @@ package sql
 import (
 	"sync"
 	"time"
+
+	goroutineutil "github.com/elum-utils/services/internal/utils/goroutine"
 )
 
 type l1Entry struct {
@@ -28,6 +30,7 @@ type l1Cache struct {
 	ttlCheck  time.Duration
 	stopCh    chan struct{}
 	closeOnce sync.Once
+	workers   *goroutineutil.Manager
 }
 
 func newL1Cache(maxSize int, ttlCheck time.Duration) *l1Cache {
@@ -43,9 +46,10 @@ func newL1Cache(maxSize int, ttlCheck time.Duration) *l1Cache {
 		maxSize:  maxSize,
 		ttlCheck: ttlCheck,
 		stopCh:   make(chan struct{}),
+		workers:  goroutineutil.New(),
 	}
 
-	go c.cleanupLoop()
+	c.workers.Go("sql-l1-cache-cleanup", c.cleanupLoop)
 	return c
 }
 
@@ -137,6 +141,7 @@ func (c *l1Cache) Reset() {
 func (c *l1Cache) Close() {
 	c.closeOnce.Do(func() {
 		close(c.stopCh)
+		c.workers.Close()
 	})
 }
 

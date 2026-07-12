@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"math"
 
 	"github.com/elum-utils/services/calendar/repository"
 	"github.com/elum-utils/services/calendar/service/user"
@@ -53,6 +54,10 @@ func (a *Admin) UpdateReward(ctx context.Context, params SaveRewardParams) (int6
 func (a *Admin) GetReward(ctx context.Context, workspaceID, calendarID string, id uint64) (user.RewardModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+	if workspaceID == "" || calendarID == "" || id == 0 || id > math.MaxInt64 {
+		return user.RewardModel{}, ErrCalendarNumberOutOfRange
+	}
+
 	value, err := a.repository.GetReward(mergedCtx, workspaceID, calendarID, id)
 	if err != nil {
 		return user.RewardModel{}, err
@@ -65,6 +70,10 @@ func (a *Admin) GetReward(ctx context.Context, workspaceID, calendarID string, i
 func (a *Admin) DeleteReward(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+	if workspaceID == "" || calendarID == "" || id == 0 || id > math.MaxInt64 {
+		return 0, ErrCalendarNumberOutOfRange
+	}
+
 	return a.repository.DeleteReward(mergedCtx, workspaceID, calendarID, id)
 }
 
@@ -72,6 +81,10 @@ func validateReward(params SaveRewardParams) error {
 	if params.WorkspaceID == "" || params.CalendarID == "" || params.StepID == 0 ||
 		params.Key == "" || params.Quantity <= 0 || params.Position == 0 {
 		return ErrRewardRequired
+	}
+	if params.StepID > math.MaxInt64 || params.ID > math.MaxInt64 ||
+		params.Scale > math.MaxInt16 || params.Position > math.MaxInt32 {
+		return ErrCalendarNumberOutOfRange
 	}
 	switch normalizedRewardType(params.Type) {
 	case "quantity":

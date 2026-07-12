@@ -6,16 +6,14 @@ import (
 
 	"github.com/elum-utils/services/payment/repository"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
+	json "github.com/goccy/go-json"
 )
-
-const AssetRateSourceDexScreener = repository.AssetRateSourceDexScreener
 
 type ExportRequest = repository.ExportRequest
 type ExportPackage = repository.ExportPackage
 type ExportProductGroup = repository.ExportProductGroup
 type ExportText = repository.ExportText
 type ExportProduct = repository.ExportProduct
-type ExportItem = repository.ExportItem
 type ExportProductItem = repository.ExportProductItem
 type ExportPrice = repository.ExportPrice
 type ExportTONWallet = repository.ExportTONWallet
@@ -24,6 +22,28 @@ type ImportPreview = repository.ImportPreview
 type ImportCounts = repository.ImportCounts
 type ImportConflict = repository.ImportConflict
 type ImportResult = repository.ImportResult
+
+type ProviderModel = paymentsqlc.PaymentProvider
+type AssetModel = paymentsqlc.PaymentAsset
+type ProviderAssetModel = paymentsqlc.PaymentProviderAsset
+type AssetRateModel = paymentsqlc.PaymentAssetRate
+type ProductGroupModel = paymentsqlc.PaymentProductGroup
+type LocalizationModel = paymentsqlc.PaymentLocalization
+type ProductModel = paymentsqlc.PaymentProduct
+type ProductItemModel = paymentsqlc.PaymentProductItem
+type PriceModel = paymentsqlc.PaymentPrice
+type ProductLimitCounterModel = paymentsqlc.PaymentProductLimitCounter
+type PurchaseKeyModel = paymentsqlc.PaymentPurchaseKey
+type OrderModel = paymentsqlc.PaymentOrder
+type PaymentAttemptModel = paymentsqlc.PaymentAttempt
+type PaymentEventModel = paymentsqlc.PaymentEvent
+type SubscriptionModel = paymentsqlc.PaymentSubscription
+type FulfillmentModel = paymentsqlc.PaymentFulfillment
+type FulfillmentItemModel = paymentsqlc.PaymentFulfillmentItem
+type RefundModel = paymentsqlc.PaymentRefund
+type ProviderCursorModel = paymentsqlc.PaymentProviderCursor
+type ProviderTransactionModel = paymentsqlc.PaymentProviderTransaction
+type TONWalletModel = paymentsqlc.PaymentTonWallet
 
 type PageParams struct {
 	Limit  int32
@@ -102,17 +122,6 @@ type DailyOverviewModel struct {
 	RefundCount          uint64    `json:"refund_count"`
 }
 
-type ProviderUpsertParams struct {
-	Code             string
-	Title            string
-	ProviderKind     paymentsqlc.PaymentProviderProviderKind
-	SupportsCreate   bool
-	SupportsRedirect bool
-	SupportsWebhook  bool
-	SupportsRefund   bool
-	IsActive         bool
-}
-
 type ProviderAssetListParams struct {
 	ProviderCode string
 	AssetCode    string
@@ -125,6 +134,80 @@ type TONWalletUpsertParams struct {
 	WalletAddress    string
 	NetworkConfigURL *string
 	IsEnabled        bool
+}
+
+type ProductGroupUpsertParams struct {
+	WorkspaceID    string
+	Code           string
+	TitleKey       *string
+	DescriptionKey *string
+	Position       int32
+	IsActive       bool
+}
+
+type LocalizationUpsertParams struct {
+	WorkspaceID     string
+	Locale          string
+	LocalizationKey string
+	Value           string
+}
+
+type ProductUpsertParams struct {
+	WorkspaceID          string
+	ID                   string
+	GroupCode            *string
+	TitleKey             string
+	DescriptionKey       *string
+	Target               json.RawMessage
+	ImageURL             *string
+	LinkURL              *string
+	SizeLabel            *string
+	PeriodSeconds        *int64
+	TrialDurationSeconds *int64
+	QuantityMode         string
+	Position             int32
+	GlobalLimit          int32
+	GlobalInterval       string
+	GlobalIntervalCount  int32
+	UserLimit            int32
+	UserInterval         string
+	UserIntervalCount    int32
+	AvailableFrom        *time.Time
+	AvailableUntil       *time.Time
+	IsVisible            bool
+	IsClosed             bool
+}
+
+type ProductItemUpsertParams struct {
+	WorkspaceID  string
+	ProductID    string
+	ItemID       string
+	RewardType   string
+	Quantity     int64
+	Scale        uint16
+	DurationUnit *string
+}
+
+type ProductPriceCreateParams struct {
+	WorkspaceID         string
+	ProductID           string
+	AssetCode           string
+	ListAmountMinor     uint64
+	DiscountAmountMinor uint64
+	IsPromotion         bool
+	StartsAt            *time.Time
+	EndsAt              *time.Time
+}
+
+type ProductPriceUpdateParams struct {
+	ID                  uint64
+	WorkspaceID         string
+	AssetCode           string
+	ListAmountMinor     uint64
+	DiscountAmountMinor uint64
+	IsPromotion         bool
+	StartsAt            *time.Time
+	EndsAt              *time.Time
 }
 
 type ProductGroupListParams struct {
@@ -145,12 +228,6 @@ type ProductListParams struct {
 	Page         PageParams
 }
 
-type ItemListParams struct {
-	WorkspaceID string
-	ItemType    string
-	Page        PageParams
-}
-
 type ProductItemListParams struct {
 	WorkspaceID string
 	ProductID   string
@@ -163,29 +240,6 @@ type PriceListParams struct {
 	ProductID   string
 	AssetCode   string
 	Page        PageParams
-}
-
-type UpdateAssetRateParams struct {
-	AssetCode              string
-	ReferenceAssetCode     string
-	ReferencePerAssetMinor uint64
-	Source                 string
-	ObservedAt             time.Time
-}
-
-type UpdateAssetRateResult struct {
-	UpdatedPrices      uint64 `json:"updated_prices"`
-	AffectedProducts   uint64 `json:"affected_products"`
-	AffectedWorkspaces uint64 `json:"affected_workspaces"`
-}
-
-type ConfigureAssetRateAutoUpdateParams struct {
-	AssetCode          string
-	ReferenceAssetCode string
-	Enabled            bool
-	Source             string
-	SourceChainID      string
-	SourceTokenAddress *string
 }
 
 type AssetRateListParams struct {
@@ -206,10 +260,10 @@ type ProductLimitCounterDeleteParams struct {
 	WorkspaceID    string
 	PlatformID     int64
 	ProductID      string
-	CounterScope   paymentsqlc.PaymentProductLimitCounterCounterScope
+	CounterScope   string
 	PlatformUserID string
-	WindowStart    sql.NullTime
-	WindowEnd      sql.NullTime
+	WindowStart    time.Time
+	WindowEnd      time.Time
 }
 
 type PurchaseKeyListParams struct {
@@ -230,6 +284,16 @@ type OrderListParams struct {
 	Page           PageParams
 }
 
+type OrderRefParams struct {
+	WorkspaceID string
+	ID          uint64
+}
+
+type OrderPublicRefParams struct {
+	WorkspaceID string
+	PublicID    string
+}
+
 type AttemptListParams struct {
 	WorkspaceID  string
 	OrderID      uint64
@@ -238,11 +302,34 @@ type AttemptListParams struct {
 	Page         PageParams
 }
 
+type AttemptRefParams struct {
+	WorkspaceID string
+	ID          uint64
+}
+
+type AttemptStatusParams struct {
+	WorkspaceID string
+	ID          uint64
+	Status      string
+}
+
 type EventListParams struct {
 	WorkspaceID      string
 	ProviderCode     string
 	ProcessingStatus string
 	Page             PageParams
+}
+
+type EventRefParams struct {
+	WorkspaceID string
+	ID          uint64
+}
+
+type EventStatusParams struct {
+	WorkspaceID string
+	ID          uint64
+	Status      string
+	Message     string
 }
 
 type SubscriptionListParams struct {
@@ -255,11 +342,54 @@ type SubscriptionListParams struct {
 	Page           PageParams
 }
 
+type SubscriptionProviderRefParams struct {
+	WorkspaceID            string
+	ProviderCode           string
+	ProviderSubscriptionID string
+}
+
+type SubscriptionUpsertParams struct {
+	WorkspaceID            string
+	ProviderCode           string
+	ProviderSubscriptionID string
+	AppID                  int64
+	PlatformID             int64
+	PlatformUserID         string
+	InternalUserID         sql.NullInt64
+	ProductID              string
+	OrderID                sql.NullInt64
+	AttemptID              sql.NullInt64
+	Status                 string
+	CancelReason           sql.NullString
+	StartedAt              time.Time
+	EndedAt                sql.NullTime
+}
+
+type SubscriptionStatusUpdateParams struct {
+	ProviderCode           string
+	ProviderSubscriptionID string
+	Status                 string
+	CancelReason           sql.NullString
+	EndedAt                sql.NullTime
+}
+
 type FulfillmentListParams struct {
 	WorkspaceID string
 	Status      string
 	OrderID     uint64
 	Page        PageParams
+}
+
+type FulfillmentRefParams struct {
+	WorkspaceID string
+	ID          uint64
+}
+
+type FulfillmentStatusParams struct {
+	WorkspaceID string
+	ID          uint64
+	Status      string
+	Message     string
 }
 
 type FulfillmentItemListParams struct {
@@ -269,6 +399,7 @@ type FulfillmentItemListParams struct {
 }
 
 type RefundCreateParams struct {
+	WorkspaceID      string
 	OrderID          uint64
 	AttemptID        uint64
 	ProviderCode     string
@@ -277,6 +408,18 @@ type RefundCreateParams struct {
 	AssetCode        string
 	Status           string
 	Reason           *string
+}
+
+type RefundRefParams struct {
+	WorkspaceID string
+	ID          uint64
+}
+
+type RefundStatusParams struct {
+	WorkspaceID string
+	ID          uint64
+	Status      string
+	Reason      string
 }
 
 type RefundListParams struct {
@@ -294,6 +437,15 @@ type ProviderCursorListParams struct {
 	Page         PageParams
 }
 
+type ProviderCursorUpsertParams struct {
+	WorkspaceID    string
+	ProviderCode   string
+	Network        string
+	SourceKey      string
+	CursorValue    string
+	CursorSequence int64
+}
+
 type ProviderTransactionListParams struct {
 	WorkspaceID  string
 	ProviderCode string
@@ -304,6 +456,7 @@ type ProviderTransactionListParams struct {
 }
 
 type CallbackEventListParams struct {
+	WorkspaceID   string
 	SourceService string
 	EventType     string
 	Status        string

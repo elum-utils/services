@@ -30,3 +30,11 @@ func (a *Admin) withContext(ctx context.Context) (context.Context, context.Cance
 	}
 	return contextutil.Merge(a.rootCtx, ctx)
 }
+
+func (a *Admin) withMutation(
+	ctx context.Context,
+	event repository.AuditEvent,
+) (context.Context, context.CancelFunc) {
+	mergedCtx, cancel := a.withContext(ctx)
+	return repository.WithAudit(mergedCtx, event), cancel
+}

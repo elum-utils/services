@@ -59,8 +59,6 @@ func (a *VKMA) ChargeableForWorkspace(ctx context.Context, workspaceID string, p
 	attempt, err = a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:                order.ID,
 		ProviderCode:           ProviderCode,
-		KnownAssetCode:         utils.Ref(order.AssetCode),
-		KnownAmountMinor:       uint64Ptr(order.PayableAmountMinor),
 		ProviderPaymentID:      utils.Ref(providerPaymentID),
 		ProviderSubscriptionID: providerSubscriptionID,
 		IdempotencyKey:         utils.Ref(fmt.Sprintf("%s:%s", ProviderCode, providerPaymentID)),

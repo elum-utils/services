@@ -1,8 +1,11 @@
 package repository
 
 import (
-	json "github.com/goccy/go-json"
 	"time"
+
+	json "github.com/goccy/go-json"
+
+	services "github.com/elum-utils/services"
 )
 
 const (
@@ -113,7 +116,6 @@ type ExportPackage struct {
 	Format    string           `json:"format"`
 	Service   string           `json:"service"`
 	CreatedAt time.Time        `json:"created_at"`
-	Items     []ExportItem     `json:"items,omitempty"`
 	Groups    []ExportGroup    `json:"groups"`
 	Sequences []ExportSequence `json:"sequences,omitempty"`
 }
@@ -131,14 +133,6 @@ type ExportGroup struct {
 type ExportText struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
-}
-
-type ExportItem struct {
-	ID           string                `json:"id"`
-	ItemType     *string               `json:"item_type,omitempty"`
-	Rarity       string                `json:"rarity,omitempty"`
-	Position     int32                 `json:"position,omitempty"`
-	Localization map[string]ExportText `json:"localization,omitempty"`
 }
 
 type ExportSequence struct {
@@ -239,7 +233,6 @@ type ImportPreview struct {
 }
 
 type ImportCounts struct {
-	Items              int `json:"items"`
 	Groups             int `json:"groups"`
 	Sequences          int `json:"sequences"`
 	Tasks              int `json:"tasks"`
@@ -270,6 +263,19 @@ type Identity struct {
 	IsPremium      bool
 	Sex            string
 	Country        string
+}
+
+func (i Identity) Validate() error {
+	return (services.Identity{
+		WorkspaceID:    i.WorkspaceID,
+		AppID:          i.AppID,
+		PlatformID:     i.PlatformID,
+		Platform:       i.Platform,
+		PlatformUserID: i.PlatformUserID,
+		IsPremium:      i.IsPremium,
+		Sex:            i.Sex,
+		Country:        i.Country,
+	}).Validate()
 }
 
 type Task struct {

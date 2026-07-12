@@ -3,24 +3,6 @@
     "format": "payment.export.v1",
     "service": "payment",
     "created_at": "2026-07-01T00:00:00Z",
-    "items": [
-      {
-        "id": "stars",
-        "item_type": "currency",
-        "rarity": "common",
-        "position": 10,
-        "localization": {
-          "ru": {
-            "title": "Stars",
-            "description": "Внутренняя валюта приложения."
-          },
-          "en": {
-            "title": "Stars",
-            "description": "In-app currency."
-          }
-        }
-      }
-    ],
     "groups": [
       {
         "key": "topup",

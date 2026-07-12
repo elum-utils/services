@@ -1,6 +1,9 @@
 package target
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -30,7 +33,7 @@ type Rules struct {
 }
 
 func Match(raw json.RawMessage, ctx Context) bool {
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 || string(bytes.TrimSpace(raw)) == "null" {
 		return true
 	}
 	var rules Rules
@@ -61,6 +64,15 @@ func Match(raw json.RawMessage, ctx Context) bool {
 	return true
 }
 
+func Validate(raw json.RawMessage) error {
+	if len(raw) == 0 || string(bytes.TrimSpace(raw)) == "null" {
+		return nil
+	}
+
+	var rules Rules
+	return json.Unmarshal(raw, &rules)
+}
+
 func (r *Rules) UnmarshalJSON(data []byte) error {
 	type rawRules struct {
 		IsPremium   *bool           `json:"is_premium"`
@@ -78,52 +90,112 @@ func (r *Rules) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for key := range fields {
+		if !isRuleKey(key) {
+			return fmt.Errorf("target: unsupported field %q", key)
+		}
+	}
+
+	sex, err := stringList(raw.Sex)
+	if err != nil {
+		return fmt.Errorf("target.sex: %w", err)
+	}
+	country, err := stringList(raw.Country)
+	if err != nil {
+		return fmt.Errorf("target.country: %w", err)
+	}
+	countries, err := stringList(raw.Countries)
+	if err != nil {
+		return fmt.Errorf("target.countries: %w", err)
+	}
+	loc, err := stringList(raw.Loc)
+	if err != nil {
+		return fmt.Errorf("target.loc: %w", err)
+	}
+	locale, err := stringList(raw.Locale)
+	if err != nil {
+		return fmt.Errorf("target.locale: %w", err)
+	}
+	locales, err := stringList(raw.Locales)
+	if err != nil {
+		return fmt.Errorf("target.locales: %w", err)
+	}
+	platform, err := stringList(raw.Platform)
+	if err != nil {
+		return fmt.Errorf("target.platform: %w", err)
+	}
+	platformID, err := stringList(raw.PlatformID)
+	if err != nil {
+		return fmt.Errorf("target.platform_id: %w", err)
+	}
+	platformIDs, err := stringList(raw.PlatformIDs)
+	if err != nil {
+		return fmt.Errorf("target.platform_ids: %w", err)
+	}
+
 	r.IsPremium = raw.IsPremium
-	r.Sex = stringList(raw.Sex)
-	r.Country = stringList(raw.Country)
-	r.Countries = stringList(raw.Countries)
-	r.Loc = stringList(raw.Loc)
-	r.Locale = stringList(raw.Locale)
-	r.Locales = stringList(raw.Locales)
-	r.Platform = stringList(raw.Platform)
-	r.PlatformID = stringList(raw.PlatformID)
-	r.PlatformIDs = stringList(raw.PlatformIDs)
+	r.Sex = sex
+	r.Country = country
+	r.Countries = countries
+	r.Loc = loc
+	r.Locale = locale
+	r.Locales = locales
+	r.Platform = platform
+	r.PlatformID = platformID
+	r.PlatformIDs = platformIDs
 	return nil
 }
 
-func stringList(raw json.RawMessage) []string {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil
+func isRuleKey(key string) bool {
+	switch key {
+	case "is_premium", "sex", "country", "countries", "loc", "locale", "locales", "platform", "platform_id", "platform_ids":
+		return true
+	default:
+		return false
+	}
+}
+
+func stringList(raw json.RawMessage) ([]string, error) {
+	if len(raw) == 0 || string(bytes.TrimSpace(raw)) == "null" {
+		return nil, nil
 	}
 	var single string
 	if err := json.Unmarshal(raw, &single); err == nil {
 		if single == "" {
-			return nil
+			return nil, errors.New("value must not be empty")
 		}
-		return []string{single}
+		return []string{single}, nil
 	}
 	var number json.Number
 	if err := json.Unmarshal(raw, &number); err == nil {
-		return []string{number.String()}
+		return []string{number.String()}, nil
 	}
 	var rawList []json.RawMessage
 	if err := json.Unmarshal(raw, &rawList); err != nil {
-		return nil
+		return nil, errors.New("value must be a string, number, or array")
 	}
 	out := make([]string, 0, len(rawList))
-	for _, item := range rawList {
+	for index, item := range rawList {
 		var value string
 		if err := json.Unmarshal(item, &value); err != nil {
 			var number json.Number
 			if err := json.Unmarshal(item, &number); err == nil {
 				value = number.String()
+			} else {
+				return nil, fmt.Errorf("item %d must be a string or number", index)
 			}
 		}
-		if value != "" {
-			out = append(out, value)
+		if value == "" {
+			return nil, fmt.Errorf("item %d must not be empty", index)
 		}
+		out = append(out, value)
 	}
-	return out
+	return out, nil
 }
 
 func containsFold(values []string, target string) bool {

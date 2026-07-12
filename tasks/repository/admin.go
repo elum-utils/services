@@ -3,110 +3,140 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"math"
+	"strings"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
 func (r *Repository) UpsertGroup(ctx context.Context, workspaceID, key string, position int32, active bool) error {
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertGroup(ctx, tasksqlc.AdminUpsertGroupParams{
-			WorkspaceID: workspaceID, Key: key, Position: position, IsActive: active,
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" {
+		return fmt.Errorf("tasks group workspace_id and key are required")
+	}
+
+	if err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		return txRepo.q.AdminUpsertGroup(ctx, tasksqlc.AdminUpsertGroupParams{
+			WorkspaceID: workspaceID,
+			Key:         key,
+			Position:    position,
+			IsActive:    active,
 		})
 	}); err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
 func (r *Repository) UpsertGroupLocalization(ctx context.Context, workspaceID, key, locale, title, description string) error {
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertGroupLocalization(ctx, tasksqlc.AdminUpsertGroupLocalizationParams{
-			WorkspaceID: workspaceID, GroupKey: key, Locale: locale, Title: title, Description: description,
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" ||
+		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
+		return fmt.Errorf("tasks group localization scope, locale, and title are required")
+	}
+
+	if err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		return txRepo.q.AdminUpsertGroupLocalization(ctx, tasksqlc.AdminUpsertGroupLocalizationParams{
+			WorkspaceID: workspaceID,
+			GroupKey:    key,
+			Locale:      locale,
+			Title:       title,
+			Description: description,
 		})
 	}); err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
 func (r *Repository) UpsertSequence(ctx context.Context, workspaceID, key string, position int32, active bool) error {
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertSequence(ctx, tasksqlc.AdminUpsertSequenceParams{
-			WorkspaceID: workspaceID, Key: key, Position: position, IsActive: active,
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" {
+		return fmt.Errorf("tasks sequence workspace_id and key are required")
+	}
+
+	if err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		return txRepo.q.AdminUpsertSequence(ctx, tasksqlc.AdminUpsertSequenceParams{
+			WorkspaceID: workspaceID,
+			Key:         key,
+			Position:    position,
+			IsActive:    active,
 		})
 	}); err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
 func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint64, error) {
-	taskKind := params.TaskKind
-	if taskKind == "" {
-		taskKind = TaskKindInternal
-	}
-	startMode := params.StartMode
-	if startMode == "" {
-		startMode = StartModeNone
-	}
-	payload := params.Payload
-	if len(payload) == 0 {
-		payload = []byte("{}")
-	}
-	target := params.Target
-	if len(target) == 0 {
-		target = []byte("null")
-	}
-	integrationPayload := params.IntegrationPayload
-	if len(integrationPayload) == 0 {
-		integrationPayload = []byte("null")
+	params = normalizeSaveTaskParams(params)
+	if err := validateSaveTask(params); err != nil {
+		return 0, err
 	}
 	if params.ID == 0 {
-		id, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-			return r.q.AdminCreateTask(ctx, tasksqlc.AdminCreateTaskParams{
+		var id int64
+		err := r.withWorkspaceMutation(ctx, params.WorkspaceID, func(txRepo *Repository) error {
+			var err error
+			id, err = txRepo.q.AdminCreateTask(ctx, tasksqlc.AdminCreateTaskParams{
 				WorkspaceID: params.WorkspaceID, Key: params.Key, GroupKey: params.GroupKey,
 				SequenceKey: nullString(params.SequenceKey), SequencePosition: nullInt32FromUint32(params.SequencePosition),
-				TaskKind:  taskKind,
+				TaskKind:  params.TaskKind,
 				ActionKey: params.ActionKey, ActionKind: params.ActionKind,
-				ClaimMode: params.ClaimMode, StartMode: startMode, TargetCount: int64(params.TargetCount),
+				ClaimMode: params.ClaimMode, StartMode: params.StartMode, TargetCount: int64(params.TargetCount),
 				ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
-				Position: params.Position, Payload: rawMessageParam(payload), Target: rawMessageParam(target), IntegrationKind: nullString(params.IntegrationKind),
-				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(integrationPayload),
+				Position: params.Position, Payload: rawMessageParam(params.Payload), Target: rawMessageParam(params.Target), IntegrationKind: nullString(params.IntegrationKind),
+				IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
 				ImageUrl:  nullString(params.ImageURL),
 				IsVisible: params.IsVisible, IsActive: params.IsActive,
 				StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
 			})
+			return err
 		})
 		if err != nil {
 			return 0, err
 		}
+
 		return uint64(id), r.invalidateTaskCache(ctx, params.WorkspaceID)
 	}
-	_, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-		return r.q.AdminUpdateTask(ctx, tasksqlc.AdminUpdateTaskParams{
+
+	err := r.withWorkspaceMutation(ctx, params.WorkspaceID, func(txRepo *Repository) error {
+		_, err := txRepo.q.AdminUpdateTask(ctx, tasksqlc.AdminUpdateTaskParams{
 			GroupKey: params.GroupKey, SequenceKey: nullString(params.SequenceKey),
-			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: taskKind, ActionKey: params.ActionKey,
+			SequencePosition: nullInt32FromUint32(params.SequencePosition), TaskKind: params.TaskKind, ActionKey: params.ActionKey,
 			ActionKind: params.ActionKind,
-			ClaimMode:  params.ClaimMode, StartMode: startMode, TargetCount: int64(params.TargetCount),
+			ClaimMode:  params.ClaimMode, StartMode: params.StartMode, TargetCount: int64(params.TargetCount),
 			ResetUnit: params.ResetUnit, ResetEvery: int32(params.ResetEvery),
-			Position: params.Position, Payload: rawMessageParam(payload), Target: rawMessageParam(target), IntegrationKind: nullString(params.IntegrationKind),
-			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(integrationPayload),
+			Position: params.Position, Payload: rawMessageParam(params.Payload), Target: rawMessageParam(params.Target), IntegrationKind: nullString(params.IntegrationKind),
+			IntegrationProvider: nullString(params.IntegrationProvider), IntegrationPayload: rawMessageParam(params.IntegrationPayload),
 			ImageUrl:  nullString(params.ImageURL),
 			IsVisible: params.IsVisible, IsActive: params.IsActive,
 			StartAt: nullTime(params.StartAt), EndAt: nullTime(params.EndAt),
 			WorkspaceID: params.WorkspaceID, ID: int64(params.ID),
 		})
+		return err
 	})
 	if err != nil {
 		return 0, err
 	}
+
 	return params.ID, r.invalidateTaskCache(ctx, params.WorkspaceID)
 }
 
 func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint64) (int64, error) {
-	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-		return r.q.AdminDeleteTask(ctx, tasksqlc.AdminDeleteTaskParams{WorkspaceID: workspaceID, ID: int64(id)})
+	if strings.TrimSpace(workspaceID) == "" || id == 0 || id > math.MaxInt64 {
+		return 0, fmt.Errorf("tasks delete task scope or id is invalid")
+	}
+
+	var rows int64
+	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		var err error
+		rows, err = txRepo.q.AdminDeleteTask(ctx, tasksqlc.AdminDeleteTaskParams{
+			WorkspaceID: workspaceID,
+			ID:          int64(id),
+		})
+		return err
 	})
 	if err != nil {
 		return 0, err
@@ -114,18 +144,26 @@ func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint
 	if rows > 0 {
 		return rows, r.invalidateTaskCache(ctx, workspaceID)
 	}
+
 	return rows, nil
 }
 
 func (r *Repository) GetTask(ctx context.Context, workspaceID string, id uint64) (Task, error) {
+	if strings.TrimSpace(workspaceID) == "" || id == 0 || id > math.MaxInt64 {
+		return Task{}, fmt.Errorf("tasks get task scope or id is invalid")
+	}
+
 	key := adminGetTaskCacheKey(workspaceID, id)
-	rememberTaskCacheKey(workspaceID, key)
 	out, err := repositoryQuery[Task](ctx, r, sqlwrap.Params{
-		Key:          key,
-		CacheL1Delay: r.cacheL1Delay,
-		CacheL2Delay: r.cacheL2Delay,
+		Key:               key,
+		CacheL1Delay:      r.cacheL1Delay,
+		CacheL2Delay:      r.cacheL2Delay,
+		CacheVersionScope: taskCatalogCacheScope(workspaceID),
 	}, func(ctx context.Context) (Task, error) {
-		row, err := tasksqlc.New(r.db.DB()).AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{WorkspaceID: workspaceID, ID: int64(id)})
+		row, err := r.q.AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{
+			WorkspaceID: workspaceID,
+			ID:          int64(id),
+		})
 		if err != nil {
 			return Task{}, err
 		}
@@ -138,18 +176,21 @@ func (r *Repository) GetTask(ctx context.Context, workspaceID string, id uint64)
 }
 
 func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string, limit, offset int32) ([]Task, error) {
+	if strings.TrimSpace(workspaceID) == "" {
+		return nil, fmt.Errorf("tasks list workspace_id is required")
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	key := adminListTasksCacheKey(workspaceID, groupKey, limit, offset)
-	rememberTaskCacheKey(workspaceID, key)
 	out, err := repositoryQuery[[]Task](ctx, r, sqlwrap.Params{
-		Key:          key,
-		CacheL1Delay: r.cacheL1Delay,
-		CacheL2Delay: r.cacheL2Delay,
+		Key:               key,
+		CacheL1Delay:      r.cacheL1Delay,
+		CacheL2Delay:      r.cacheL2Delay,
+		CacheVersionScope: taskCatalogCacheScope(workspaceID),
 	}, func(ctx context.Context) ([]Task, error) {
-		q := tasksqlc.New(r.db.DB())
 		var result []Task
 		if groupKey != "" {
-			rows, err := q.AdminListTasksByGroup(ctx, tasksqlc.AdminListTasksByGroupParams{
+			rows, err := r.q.AdminListTasksByGroup(ctx, tasksqlc.AdminListTasksByGroupParams{
 				WorkspaceID: workspaceID, GroupKey: groupKey, Limit: limit, Offset: offset,
 			})
 			if err != nil {
@@ -161,7 +202,7 @@ func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string
 			}
 			return result, nil
 		}
-		rows, err := q.AdminListTasks(ctx, tasksqlc.AdminListTasksParams{
+		rows, err := r.q.AdminListTasks(ctx, tasksqlc.AdminListTasksParams{
 			WorkspaceID: workspaceID, Limit: limit, Offset: offset,
 		})
 		if err != nil {
@@ -180,23 +221,49 @@ func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string
 }
 
 func (r *Repository) UpsertTaskLocalization(ctx context.Context, workspaceID string, taskID uint64, locale, title, description string) error {
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertTaskLocalization(ctx, tasksqlc.AdminUpsertTaskLocalizationParams{
-			WorkspaceID: workspaceID, TaskID: int64(taskID), Locale: locale, Title: title, Description: description,
+	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 ||
+		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
+		return fmt.Errorf("tasks localization scope, locale, or title is invalid")
+	}
+
+	if err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		return txRepo.q.AdminUpsertTaskLocalization(ctx, tasksqlc.AdminUpsertTaskLocalizationParams{
+			WorkspaceID: workspaceID,
+			TaskID:      int64(taskID),
+			Locale:      locale,
+			Title:       title,
+			Description: description,
 		})
 	}); err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
 func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskID uint64, reward Reward, position int32) error {
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertReward(ctx, tasksqlc.AdminUpsertRewardParams{
-			WorkspaceID: workspaceID, TaskID: int64(taskID), RewardKey: reward.Key,
-			RewardType: reward.Type,
-			Quantity:   reward.Quantity,
-			Scale:      int16(reward.Scale),
+	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 {
+		return fmt.Errorf("tasks reward scope is invalid")
+	}
+	if err := validateRewardDefinition(ExportReward{
+		Key:      reward.Key,
+		Type:     reward.Type,
+		Quantity: reward.Quantity,
+		Scale:    reward.Scale,
+		Unit:     reward.Unit,
+		Position: position,
+	}); err != nil {
+		return fmt.Errorf("tasks reward: %w", err)
+	}
+
+	if err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		return txRepo.q.AdminUpsertReward(ctx, tasksqlc.AdminUpsertRewardParams{
+			WorkspaceID: workspaceID,
+			TaskID:      int64(taskID),
+			RewardKey:   reward.Key,
+			RewardType:  reward.Type,
+			Quantity:    reward.Quantity,
+			Scale:       int16(reward.Scale),
 			DurationUnit: sql.NullString{
 				String: taskStringValue(reward.Unit),
 				Valid:  reward.Unit != nil,
@@ -206,14 +273,25 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, taskI
 	}); err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, workspaceID)
 }
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskID uint64, key string) (int64, error) {
-	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-		return r.q.AdminDeleteReward(ctx, tasksqlc.AdminDeleteRewardParams{
-			WorkspaceID: workspaceID, TaskID: int64(taskID), RewardKey: key,
+	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 ||
+		strings.TrimSpace(key) == "" {
+		return 0, fmt.Errorf("tasks delete reward scope is invalid")
+	}
+
+	var rows int64
+	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		var err error
+		rows, err = txRepo.q.AdminDeleteReward(ctx, tasksqlc.AdminDeleteRewardParams{
+			WorkspaceID: workspaceID,
+			TaskID:      int64(taskID),
+			RewardKey:   key,
 		})
+		return err
 	})
 	if err != nil {
 		return 0, err
@@ -221,34 +299,78 @@ func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskI
 	if rows > 0 {
 		return rows, r.invalidateTaskCache(ctx, workspaceID)
 	}
+
 	return rows, nil
 }
 
 func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComplexConditionParams) error {
-	requiredStatus := params.RequiredStatus
-	if requiredStatus == "" {
-		requiredStatus = ComplexRequiredStatusReady
+	params.RequiredStatus = defaultString(params.RequiredStatus, ComplexRequiredStatusReady)
+	if err := validateComplexCondition(params); err != nil {
+		return err
 	}
-	if err := repositoryExec(ctx, r, func(ctx context.Context) error {
-		return r.q.AdminUpsertComplexCondition(ctx, tasksqlc.AdminUpsertComplexConditionParams{
+
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, params.WorkspaceID); err != nil {
+			return err
+		}
+
+		rows, err := txRepo.q.AdminListComplexConditions(ctx, params.WorkspaceID)
+		if err != nil {
+			return err
+		}
+
+		graph := make(map[uint64][]uint64)
+		candidateExists := false
+		for _, row := range rows {
+			parentID := uint64(row.ParentTaskID)
+			conditionID := uint64(row.ConditionTaskID)
+			graph[parentID] = append(graph[parentID], conditionID)
+			if parentID == params.ParentTaskID && conditionID == params.ConditionTaskID {
+				candidateExists = true
+			}
+		}
+		if !candidateExists {
+			graph[params.ParentTaskID] = append(graph[params.ParentTaskID], params.ConditionTaskID)
+		}
+		if hasDirectedCycle(graph) {
+			return fmt.Errorf("tasks complex condition creates a cycle")
+		}
+
+		return txRepo.q.AdminUpsertComplexCondition(ctx, tasksqlc.AdminUpsertComplexConditionParams{
 			WorkspaceID:     params.WorkspaceID,
 			ParentTaskID:    int64(params.ParentTaskID),
 			ConditionTaskID: int64(params.ConditionTaskID),
-			RequiredStatus:  requiredStatus,
+			RequiredStatus:  params.RequiredStatus,
 			Position:        params.Position,
 			IsRequired:      params.IsRequired,
 		})
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+
 	return r.invalidateTaskCache(ctx, params.WorkspaceID)
 }
 
 func (r *Repository) DeleteComplexCondition(ctx context.Context, workspaceID string, parentTaskID uint64, conditionTaskID uint64) (int64, error) {
-	rows, err := repositoryValue(ctx, r, func(ctx context.Context) (int64, error) {
-		return r.q.AdminDeleteComplexCondition(ctx, tasksqlc.AdminDeleteComplexConditionParams{
-			WorkspaceID: workspaceID, ParentTaskID: int64(parentTaskID), ConditionTaskID: int64(conditionTaskID),
+	if err := validateComplexCondition(SaveComplexConditionParams{
+		WorkspaceID:     workspaceID,
+		ParentTaskID:    parentTaskID,
+		ConditionTaskID: conditionTaskID,
+		RequiredStatus:  ComplexRequiredStatusReady,
+	}); err != nil {
+		return 0, err
+	}
+
+	var rows int64
+	err := r.withWorkspaceMutation(ctx, workspaceID, func(txRepo *Repository) error {
+		var err error
+		rows, err = txRepo.q.AdminDeleteComplexCondition(ctx, tasksqlc.AdminDeleteComplexConditionParams{
+			WorkspaceID:     workspaceID,
+			ParentTaskID:    int64(parentTaskID),
+			ConditionTaskID: int64(conditionTaskID),
 		})
+		return err
 	})
 	if err != nil {
 		return 0, err
@@ -256,6 +378,7 @@ func (r *Repository) DeleteComplexCondition(ctx context.Context, workspaceID str
 	if rows > 0 {
 		return rows, r.invalidateTaskCache(ctx, workspaceID)
 	}
+
 	return rows, nil
 }
 

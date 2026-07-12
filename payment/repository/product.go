@@ -149,11 +149,6 @@ type ProductItem struct {
 	Scale        uint16
 	RewardType   string
 	DurationUnit *string
-	Type         sql.NullString
-	Title        string
-	Description  string
-	Rarity       sql.NullString
-	Position     sql.NullInt32
 }
 
 func (r *PaymentRepository) GetProduct(ctx context.Context, params ProductGetParams) (Product, error) {
@@ -502,11 +497,6 @@ func mapProductCatalogRows(rows []sqlc.ListProductCatalogCacheRowsRow, now time.
 			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
-			Type:         row.ItemType,
-			Title:        row.ItemTitle,
-			Description:  row.ItemDescription,
-			Rarity:       row.ItemRarity,
-			Position:     row.ItemPosition,
 		})
 	}
 
@@ -586,11 +576,6 @@ func mapProductsCatalogGroup(rows []sqlc.ListProductsCatalogCacheRowsRow, now ti
 			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: listProductsDurationUnitPtr(row.DurationUnit),
-			Type:         row.ItemType,
-			Title:        row.ItemTitle,
-			Description:  row.ItemDescription,
-			Rarity:       row.ItemRarity,
-			Position:     row.ItemPosition,
 		})
 	}
 	return product, true
@@ -730,11 +715,6 @@ func mapProductPreviewCatalogRows(rows []sqlc.ListProductPreviewCatalogCacheRows
 			Scale:        uint16(row.ItemScale),
 			RewardType:   string(row.RewardType),
 			DurationUnit: paymentCacheDurationUnitPtr(row.DurationUnit),
-			Type:         row.ItemType,
-			Title:        row.ItemTitle,
-			Description:  row.ItemDescription,
-			Rarity:       row.ItemRarity,
-			Position:     row.ItemPosition,
 		})
 	}
 
@@ -900,11 +880,7 @@ func normalizeLimitAmount(amount uint64) uint64 {
 
 func (r *PaymentRepository) databaseNow(ctx context.Context) (time.Time, error) {
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context) (time.Time, error) {
-		var value time.Time
-		if err := r.db.QueryRowContext(ctx, "SELECT NOW()").Scan(&value); err != nil {
-			return time.Time{}, err
-		}
-		return value, nil
+		return r.q.DatabaseNow(ctx)
 	})
 }
 

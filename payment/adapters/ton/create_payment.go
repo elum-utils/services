@@ -74,8 +74,6 @@ func (a *TON) CreatePayment(ctx context.Context, params CreatePaymentParams) (*C
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:           order.ID,
 		ProviderCode:      ProviderCode,
-		KnownAssetCode:    utils.Ref(order.AssetCode),
-		KnownAmountMinor:  utils.Ref(order.PayableAmountMinor),
 		ProviderPaymentID: utils.Ref(comment),
 		IdempotencyKey:    utils.Ref(fmt.Sprintf("%s:%s", ProviderCode, comment)),
 	})

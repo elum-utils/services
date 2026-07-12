@@ -91,8 +91,8 @@ func (a *Admin) ListDailyOverview(
 	return result, nil
 }
 
-func (a *Admin) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
+func (a *Admin) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.RefreshDailyStats(mergedCtx, from, until)
+	return a.repository.RefreshDailyStats(mergedCtx, workspaceID, from, until)
 }

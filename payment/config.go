@@ -45,8 +45,10 @@ type Options struct {
 	PriceUpdateHTTPClient *http.Client
 	PriceUpdateInterval   time.Duration
 	PriceUpdateBaseURL    string
+	DisablePriceUpdater   bool
 
-	TONWalletSyncInterval time.Duration
+	TONWalletSyncInterval    time.Duration
+	OnCacheInvalidationError func(error)
 }
 
 type DatabaseParams struct {

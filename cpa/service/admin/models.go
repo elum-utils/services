@@ -5,6 +5,7 @@ import (
 
 	json "github.com/goccy/go-json"
 
+	"github.com/elum-utils/services/cpa/model"
 	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/user"
 )
@@ -58,33 +59,33 @@ type DailyStatsModel struct {
 }
 
 type AssignmentModel struct {
-	ID             uint64     `json:"id"`
-	CPAID          string     `json:"cpa_id"`
-	AppID          int64      `json:"app_id"`
-	PlatformID     int64      `json:"platform_id"`
-	PlatformUserID string     `json:"platform_user_id"`
-	Code           string     `json:"code"`
-	CodeMode       string     `json:"code_mode"`
-	Status         string     `json:"status"`
-	IssuedAt       time.Time  `json:"issued_at"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	ID             uint64                 `json:"id"`
+	CPAID          string                 `json:"cpa_id"`
+	AppID          int64                  `json:"app_id"`
+	PlatformID     int64                  `json:"platform_id"`
+	PlatformUserID string                 `json:"platform_user_id"`
+	Code           string                 `json:"code"`
+	CodeMode       string                 `json:"code_mode"`
+	Status         model.AssignmentStatus `json:"status"`
+	IssuedAt       time.Time              `json:"issued_at"`
+	CompletedAt    *time.Time             `json:"completed_at,omitempty"`
 }
 
 type CodeModel struct {
-	ID        uint64     `json:"id"`
-	Code      string     `json:"code"`
-	Source    string     `json:"source"`
-	Status    string     `json:"status"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	ID        uint64           `json:"id"`
+	Code      string           `json:"code"`
+	Source    string           `json:"source"`
+	Status    model.CodeStatus `json:"status"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	DeletedAt *time.Time       `json:"deleted_at,omitempty"`
 }
 
 type AssignmentEventModel struct {
-	ID           uint64    `json:"id"`
-	AssignmentID uint64    `json:"assignment_id"`
-	EventType    string    `json:"event_type"`
-	OccurredAt   time.Time `json:"occurred_at"`
+	ID           uint64                    `json:"id"`
+	AssignmentID uint64                    `json:"assignment_id"`
+	EventType    model.AssignmentEventType `json:"event_type"`
+	OccurredAt   time.Time                 `json:"occurred_at"`
 }
 
 type ExportRequest = repository.ExportRequest

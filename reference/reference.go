@@ -89,9 +89,10 @@ func open(ctx context.Context, params DatabaseParams) (*Reference, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "reference sql client initialization failed", err)
 	}
 	bootstrap := repository.NewWithOptions(client, repository.Options{
-		QueryTimeout: params.Options.QueryTimeout,
-		CacheL1Delay: params.Options.CacheL1Delay,
-		CacheL2Delay: params.Options.CacheL2Delay,
+		QueryTimeout:             params.Options.QueryTimeout,
+		CacheL1Delay:             params.Options.CacheL1Delay,
+		CacheL2Delay:             params.Options.CacheL2Delay,
+		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
 	})
 	if err := bootstrap.Bootstrap(contextutil.Normalize(ctx)); err != nil {
 		_ = bootstrap.Close()
@@ -137,9 +138,10 @@ func (r *Reference) adopt(running *Reference) {
 func newReference(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Reference {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 	return &Reference{
 		Admin:  admin.NewWithRepositoryOptions(rootCtx, db, repositoryOptions),

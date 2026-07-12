@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 
-	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/payment/repository"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
-func (a *Admin) ListProductGroups(ctx context.Context, params ProductGroupListParams) ([]paymentsqlc.PaymentProductGroup, error) {
+func (a *Admin) ListProductGroups(ctx context.Context, params ProductGroupListParams) ([]ProductGroupModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -21,7 +20,7 @@ func (a *Admin) ListProductGroups(ctx context.Context, params ProductGroupListPa
 	})
 }
 
-func (a *Admin) GetProductGroup(ctx context.Context, workspaceID string, code string) (paymentsqlc.PaymentProductGroup, error) {
+func (a *Admin) GetProductGroup(ctx context.Context, workspaceID string, code string) (ProductGroupModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -31,15 +30,15 @@ func (a *Admin) GetProductGroup(ctx context.Context, workspaceID string, code st
 	})
 }
 
-func (a *Admin) UpsertProductGroup(ctx context.Context, params paymentsqlc.UpsertProductGroupParams) error {
+func (a *Admin) UpsertProductGroup(ctx context.Context, params ProductGroupUpsertParams) error {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.UpsertProductGroup(ctx, repository.ProductGroupUpsertParams{
 		WorkspaceID:    params.WorkspaceID,
 		Code:           params.Code,
-		TitleKey:       sqlwrap.NullStringPtr(params.TitleKey),
-		DescriptionKey: sqlwrap.NullStringPtr(params.DescriptionKey),
+		TitleKey:       params.TitleKey,
+		DescriptionKey: params.DescriptionKey,
 		Position:       params.Position,
 		IsActive:       params.IsActive,
 	})
@@ -52,7 +51,7 @@ func (a *Admin) DeleteProductGroup(ctx context.Context, workspaceID string, code
 	return a.repository.DeleteProductGroup(ctx, workspaceID, code)
 }
 
-func (a *Admin) ListLocalizations(ctx context.Context, params LocalizationListParams) ([]paymentsqlc.PaymentLocalization, error) {
+func (a *Admin) ListLocalizations(ctx context.Context, params LocalizationListParams) ([]LocalizationModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -66,7 +65,7 @@ func (a *Admin) ListLocalizations(ctx context.Context, params LocalizationListPa
 	})
 }
 
-func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, locale string, key string) (paymentsqlc.PaymentLocalization, error) {
+func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, locale string, key string) (LocalizationModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -77,7 +76,7 @@ func (a *Admin) GetLocalization(ctx context.Context, workspaceID string, locale 
 	})
 }
 
-func (a *Admin) UpsertLocalization(ctx context.Context, params paymentsqlc.UpsertLocalizationParams) error {
+func (a *Admin) UpsertLocalization(ctx context.Context, params LocalizationUpsertParams) error {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -96,7 +95,7 @@ func (a *Admin) DeleteLocalization(ctx context.Context, workspaceID string, loca
 	return a.repository.DeleteLocalization(ctx, workspaceID, locale, key)
 }
 
-func (a *Admin) ListProducts(ctx context.Context, params ProductListParams) ([]paymentsqlc.PaymentProduct, error) {
+func (a *Admin) ListProducts(ctx context.Context, params ProductListParams) ([]ProductModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -112,38 +111,39 @@ func (a *Admin) ListProducts(ctx context.Context, params ProductListParams) ([]p
 	})
 }
 
-func (a *Admin) GetProduct(ctx context.Context, workspaceID string, id string) (paymentsqlc.PaymentProduct, error) {
+func (a *Admin) GetProduct(ctx context.Context, workspaceID string, id string) (ProductModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminGetProduct(ctx, paymentsqlc.AdminGetProductParams{WorkspaceID: workspaceID, ID: id})
 }
 
-func (a *Admin) UpsertProduct(ctx context.Context, params paymentsqlc.UpsertProductParams) error {
+func (a *Admin) UpsertProduct(ctx context.Context, params ProductUpsertParams) error {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.UpsertProduct(ctx, repository.ProductUpsertParams{
 		WorkspaceID:          params.WorkspaceID,
 		ID:                   params.ID,
-		GroupCode:            sqlwrap.NullStringPtr(params.GroupCode),
+		GroupCode:            params.GroupCode,
 		TitleKey:             params.TitleKey,
-		DescriptionKey:       sqlwrap.NullStringPtr(params.DescriptionKey),
-		ImageURL:             sqlwrap.NullStringPtr(params.ImageUrl),
-		LinkURL:              sqlwrap.NullStringPtr(params.LinkUrl),
-		SizeLabel:            sqlwrap.NullStringPtr(params.SizeLabel),
-		PeriodSeconds:        nullInt64Ptr(params.PeriodSeconds),
-		TrialDurationSeconds: nullInt64Ptr(params.TrialDurationSeconds),
-		QuantityMode:         string(params.QuantityMode),
+		DescriptionKey:       params.DescriptionKey,
+		Target:               params.Target,
+		ImageURL:             params.ImageURL,
+		LinkURL:              params.LinkURL,
+		SizeLabel:            params.SizeLabel,
+		PeriodSeconds:        params.PeriodSeconds,
+		TrialDurationSeconds: params.TrialDurationSeconds,
+		QuantityMode:         params.QuantityMode,
 		Position:             params.Position,
 		GlobalLimit:          params.GlobalLimit,
-		GlobalInterval:       string(params.GlobalInterval),
+		GlobalInterval:       params.GlobalInterval,
 		GlobalIntervalCount:  params.GlobalIntervalCount,
 		UserLimit:            params.UserLimit,
-		UserInterval:         string(params.UserInterval),
+		UserInterval:         params.UserInterval,
 		UserIntervalCount:    params.UserIntervalCount,
-		AvailableFrom:        &params.AvailableFrom,
-		AvailableUntil:       &params.AvailableUntil,
+		AvailableFrom:        params.AvailableFrom,
+		AvailableUntil:       params.AvailableUntil,
 		IsVisible:            params.IsVisible,
 		IsClosed:             params.IsClosed,
 	})
@@ -156,50 +156,7 @@ func (a *Admin) DeleteProduct(ctx context.Context, workspaceID string, id string
 	return a.repository.DeleteProduct(ctx, workspaceID, id)
 }
 
-func (a *Admin) ListItems(ctx context.Context, params ItemListParams) ([]paymentsqlc.PaymentItem, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	limit, offset := normalizePage(params.Page)
-	return a.repository.AdminListItems(ctx, paymentsqlc.AdminListItemsParams{
-		WorkspaceID: params.WorkspaceID,
-		Column2:     params.ItemType,
-		ItemType:    sql.NullString{String: params.ItemType, Valid: params.ItemType != ""},
-		Limit:       limit,
-		Offset:      offset,
-	})
-}
-
-func (a *Admin) GetItem(ctx context.Context, workspaceID string, id string) (paymentsqlc.PaymentItem, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.AdminGetItem(ctx, paymentsqlc.AdminGetItemParams{WorkspaceID: workspaceID, ID: id})
-}
-
-func (a *Admin) UpsertItem(ctx context.Context, params paymentsqlc.UpsertItemParams) error {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.UpsertItem(ctx, repository.ItemUpsertParams{
-		WorkspaceID:    params.WorkspaceID,
-		ID:             params.ID,
-		ItemType:       sqlwrap.NullStringPtr(params.ItemType),
-		TitleKey:       params.TitleKey,
-		DescriptionKey: sqlwrap.NullStringPtr(params.DescriptionKey),
-		Rarity:         params.Rarity,
-		Position:       params.Position,
-	})
-}
-
-func (a *Admin) DeleteItem(ctx context.Context, workspaceID string, id string) (int64, error) {
-	mergedCtx, paymentRequestCancel := a.withContext(ctx)
-	defer paymentRequestCancel()
-	ctx = mergedCtx
-	return a.repository.DeleteItem(ctx, workspaceID, id)
-}
-
-func (a *Admin) ListProductItems(ctx context.Context, params ProductItemListParams) ([]paymentsqlc.PaymentProductItem, error) {
+func (a *Admin) ListProductItems(ctx context.Context, params ProductItemListParams) ([]ProductItemModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -215,7 +172,7 @@ func (a *Admin) ListProductItems(ctx context.Context, params ProductItemListPara
 	})
 }
 
-func (a *Admin) UpsertProductItem(ctx context.Context, params paymentsqlc.UpsertProductItemParams) error {
+func (a *Admin) UpsertProductItem(ctx context.Context, params ProductItemUpsertParams) error {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -226,19 +183,11 @@ func (a *Admin) UpsertProductItem(ctx context.Context, params paymentsqlc.Upsert
 		WorkspaceID:  params.WorkspaceID,
 		ProductID:    params.ProductID,
 		ItemID:       params.ItemID,
-		RewardType:   string(params.RewardType),
+		RewardType:   params.RewardType,
 		Quantity:     params.Quantity,
 		Scale:        uint16(params.Scale),
-		DurationUnit: paymentProductItemDurationUnitPtr(params.DurationUnit),
+		DurationUnit: params.DurationUnit,
 	})
-}
-
-func paymentProductItemDurationUnitPtr(value paymentsqlc.NullPaymentProductItemDurationUnit) *string {
-	if !value.Valid {
-		return nil
-	}
-	unit := string(value.PaymentProductItemDurationUnit)
-	return &unit
 }
 
 func (a *Admin) DeleteProductItem(ctx context.Context, workspaceID string, productID string, itemID string) (int64, error) {
@@ -248,7 +197,7 @@ func (a *Admin) DeleteProductItem(ctx context.Context, workspaceID string, produ
 	return a.repository.DeleteProductItem(ctx, workspaceID, productID, itemID)
 }
 
-func (a *Admin) ListPrices(ctx context.Context, params PriceListParams) ([]paymentsqlc.PaymentPrice, error) {
+func (a *Admin) ListPrices(ctx context.Context, params PriceListParams) ([]PriceModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -264,14 +213,14 @@ func (a *Admin) ListPrices(ctx context.Context, params PriceListParams) ([]payme
 	})
 }
 
-func (a *Admin) GetPrice(ctx context.Context, workspaceID string, id uint64) (paymentsqlc.PaymentPrice, error) {
+func (a *Admin) GetPrice(ctx context.Context, workspaceID string, id uint64) (PriceModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.AdminGetPrice(ctx, paymentsqlc.AdminGetPriceParams{WorkspaceID: workspaceID, ID: int64(id)})
 }
 
-func (a *Admin) CreatePrice(ctx context.Context, params paymentsqlc.CreateProductPriceParams) (uint64, error) {
+func (a *Admin) CreatePrice(ctx context.Context, params ProductPriceCreateParams) (uint64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -279,27 +228,27 @@ func (a *Admin) CreatePrice(ctx context.Context, params paymentsqlc.CreateProduc
 		WorkspaceID:         params.WorkspaceID,
 		ProductID:           params.ProductID,
 		AssetCode:           params.AssetCode,
-		ListAmountMinor:     uint64(params.ListAmountMinor),
-		DiscountAmountMinor: uint64(params.DiscountAmountMinor),
+		ListAmountMinor:     params.ListAmountMinor,
+		DiscountAmountMinor: params.DiscountAmountMinor,
 		IsPromotion:         params.IsPromotion,
-		StartsAt:            &params.StartsAt,
-		EndsAt:              &params.EndsAt,
+		StartsAt:            params.StartsAt,
+		EndsAt:              params.EndsAt,
 	})
 }
 
-func (a *Admin) UpdatePrice(ctx context.Context, params paymentsqlc.UpdateProductPriceParams) (int64, error) {
+func (a *Admin) UpdatePrice(ctx context.Context, params ProductPriceUpdateParams) (int64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.UpdateProductPrice(ctx, repository.ProductPriceUpdateParams{
-		ID:                  uint64(params.ID),
+		ID:                  params.ID,
 		WorkspaceID:         params.WorkspaceID,
 		AssetCode:           params.AssetCode,
-		ListAmountMinor:     uint64(params.ListAmountMinor),
-		DiscountAmountMinor: uint64(params.DiscountAmountMinor),
+		ListAmountMinor:     params.ListAmountMinor,
+		DiscountAmountMinor: params.DiscountAmountMinor,
 		IsPromotion:         params.IsPromotion,
-		StartsAt:            &params.StartsAt,
-		EndsAt:              &params.EndsAt,
+		StartsAt:            params.StartsAt,
+		EndsAt:              params.EndsAt,
 	})
 }
 
@@ -310,7 +259,7 @@ func (a *Admin) DeletePrice(ctx context.Context, workspaceID string, id uint64) 
 	return a.repository.DeleteProductPrice(ctx, workspaceID, id)
 }
 
-func (a *Admin) ListProductLimitCounters(ctx context.Context, params ProductLimitCounterListParams) ([]paymentsqlc.PaymentProductLimitCounter, error) {
+func (a *Admin) ListProductLimitCounters(ctx context.Context, params ProductLimitCounterListParams) ([]ProductLimitCounterModel, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
@@ -328,17 +277,17 @@ func (a *Admin) ListProductLimitCounters(ctx context.Context, params ProductLimi
 	})
 }
 
-func (a *Admin) DeleteProductLimitCounter(ctx context.Context, params paymentsqlc.AdminDeleteProductLimitCounterParams) (int64, error) {
+func (a *Admin) DeleteProductLimitCounter(ctx context.Context, params ProductLimitCounterDeleteParams) (int64, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.repository.AdminDeleteProductLimitCounter(ctx, params)
-}
-
-func nullInt64Ptr(value sql.NullInt64) *int64 {
-	if !value.Valid {
-		return nil
-	}
-	v := value.Int64
-	return &v
+	return a.repository.AdminDeleteProductLimitCounter(ctx, paymentsqlc.AdminDeleteProductLimitCounterParams{
+		WorkspaceID:    params.WorkspaceID,
+		PlatformID:     params.PlatformID,
+		ProductID:      params.ProductID,
+		CounterScope:   paymentsqlc.PaymentProductLimitCounterCounterScope(params.CounterScope),
+		PlatformUserID: params.PlatformUserID,
+		WindowStart:    params.WindowStart,
+		WindowEnd:      params.WindowEnd,
+	})
 }

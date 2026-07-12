@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sort"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -19,25 +18,42 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	calendars, err := r.q.ListExportCalendars(ctx, workspaceID)
-	if err != nil {
+	var calendars []calendarsqlc.CalendarDefinition
+	var localizationRows []calendarsqlc.CalendarLocalization
+	var stepRows []calendarsqlc.ListExportStepsWithRewardsRow
+	if err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		var err error
+		calendars, err = txRepo.q.ListExportCalendars(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		localizationRows, err = txRepo.q.ListExportLocalizations(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		stepRows, err = txRepo.q.ListExportStepsWithRewards(ctx, workspaceID)
+		return err
+	}); err != nil {
 		return ExportPackage{}, err
 	}
-	localizationRows, err := r.q.ListExportLocalizations(ctx, workspaceID)
-	if err != nil {
-		return ExportPackage{}, err
-	}
+
 	localizations := mapExportLocalizations(localizationRows)
-	stepRows, err := r.q.ListExportStepsWithRewards(ctx, workspaceID)
-	if err != nil {
-		return ExportPackage{}, err
-	}
 	steps := mapExportSteps(stepRows)
 	out := ExportPackage{
-		Format: ExportFormat, Service: "calendar", CreatedAt: now.UTC(),
+		Format:    ExportFormat,
+		Service:   "calendar",
+		CreatedAt: now.UTC(),
 		Calendars: make([]ExportCalendar, 0, len(calendars)),
 	}
-	items := make(exportItemCollector)
 	for _, calendar := range calendars {
 		item := ExportCalendar{
 			ID:                  calendar.ID,
@@ -53,16 +69,11 @@ func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportR
 			IsActive:            calendar.IsActive,
 			StartAt:             sqlwrap.NullTimePtr(calendar.StartAt),
 			EndAt:               sqlwrap.NullTimePtr(calendar.EndAt),
-			Localization:        localizations[calendar.ID], Steps: steps[calendar.ID],
-		}
-		for _, step := range item.Steps {
-			for _, reward := range step.Rewards {
-				items.add(reward.Key)
-			}
+			Localization:        localizations[calendar.ID],
+			Steps:               steps[calendar.ID],
 		}
 		out.Calendars = append(out.Calendars, item)
 	}
-	out.Items = items.list()
 	return out, nil
 }
 
@@ -78,31 +89,6 @@ func mapExportLocalizations(rows []calendarsqlc.CalendarLocalization) map[string
 		}
 	}
 	return result
-}
-
-type exportItemCollector map[string]struct{}
-
-func (c exportItemCollector) add(id string) {
-	if id == "" {
-		return
-	}
-	c[id] = struct{}{}
-}
-
-func (c exportItemCollector) list() []ExportItem {
-	if len(c) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(c))
-	for id := range c {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	items := make([]ExportItem, 0, len(ids))
-	for index, id := range ids {
-		items = append(items, ExportItem{ID: id, Position: int32((index + 1) * 10)})
-	}
-	return items
 }
 
 func mapExportSteps(rows []calendarsqlc.ListExportStepsWithRewardsRow) map[string][]ExportStep {

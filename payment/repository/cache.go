@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"sync"
+	"errors"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
@@ -10,18 +10,13 @@ import (
 
 const paymentGlobalCacheScope = "*"
 
-var paymentCacheKeys sync.Map
-
 func paymentCacheKey(parts ...any) string {
 	args := append([]any{"payment"}, parts...)
 	return sqlwrap.CreateKey(args...)
 }
 
-func rememberPaymentCacheKey(scope string, key string) {
-	if scope == "" || key == "" {
-		return
-	}
-	paymentCacheKeys.Store(key, scope)
+func paymentCacheVersionScope(scope string) []any {
+	return []any{"payment", "cache", scope}
 }
 
 func queryPaymentCache[T any](
@@ -31,15 +26,14 @@ func queryPaymentCache[T any](
 	key string,
 	loader func(context.Context) (T, error),
 ) (T, error) {
+	globalVersion := repository.db.CacheVersion(paymentCacheVersionScope(paymentGlobalCacheScope)...)
 	value, err := sqlwrap.Query(ctx, repository.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      repository.timeout,
-		CacheL1Delay: repository.cacheL1,
-		CacheL2Delay: repository.cacheL2,
+		Key:               sqlwrap.CreateKey(key, globalVersion),
+		Timeout:           repository.timeout,
+		CacheL1Delay:      repository.cacheL1,
+		CacheL2Delay:      repository.cacheL2,
+		CacheVersionScope: paymentCacheVersionScope(scope),
 	}, loader)
-	if err == nil {
-		rememberPaymentCacheKey(scope, key)
-	}
 	return value, err
 }
 
@@ -51,17 +45,14 @@ func queryPaymentVersionedCache[T any](
 	key string,
 	loader func(context.Context) (T, error),
 ) (T, error) {
-	value, err := sqlwrap.Query(ctx, repository.db, sqlwrap.Params{
+	_ = scope
+	return sqlwrap.Query(ctx, repository.db, sqlwrap.Params{
 		Key:               key,
 		Timeout:           repository.timeout,
 		CacheL1Delay:      repository.cacheL1,
 		CacheL2Delay:      repository.cacheL2,
 		CacheVersionScope: versionScope,
 	}, loader)
-	if err == nil {
-		rememberPaymentCacheKey(scope, key)
-	}
-	return value, err
 }
 
 func paymentProductLimitConfigVersionScope(workspaceID string) []any {
@@ -81,54 +72,56 @@ func InvalidateWorkspaceCache(db *sqlwrap.Client, workspaceID string) error {
 	if db == nil || workspaceID == "" {
 		return nil
 	}
-	outErr := db.BumpCacheVersion(paymentProductLimitConfigVersionScope(workspaceID)...)
-	deleteErr := invalidatePaymentCache(db, func(scope string) bool {
-		return scope == workspaceID
-	})
-	if outErr != nil {
-		return outErr
-	}
-	return deleteErr
+	return errors.Join(
+		db.BumpCacheVersion(paymentCacheVersionScope(workspaceID)...),
+		db.BumpCacheVersion(paymentProductLimitConfigVersionScope(workspaceID)...),
+	)
 }
 
 func InvalidateAllCache(db *sqlwrap.Client) error {
 	if db == nil {
 		return nil
 	}
-	return invalidatePaymentCache(db, func(string) bool {
-		return true
-	})
-}
-
-func invalidatePaymentCache(db *sqlwrap.Client, match func(scope string) bool) error {
-	var outErr error
-	paymentCacheKeys.Range(func(rawKey, rawScope any) bool {
-		key, keyOK := rawKey.(string)
-		scope, scopeOK := rawScope.(string)
-		if !keyOK || !scopeOK || !match(scope) {
-			return true
-		}
-		if err := db.DeleteCache(key); err != nil && outErr == nil {
-			outErr = err
-		}
-		paymentCacheKeys.Delete(rawKey)
-		return true
-	})
-	return outErr
+	return db.BumpCacheVersion(paymentCacheVersionScope(paymentGlobalCacheScope)...)
 }
 
 func (r *PaymentRepository) invalidateWorkspaceCache(workspaceID string) error {
 	if r == nil {
 		return nil
 	}
-	return InvalidateWorkspaceCache(r.db, workspaceID)
+	if r.inTx {
+		if r.pendingWorkspaceInvalidations == nil {
+			r.pendingWorkspaceInvalidations = make(map[string]struct{})
+		}
+		r.pendingWorkspaceInvalidations[workspaceID] = struct{}{}
+		return nil
+	}
+	err := InvalidateWorkspaceCache(r.db, workspaceID)
+	r.reportCacheInvalidationError(err)
+	return nil
 }
 
 func (r *PaymentRepository) invalidateAllCache() error {
 	if r == nil {
 		return nil
 	}
-	return InvalidateAllCache(r.db)
+	if r.inTx {
+		r.pendingInvalidateAll = true
+		return nil
+	}
+	err := InvalidateAllCache(r.db)
+	r.reportCacheInvalidationError(err)
+	return nil
+}
+
+func (r *PaymentRepository) reportCacheInvalidationError(err error) {
+	if err == nil || r == nil || r.onCacheInvalidationError == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	r.onCacheInvalidationError(err)
 }
 
 func (r *PaymentRepository) RebuildWorkspaceProductCache(ctx context.Context, workspaceID string) error {

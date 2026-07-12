@@ -77,11 +77,21 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 		var found bool
 		var err error
 		if params.ExternalClickID != "" {
-			issue, found, err = i.repository.GetPartnerIssueByExternalClickID(mergedCtx, params.WorkspaceID, params.Provider, params.ExternalClickID)
+			issue, found, err = i.repository.GetPartnerIssueByExternalClickID(
+				mergedCtx,
+				params.WorkspaceID,
+				params.Provider,
+				params.ExternalClickID,
+			)
 		} else if params.ExternalID != "" && params.PlatformUserID != "" {
 			issue, found, err = i.repository.GetPartnerIssueByExternalUser(
-				mergedCtx, params.WorkspaceID, params.Provider, params.GroupKey, params.Platform,
-				params.ExternalID, params.PlatformUserID,
+				mergedCtx,
+				params.WorkspaceID,
+				params.Provider,
+				params.GroupKey,
+				params.Platform,
+				params.ExternalID,
+				params.PlatformUserID,
 			)
 		} else if len(params.Lookup.PrivatePayload) > 0 && params.Lookup.PlatformUserID != "" {
 			issue, found, err = i.lookupPartnerIssueByPrivatePayloadList(mergedCtx, params, params.Lookup.PrivatePayload, params.Lookup.PlatformUserID)
@@ -98,7 +108,14 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 	}
 	switch params.Status {
 	case repository.PartnerIssueStatusCompleted, "complete", "step_completed", "subscribed":
-		issue, changed, err := i.repository.CompletePartnerIssue(mergedCtx, params.WorkspaceID, issueID, params.Status, params.Payload, params.Now)
+		issue, changed, err := i.repository.CompletePartnerIssue(
+			mergedCtx,
+			params.WorkspaceID,
+			issueID,
+			params.Status,
+			params.Payload,
+			params.Now,
+		)
 		if err != nil {
 			return PartnerCallbackResult{}, err
 		}
@@ -110,7 +127,14 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 		}
 		return PartnerCallbackResult{Status: issue.Status, Issue: &issue}, nil
 	case PartnerCallbackStatusRevoked, repository.PartnerIssueStatusRevokedAfterClaim, "unsubscribe", "unsubscribed", "cancelled", "canceled":
-		issue, changed, err := i.repository.RevokePartnerIssue(mergedCtx, params.WorkspaceID, issueID, params.Status, params.Payload, params.Now)
+		issue, changed, err := i.repository.RevokePartnerIssue(
+			mergedCtx,
+			params.WorkspaceID,
+			issueID,
+			params.Status,
+			params.Payload,
+			params.Now,
+		)
 		if err != nil {
 			return PartnerCallbackResult{}, err
 		}
@@ -126,7 +150,12 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 	}
 }
 
-func (i *Internal) lookupPartnerIssueByPrivatePayloadList(ctx context.Context, params PartnerCallbackParams, values []PartnerCallbackLookupItem, platformUserID string) (repository.PartnerIssue, bool, error) {
+func (i *Internal) lookupPartnerIssueByPrivatePayloadList(
+	ctx context.Context,
+	params PartnerCallbackParams,
+	values []PartnerCallbackLookupItem,
+	platformUserID string,
+) (repository.PartnerIssue, bool, error) {
 	for _, item := range values {
 		if item.Key == "" || item.Value == "" {
 			continue
@@ -139,13 +168,25 @@ func (i *Internal) lookupPartnerIssueByPrivatePayloadList(ctx context.Context, p
 	return repository.PartnerIssue{}, false, nil
 }
 
-func (i *Internal) lookupPartnerIssueByPrivatePayload(ctx context.Context, params PartnerCallbackParams, key, value, platformUserID string) (repository.PartnerIssue, bool, error) {
+func (i *Internal) lookupPartnerIssueByPrivatePayload(
+	ctx context.Context,
+	params PartnerCallbackParams,
+	key string,
+	value string,
+	platformUserID string,
+) (repository.PartnerIssue, bool, error) {
 	if !partnerLookupKeyPattern.MatchString(key) || value == "" || platformUserID == "" {
 		return repository.PartnerIssue{}, false, nil
 	}
 	return i.repository.GetPartnerIssueByPrivatePayloadUser(
-		ctx, params.WorkspaceID, params.Provider, params.GroupKey, params.Platform,
-		key, value, platformUserID,
+		ctx,
+		params.WorkspaceID,
+		params.Provider,
+		params.GroupKey,
+		params.Platform,
+		key,
+		value,
+		platformUserID,
 	)
 }
 
@@ -155,7 +196,11 @@ func (i *Internal) HandlePartnerWebhook(ctx context.Context, params PartnerWebho
 	if params.WorkspaceID == "" || params.Secret == "" {
 		return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
 	}
-	config, found, err := i.repository.GetPartnerConfigByWebhookSecret(mergedCtx, params.WorkspaceID, params.Secret)
+	config, found, err := i.repository.GetPartnerConfigByWebhookSecret(
+		mergedCtx,
+		params.WorkspaceID,
+		params.Secret,
+	)
 	if err != nil {
 		return PartnerCallbackResult{}, err
 	}
@@ -196,7 +241,13 @@ func (i *Internal) HandlePartnerWebhook(ctx context.Context, params PartnerWebho
 			if !ok {
 				continue
 			}
-			last, err = i.applyPartnerWebhookCallback(mergedCtx, config, callback, params.Body, params.Now)
+			last, err = i.applyPartnerWebhookCallback(
+				mergedCtx,
+				config,
+				callback,
+				params.Body,
+				params.Now,
+			)
 			if err != nil {
 				return PartnerCallbackResult{}, err
 			}
@@ -206,10 +257,22 @@ func (i *Internal) HandlePartnerWebhook(ctx context.Context, params PartnerWebho
 		}
 		return last, nil
 	}
-	return i.applyPartnerWebhookCallback(mergedCtx, config, result, params.Body, params.Now)
+	return i.applyPartnerWebhookCallback(
+		mergedCtx,
+		config,
+		result,
+		params.Body,
+		params.Now,
+	)
 }
 
-func (i *Internal) applyPartnerWebhookCallback(ctx context.Context, config repository.PartnerConfig, result map[string]any, fallbackPayload json.RawMessage, now time.Time) (PartnerCallbackResult, error) {
+func (i *Internal) applyPartnerWebhookCallback(
+	ctx context.Context,
+	config repository.PartnerConfig,
+	result map[string]any,
+	fallbackPayload json.RawMessage,
+	now time.Time,
+) (PartnerCallbackResult, error) {
 	status := firstWebhookString(result["status"], result["action"])
 	if status == "complete" {
 		status = repository.PartnerIssueStatusCompleted
@@ -240,8 +303,11 @@ func (i *Internal) applyPartnerWebhookCallback(ctx context.Context, config repos
 
 func internalPartnerConfigMap(config repository.PartnerConfig) map[string]any {
 	return map[string]any{
-		"workspace_id": config.WorkspaceID, "provider": config.Provider, "group_key": config.GroupKey,
-		"platform": config.Platform, "secret": stringPtrValue(config.Secret),
+		"workspace_id":   config.WorkspaceID,
+		"provider":       config.Provider,
+		"group_key":      config.GroupKey,
+		"platform":       config.Platform,
+		"secret":         stringPtrValue(config.Secret),
 		"webhook_secret": stringPtrValue(config.WebhookSecret),
 		"settings":       rawObject(config.Settings),
 		"target":         rawObject(config.Target),

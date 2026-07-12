@@ -1400,6 +1400,15 @@ func (q *Queries) ListWorkspacesForAccount(ctx context.Context, arg ListWorkspac
 	return items, nil
 }
 
+const lockMethodRegistry = `-- name: LockMethodRegistry :exec
+SELECT pg_advisory_xact_lock(hashtextextended('control:method-registry', 0))
+`
+
+func (q *Queries) LockMethodRegistry(ctx context.Context) error {
+	_, err := q.exec(ctx, q.lockMethodRegistryStmt, lockMethodRegistry)
+	return err
+}
+
 const removeRoleMember = `-- name: RemoveRoleMember :execrows
 DELETE FROM control_role_member WHERE role_id = $1 AND account_id = $2
 `

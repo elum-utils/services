@@ -2,12 +2,20 @@ package user
 
 import (
 	"context"
+	"strings"
 	"time"
+
+	"github.com/elum-utils/services/calendar/repository"
 )
 
 func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]ActiveCalendarModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if strings.TrimSpace(params.WorkspaceID) == "" {
+		return nil, ErrWorkspaceRequired
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -34,10 +42,23 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]Activ
 func (u *User) GetCalendar(ctx context.Context, params GetCalendarParams) (CalendarModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return CalendarModel{}, err
+	}
+
 	value, err := u.repository.GetCalendar(mergedCtx, params.Identity.WorkspaceID, params.Ref, params.Locale)
 	if err != nil {
 		return CalendarModel{}, err
 	}
+	now := params.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if !calendarVisibleAt(value, now) {
+		return CalendarModel{}, nil
+	}
+
 	result := mapCalendar(value)
 	if !value.HideFutureRewards || value.ID == "" {
 		return result, nil
@@ -60,9 +81,24 @@ func (u *User) GetCalendar(ctx context.Context, params GetCalendarParams) (Calen
 	return result, nil
 }
 
+func calendarVisibleAt(value repository.Calendar, now time.Time) bool {
+	if value.ID == "" || !value.IsActive || value.DeletedAt != nil {
+		return false
+	}
+	if value.StartAt != nil && value.StartAt.After(now) {
+		return false
+	}
+	return value.EndAt == nil || value.EndAt.After(now)
+}
+
 func (u *User) GetProgress(ctx context.Context, params GetProgressParams) (*ProgressModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	value, err := u.repository.GetProgress(mergedCtx, repositoryIdentity(params.Identity), params.CalendarID)
 	if err != nil || value == nil {
 		return nil, err

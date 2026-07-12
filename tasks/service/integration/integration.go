@@ -51,6 +51,11 @@ func (i *Integration) Close() error {
 func (i *Integration) Check(ctx context.Context, params CheckParams) (Result, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return Result{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -62,7 +67,7 @@ func (i *Integration) Check(ctx context.Context, params CheckParams) (Result, er
 	if !found {
 		return Result{Status: StatusNotFound}, nil
 	}
-	checkParams, ok := i.checkParamsForTask(ctx, params, task.ActionKind)
+	checkParams, ok := i.checkParamsForTask(params, task.ActionKind)
 	if !ok {
 		publicTask := activeTask(task)
 		return Result{Status: StatusInvalidTask, Task: &publicTask}, nil
@@ -74,8 +79,8 @@ func (i *Integration) CheckChannelSubscription(ctx context.Context, params Check
 	return i.checkAndRecord(ctx, checkAndRecordParams{
 		taskRef: params.TaskRefParams, provider: params.Provider,
 		variables: params.Variables, expectedActionKind: repository.ActionKindChannelSubscribe,
-		check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-			return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(ctx, ChannelSubscriptionCheckParams{
+		check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+			return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(checkCtx, ChannelSubscriptionCheckParams{
 				Identity: params.Identity, Task: taskContext(task), Provider: provider,
 				Variables: params.Variables, OccurredAt: now,
 			})
@@ -90,8 +95,8 @@ func (i *Integration) CheckChannelBoost(ctx context.Context, params CheckChannel
 	return i.checkAndRecord(ctx, checkAndRecordParams{
 		taskRef: params.TaskRefParams, provider: params.Provider,
 		variables: params.Variables, expectedActionKind: repository.ActionKindChannelBoost,
-		check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-			return checker.(ChannelBoostChecker).CheckChannelBoost(ctx, ChannelBoostCheckParams{
+		check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+			return checker.(ChannelBoostChecker).CheckChannelBoost(checkCtx, ChannelBoostCheckParams{
 				Identity: params.Identity, Task: taskContext(task), Provider: provider,
 				Variables: params.Variables, OccurredAt: now,
 			})
@@ -106,8 +111,8 @@ func (i *Integration) CheckExternal(ctx context.Context, params CheckExternalPar
 	return i.checkAndRecord(ctx, checkAndRecordParams{
 		taskRef: params.TaskRefParams, provider: params.Provider,
 		variables: params.Variables, expectedActionKind: repository.ActionKindExternal,
-		check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-			return checker.(ExternalTaskChecker).CheckExternalTask(ctx, ExternalTaskCheckParams{
+		check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+			return checker.(ExternalTaskChecker).CheckExternalTask(checkCtx, ExternalTaskCheckParams{
 				Identity: params.Identity, Task: taskContext(task), Provider: provider,
 				Variables: params.Variables, OccurredAt: now,
 			})
@@ -124,12 +129,17 @@ type checkAndRecordParams struct {
 	variables          map[string]string
 	expectedActionKind string
 	checker            func(provider string) any
-	check              func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error)
+	check              func(context.Context, any, repository.Task, string, time.Time) (CheckResult, error)
 }
 
 func (i *Integration) checkAndRecord(ctx context.Context, params checkAndRecordParams) (Result, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
+
+	if err := params.taskRef.Identity.Validate(); err != nil {
+		return Result{}, err
+	}
+
 	now := params.taskRef.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -160,7 +170,7 @@ func (i *Integration) checkLoadedAndRecord(ctx context.Context, params checkAndR
 	if checker == nil {
 		return Result{Status: StatusNoChecker, Task: &publicTask}, nil
 	}
-	check, err := params.check(checker, task, provider, now)
+	check, err := params.check(ctx, checker, task, provider, now)
 	if err != nil {
 		return Result{Status: StatusCheckRejected, Task: &publicTask}, err
 	}
@@ -185,14 +195,14 @@ func (i *Integration) checkLoadedAndRecord(ctx context.Context, params checkAndR
 	return Result{Status: status, Completed: true, Task: &readyTask, Check: check.Payload}, nil
 }
 
-func (i *Integration) checkParamsForTask(ctx context.Context, params CheckParams, actionKind string) (checkAndRecordParams, bool) {
+func (i *Integration) checkParamsForTask(params CheckParams, actionKind string) (checkAndRecordParams, bool) {
 	switch actionKind {
 	case repository.ActionKindChannelSubscribe:
 		return checkAndRecordParams{
 			taskRef: params.TaskRefParams, provider: params.Provider,
 			variables: params.Variables, expectedActionKind: repository.ActionKindChannelSubscribe,
-			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-				return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(ctx, ChannelSubscriptionCheckParams{
+			check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ChannelSubscriptionChecker).CheckChannelSubscription(checkCtx, ChannelSubscriptionCheckParams{
 					Identity: params.Identity, Task: taskContext(task), Provider: provider,
 					Variables: params.Variables, OccurredAt: now,
 				})
@@ -205,8 +215,8 @@ func (i *Integration) checkParamsForTask(ctx context.Context, params CheckParams
 		return checkAndRecordParams{
 			taskRef: params.TaskRefParams, provider: params.Provider,
 			variables: params.Variables, expectedActionKind: repository.ActionKindChannelBoost,
-			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-				return checker.(ChannelBoostChecker).CheckChannelBoost(ctx, ChannelBoostCheckParams{
+			check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ChannelBoostChecker).CheckChannelBoost(checkCtx, ChannelBoostCheckParams{
 					Identity: params.Identity, Task: taskContext(task), Provider: provider,
 					Variables: params.Variables, OccurredAt: now,
 				})
@@ -219,8 +229,8 @@ func (i *Integration) checkParamsForTask(ctx context.Context, params CheckParams
 		return checkAndRecordParams{
 			taskRef: params.TaskRefParams, provider: params.Provider,
 			variables: params.Variables, expectedActionKind: repository.ActionKindExternal,
-			check: func(checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
-				return checker.(ExternalTaskChecker).CheckExternalTask(ctx, ExternalTaskCheckParams{
+			check: func(checkCtx context.Context, checker any, task repository.Task, provider string, now time.Time) (CheckResult, error) {
+				return checker.(ExternalTaskChecker).CheckExternalTask(checkCtx, ExternalTaskCheckParams{
 					Identity: params.Identity, Task: taskContext(task), Provider: provider,
 					Variables: params.Variables, OccurredAt: now,
 				})
@@ -237,6 +247,11 @@ func (i *Integration) checkParamsForTask(ctx context.Context, params CheckParams
 func (i *Integration) ConfirmCompletion(ctx context.Context, params ConfirmCompletionParams) (ConfirmCompletionResult, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return ConfirmCompletionResult{}, err
+	}
+
 	task, found, err := i.repository.GetClaimTask(mergedCtx, params.Identity, params.TaskRef, params.Now)
 	if err != nil {
 		return ConfirmCompletionResult{}, err

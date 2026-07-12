@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -14,19 +13,21 @@ import (
 )
 
 type Repository struct {
-	db        *sqlwrap.Client
-	q         *calendarsqlc.Queries
-	callbacks *callbackutil.Store
-	executor  calendarsqlc.DBTX
-	timeout   time.Duration
-	cacheL1   time.Duration
-	cacheL2   time.Duration
+	db                       *sqlwrap.Client
+	q                        *calendarsqlc.Queries
+	callbacks                *callbackutil.Store
+	executor                 calendarsqlc.DBTX
+	timeout                  time.Duration
+	cacheL1                  time.Duration
+	cacheL2                  time.Duration
+	onCacheInvalidationError func(error)
 }
 
 type Options struct {
-	QueryTimeout time.Duration
-	CacheL1Delay time.Duration
-	CacheL2Delay time.Duration
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	OnCacheInvalidationError func(error)
 }
 
 const bootstrapQueryTimeout = 30 * time.Second
@@ -43,8 +44,14 @@ func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	executor := db.WithQueryTimeout(timeout)
 	q := calendarsqlc.New(executor)
 	return &Repository{
-		db: db, q: q, callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable),
-		executor: executor, timeout: timeout, cacheL1: options.CacheL1Delay, cacheL2: options.CacheL2Delay,
+		db:                       db,
+		q:                        q,
+		callbacks:                callbackutil.NewWithTable(db.DB(), callbackutil.CalendarTable),
+		executor:                 executor,
+		timeout:                  timeout,
+		cacheL1:                  options.CacheL1Delay,
+		cacheL2:                  options.CacheL2Delay,
+		onCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 }
 
@@ -73,8 +80,14 @@ func (r *Repository) Close() error {
 func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
 	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
 		txRepo := &Repository{
-			db: r.db, q: r.q.WithTx(tx), callbacks: r.callbacks.WithTx(tx),
-			executor: tx, timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
+			db:                       r.db,
+			q:                        r.q.WithTx(tx),
+			callbacks:                r.callbacks.WithTx(tx),
+			executor:                 tx,
+			timeout:                  r.timeout,
+			cacheL1:                  r.cacheL1,
+			cacheL2:                  r.cacheL2,
+			onCacheInvalidationError: r.onCacheInvalidationError,
 		}
 		return struct{}{}, fn(txRepo)
 	})
@@ -94,7 +107,12 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
-	for _, statement := range splitSQLStatements(raw) {
+	statements, err := sqlwrap.SplitStatements(raw)
+	if err != nil {
+		return fmt.Errorf("calendar %s SQL parse failed: %w", source, err)
+	}
+
+	for _, statement := range statements {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
@@ -110,17 +128,6 @@ func queryTimeout(value time.Duration) time.Duration {
 		return time.Second
 	}
 	return value
-}
-
-func splitSQLStatements(raw string) []string {
-	parts := strings.Split(raw, ";")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if statement := strings.TrimSpace(part); statement != "" {
-			result = append(result, statement)
-		}
-	}
-	return result
 }
 
 func isNoRows(err error) bool { return errors.Is(err, sql.ErrNoRows) }

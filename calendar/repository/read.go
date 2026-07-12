@@ -9,13 +9,13 @@ import (
 )
 
 func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale string) (Calendar, error) {
-	key := calendarCacheKey("user_get_calendar", workspaceID, ref, locale)
-	rememberCalendarCacheKey(workspaceID, key)
+	key := calendarCacheKey(calendarCacheUserCalendar, workspaceID, ref, locale)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: calendarCacheScope(calendarCacheUserCalendar, workspaceID),
 	}, func(ctx context.Context) (Calendar, error) {
 		id, calendarType := calendarReference(ref)
 		rows, err := r.q.GetCalendarBundle(ctx, calendarsqlc.GetCalendarBundleParams{
@@ -59,13 +59,13 @@ func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale s
 }
 
 func (r *Repository) ListActive(ctx context.Context, workspaceID, locale string, now time.Time) ([]Calendar, error) {
-	key := calendarCacheKey("user_list_active_catalog", workspaceID, locale)
-	rememberCalendarCacheKey(workspaceID, key)
+	key := calendarCacheKey(calendarCacheUserCatalog, workspaceID, locale)
 	catalog, err := sqlwrap.Query(ctx, r.db, sqlwrap.Params{
-		Key:          key,
-		Timeout:      r.timeout,
-		CacheL1Delay: r.cacheL1,
-		CacheL2Delay: r.cacheL2,
+		Key:               key,
+		Timeout:           r.timeout,
+		CacheL1Delay:      r.cacheL1,
+		CacheL2Delay:      r.cacheL2,
+		CacheVersionScope: calendarCacheScope(calendarCacheUserCatalog, workspaceID),
 	}, func(ctx context.Context) ([]Calendar, error) {
 		rows, err := r.q.ListActiveCalendars(ctx, calendarsqlc.ListActiveCalendarsParams{
 			Locale:      locale,

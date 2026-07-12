@@ -60,8 +60,6 @@ func (a *TelegramStars) CreatePayment(ctx context.Context, params CreatePaymentP
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:           order.ID,
 		ProviderCode:      ProviderCode,
-		KnownAssetCode:    utils.Ref(order.AssetCode),
-		KnownAmountMinor:  utils.Ref(order.PayableAmountMinor),
 		ProviderPaymentID: utils.Ref(payload),
 		ProviderInvoiceID: utils.Ref(payload),
 		IdempotencyKey:    utils.Ref(idempotencyKey),

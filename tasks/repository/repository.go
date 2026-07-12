@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
@@ -14,22 +13,24 @@ import (
 )
 
 type Repository struct {
-	db           *sqlwrap.Client
-	q            *tasksqlc.Queries
-	callbacks    *callbackutil.Store
-	executor     tasksqlc.DBTX
-	queryTimeout time.Duration
-	cacheL1Delay time.Duration
-	cacheL2Delay time.Duration
+	db                       *sqlwrap.Client
+	q                        *tasksqlc.Queries
+	callbacks                *callbackutil.Store
+	executor                 tasksqlc.DBTX
+	queryTimeout             time.Duration
+	cacheL1Delay             time.Duration
+	cacheL2Delay             time.Duration
+	onCacheInvalidationError func(error)
 }
 
 const DefaultQueryTimeout = time.Second
 const bootstrapQueryTimeout = 30 * time.Second
 
 type Options struct {
-	QueryTimeout time.Duration
-	CacheL1Delay time.Duration
-	CacheL2Delay time.Duration
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	OnCacheInvalidationError func(error)
 }
 
 func New(db *sqlwrap.Client) *Repository {
@@ -46,9 +47,14 @@ func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	}
 	executor := db.WithQueryTimeout(queryTimeout)
 	return &Repository{
-		db: db, q: tasksqlc.New(executor), callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable),
-		executor: executor, queryTimeout: queryTimeout,
-		cacheL1Delay: options.CacheL1Delay, cacheL2Delay: options.CacheL2Delay,
+		db:                       db,
+		q:                        tasksqlc.New(executor),
+		callbacks:                callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable),
+		executor:                 executor,
+		queryTimeout:             queryTimeout,
+		cacheL1Delay:             options.CacheL1Delay,
+		cacheL2Delay:             options.CacheL2Delay,
+		onCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 }
 
@@ -63,9 +69,14 @@ func NewPreparedWithOptions(_ context.Context, db *sqlwrap.Client, options Optio
 	}
 	executor := db.WithQueryTimeout(queryTimeout)
 	return &Repository{
-		db: db, q: tasksqlc.New(executor), callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable),
-		executor: executor, queryTimeout: queryTimeout,
-		cacheL1Delay: options.CacheL1Delay, cacheL2Delay: options.CacheL2Delay,
+		db:                       db,
+		q:                        tasksqlc.New(executor),
+		callbacks:                callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable),
+		executor:                 executor,
+		queryTimeout:             queryTimeout,
+		cacheL1Delay:             options.CacheL1Delay,
+		cacheL2Delay:             options.CacheL2Delay,
+		onCacheInvalidationError: options.OnCacheInvalidationError,
 	}, nil
 }
 
@@ -86,13 +97,41 @@ func (r *Repository) Close() error {
 func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
 	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.queryTimeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
 		txRepo := &Repository{
-			db: r.db, q: r.q.WithTx(tx), callbacks: r.callbacks.WithTx(tx),
-			executor: tx, queryTimeout: r.queryTimeout,
-			cacheL1Delay: r.cacheL1Delay, cacheL2Delay: r.cacheL2Delay,
+			db:                       r.db,
+			q:                        r.q.WithTx(tx),
+			callbacks:                r.callbacks.WithTx(tx),
+			executor:                 tx,
+			queryTimeout:             r.queryTimeout,
+			cacheL1Delay:             r.cacheL1Delay,
+			cacheL2Delay:             r.cacheL2Delay,
+			onCacheInvalidationError: r.onCacheInvalidationError,
 		}
 		return struct{}{}, fn(txRepo)
 	})
 	return err
+}
+
+func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		"tasks:"+workspaceID,
+	)
+	return err
+}
+
+func (r *Repository) withWorkspaceMutation(
+	ctx context.Context,
+	workspaceID string,
+	fn func(*Repository) error,
+) error {
+	return r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		return fn(txRepo)
+	})
 }
 
 func (r *Repository) Bootstrap(ctx context.Context) error {
@@ -171,7 +210,11 @@ func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
-	for _, statement := range splitSQLStatements(raw) {
+	statements, err := sqlwrap.SplitStatements(raw)
+	if err != nil {
+		return fmt.Errorf("tasks %s SQL parse failed: %w", source, err)
+	}
+	for _, statement := range statements {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
@@ -180,55 +223,6 @@ func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
 		}
 	}
 	return nil
-}
-
-func splitSQLStatements(raw string) []string {
-	result := make([]string, 0, 16)
-	start := 0
-	dollarQuote := ""
-	for index := 0; index < len(raw); index++ {
-		if dollarQuote != "" {
-			if strings.HasPrefix(raw[index:], dollarQuote) {
-				index += len(dollarQuote) - 1
-				dollarQuote = ""
-			}
-			continue
-		}
-		if raw[index] == '$' {
-			if tag, ok := readDollarQuoteTag(raw[index:]); ok {
-				dollarQuote = tag
-				index += len(tag) - 1
-				continue
-			}
-		}
-		if raw[index] == ';' {
-			if stmt := strings.TrimSpace(raw[start:index]); stmt != "" {
-				result = append(result, stmt)
-			}
-			start = index + 1
-		}
-	}
-	if stmt := strings.TrimSpace(raw[start:]); stmt != "" {
-		result = append(result, stmt)
-	}
-	return result
-}
-
-func readDollarQuoteTag(raw string) (string, bool) {
-	if len(raw) < 2 || raw[0] != '$' {
-		return "", false
-	}
-	for index := 1; index < len(raw); index++ {
-		switch c := raw[index]; {
-		case c == '$':
-			return raw[:index+1], true
-		case c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9':
-			continue
-		default:
-			return "", false
-		}
-	}
-	return "", false
 }
 
 func normalizePage(limit, offset int32) (int32, int32) {

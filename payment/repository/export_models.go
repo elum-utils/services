@@ -22,7 +22,6 @@ type ExportPackage struct {
 	CreatedAt  time.Time            `json:"created_at"`
 	Groups     []ExportProductGroup `json:"groups,omitempty"`
 	Products   []ExportProduct      `json:"products,omitempty"`
-	Items      []ExportItem         `json:"items,omitempty"`
 	TONWallets []ExportTONWallet    `json:"ton_wallets,omitempty"`
 }
 
@@ -67,16 +66,6 @@ type ExportProduct struct {
 	Localization         map[string]ExportText `json:"localization,omitempty"`
 	Items                []ExportProductItem   `json:"items,omitempty"`
 	Prices               []ExportPrice         `json:"prices,omitempty"`
-}
-
-type ExportItem struct {
-	ID             string                `json:"id"`
-	ItemType       *string               `json:"item_type,omitempty"`
-	TitleKey       string                `json:"-"`
-	DescriptionKey *string               `json:"-"`
-	Rarity         string                `json:"rarity"`
-	Position       int32                 `json:"position"`
-	Localization   map[string]ExportText `json:"localization,omitempty"`
 }
 
 type ExportProductItem struct {
@@ -124,7 +113,6 @@ type ImportPreview struct {
 type ImportCounts struct {
 	Groups        uint64 `json:"groups"`
 	Products      uint64 `json:"products"`
-	Items         uint64 `json:"items"`
 	ProductItems  uint64 `json:"product_items"`
 	Prices        uint64 `json:"prices"`
 	Localizations uint64 `json:"localizations"`

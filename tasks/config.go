@@ -30,19 +30,20 @@ type Codec interface {
 }
 
 type Options struct {
-	MaxConnections   int
-	QueryTimeout     time.Duration
-	CacheL1Delay     time.Duration
-	CacheL2Delay     time.Duration
-	Cache            Storage
-	CacheEnabled     bool
-	CacheSize        int
-	CacheTTLCheck    time.Duration
-	Codec            Codec
-	Mutex            Mutex
-	Integration      integration.Options
-	Runtime          taskruntime.Options
-	PartnerProviders map[string]user.PartnerProvider
+	MaxConnections           int
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	Cache                    Storage
+	CacheEnabled             bool
+	CacheSize                int
+	CacheTTLCheck            time.Duration
+	Codec                    Codec
+	Mutex                    Mutex
+	OnCacheInvalidationError func(error)
+	Integration              integration.Options
+	Runtime                  taskruntime.Options
+	PartnerProviders         map[string]user.PartnerProvider
 }
 
 type DatabaseParams struct {
@@ -56,18 +57,25 @@ type DatabaseParams struct {
 
 func toSQLWrapOptions(value Options) sqlwrap.Options {
 	result := sqlwrap.Options{
-		MaxConnections: value.MaxConnections, CacheEnabled: value.CacheEnabled,
-		CacheSize: value.CacheSize, CacheTTLCheck: value.CacheTTLCheck, QueryTimeout: value.QueryTimeout,
+		MaxConnections: value.MaxConnections,
+		CacheEnabled:   value.CacheEnabled,
+		CacheSize:      value.CacheSize,
+		CacheTTLCheck:  value.CacheTTLCheck,
+		QueryTimeout:   value.QueryTimeout,
 	}
+
 	if value.Cache != nil {
 		result.Cache = storageAdapter{value: value.Cache}
 	}
+
 	if value.Codec != nil {
 		result.Codec = codecAdapter{value: value.Codec}
 	}
+
 	if value.Mutex != nil {
 		result.Mutex = mutexAdapter{value: value.Mutex}
 	}
+
 	return result
 }
 

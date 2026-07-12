@@ -3,9 +3,11 @@ package admin
 import (
 	"context"
 	json "github.com/goccy/go-json"
+	"math"
 	"strings"
 	"time"
 
+	"github.com/elum-utils/services/internal/utils/target"
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
 )
@@ -37,6 +39,9 @@ func (a *Admin) UpdatePromo(ctx context.Context, params SavePromoParams) (int64,
 	if params.ID == 0 {
 		return 0, ErrPromoIDRequired
 	}
+	if params.ID > math.MaxInt64 {
+		return 0, ErrPromoNumberOutOfRange
+	}
 	if err := validatePromo(params); err != nil {
 		return 0, err
 	}
@@ -46,6 +51,13 @@ func (a *Admin) UpdatePromo(ctx context.Context, params SavePromoParams) (int64,
 func (a *Admin) GetPromo(ctx context.Context, workspaceID string, id uint64) (PromoModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+	if workspaceID == "" || id == 0 {
+		return PromoModel{}, ErrPromoScopeRequired
+	}
+	if id > math.MaxInt64 {
+		return PromoModel{}, ErrPromoNumberOutOfRange
+	}
+
 	promo, err := a.repository.GetPromo(mergedCtx, workspaceID, id)
 	if err != nil {
 		return PromoModel{}, err
@@ -79,6 +91,13 @@ func (a *Admin) ListPromos(ctx context.Context, workspaceID string, page Page) (
 func (a *Admin) DeletePromo(ctx context.Context, workspaceID string, id uint64) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
+	if workspaceID == "" || id == 0 {
+		return 0, ErrPromoScopeRequired
+	}
+	if id > math.MaxInt64 {
+		return 0, ErrPromoNumberOutOfRange
+	}
+
 	return a.repository.SoftDeletePromo(mergedCtx, workspaceID, id)
 }
 
@@ -89,7 +108,10 @@ func validatePromo(params SavePromoParams) error {
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
 		return ErrPromoPayloadInvalid
 	}
-	if len(params.Target) > 0 && !json.Valid(params.Target) {
+	if params.MaxActivations > math.MaxInt64 {
+		return ErrPromoNumberOutOfRange
+	}
+	if err := target.Validate(params.Target); err != nil {
 		return ErrPromoPayloadInvalid
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {

@@ -82,15 +82,20 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	if strategy != ImportConflictFail && strategy != ImportConflictSkip && strategy != ImportConflictUpdate {
 		return ImportResult{}, fmt.Errorf("unsupported import conflict strategy: %s", strategy)
 	}
-	preview, err := r.previewImport(ctx, workspaceID, req.Package)
-	if err != nil {
-		return ImportResult{}, err
-	}
-	if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
-		return ImportResult{}, fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
-	}
 	result := ImportResult{}
-	err = r.WithTx(ctx, func(txRepo *Repository) error {
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		preview, err := txRepo.previewImport(ctx, workspaceID, req.Package)
+		if err != nil {
+			return err
+		}
+		if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
+			return fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
+		}
+
 		return txRepo.importBulk(ctx, workspaceID, req.Package, strategy, preview, &result)
 	})
 	if err != nil {
@@ -98,6 +103,15 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	}
 	r.invalidateCPACache(workspaceID, exportOfferIDs(req.Package.Offers)...)
 	return result, nil
+}
+
+func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		workspaceID,
+	)
+	return err
 }
 
 func (r *Repository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {

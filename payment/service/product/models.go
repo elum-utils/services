@@ -113,9 +113,4 @@ type ProductItem struct {
 	Quantity     int64   `json:"quantity"`
 	Scale        uint16  `json:"scale"`
 	DurationUnit *string `json:"duration_unit,omitempty"`
-	Type         *string `json:"type,omitempty"`
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
-	Rarity       *string `json:"rarity,omitempty"`
-	Position     *uint64 `json:"position,omitempty"`
 }

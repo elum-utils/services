@@ -17,7 +17,6 @@ type ExportPackage struct {
 	Format    string           `json:"format"`
 	Service   string           `json:"service"`
 	CreatedAt time.Time        `json:"created_at"`
-	Items     []ExportItem     `json:"items,omitempty"`
 	Calendars []ExportCalendar `json:"calendars"`
 }
 
@@ -42,14 +41,6 @@ type ExportCalendar struct {
 type ExportText struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
-}
-
-type ExportItem struct {
-	ID           string                `json:"id"`
-	ItemType     *string               `json:"item_type,omitempty"`
-	Rarity       string                `json:"rarity,omitempty"`
-	Position     int32                 `json:"position,omitempty"`
-	Localization map[string]ExportText `json:"localization,omitempty"`
 }
 
 type ExportStep struct {
@@ -79,7 +70,6 @@ type ImportPreview struct {
 }
 
 type ImportCounts struct {
-	Items         uint64 `json:"items"`
 	Calendars     uint64 `json:"calendars"`
 	Localizations uint64 `json:"localizations"`
 	Steps         uint64 `json:"steps"`

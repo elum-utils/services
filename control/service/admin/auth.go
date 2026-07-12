@@ -14,12 +14,20 @@ func (a *Admin) CompleteAuth(ctx context.Context, params AuthIdentityParams) (Au
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	account, created, err := a.repository.AuthenticateIdentity(mergedCtx, repository.IdentityInput{
-		Provider: strings.TrimSpace(params.Provider), Subject: strings.TrimSpace(params.Subject), DisplayName: strings.TrimSpace(params.DisplayName), Payload: params.Payload,
+		Provider:    strings.TrimSpace(params.Provider),
+		Subject:     strings.TrimSpace(params.Subject),
+		DisplayName: strings.TrimSpace(params.DisplayName),
+		Payload:     params.Payload,
 	})
 	if err != nil {
 		return AuthResult{}, err
 	}
-	metadata := repository.SessionInput{IP: params.IP, UserAgent: params.UserAgent, BindToIP: params.BindToIP, ExpiresAt: params.ExpiresAt}
+	metadata := repository.SessionInput{
+		IP:        params.IP,
+		UserAgent: params.UserAgent,
+		BindToIP:  params.BindToIP,
+		ExpiresAt: params.ExpiresAt,
+	}
 	requiresTwoFactor, err := a.repository.RequiresTwoFactor(mergedCtx, account.ID)
 	if err != nil {
 		return AuthResult{}, err
@@ -29,19 +37,35 @@ func (a *Admin) CompleteAuth(ctx context.Context, params AuthIdentityParams) (Au
 		if err != nil {
 			return AuthResult{}, err
 		}
-		return AuthResult{Account: mapAccount(account), TwoFactorRequired: true, TwoFactorChallenge: challenge, Created: created}, nil
+		return AuthResult{
+			Account:            mapAccount(account),
+			TwoFactorRequired:  true,
+			TwoFactorChallenge: challenge,
+			Created:            created,
+		}, nil
 	}
 	session, token, err := a.repository.CreateSession(mergedCtx, account.ID, metadata)
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return AuthResult{Account: mapAccount(account), Session: mapSession(session), SessionToken: token, Created: created}, nil
+	return AuthResult{
+		Account:      mapAccount(account),
+		Session:      mapSession(session),
+		SessionToken: token,
+		Created:      created,
+	}, nil
 }
 
 func (a *Admin) CompleteTwoFactor(ctx context.Context, challenge, code, ip string) (AuthResult, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	session, token, err := a.repository.CompleteTwoFactorChallenge(mergedCtx, strings.TrimSpace(challenge), code, strings.TrimSpace(ip), time.Now())
+	session, token, err := a.repository.CompleteTwoFactorChallenge(
+		mergedCtx,
+		strings.TrimSpace(challenge),
+		code,
+		strings.TrimSpace(ip),
+		time.Now(),
+	)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -68,7 +92,14 @@ func (a *Admin) ListIdentities(ctx context.Context, accountID string) ([]Identit
 	}
 	result := make([]IdentityModel, 0, len(items))
 	for _, item := range items {
-		result = append(result, IdentityModel{AccountID: item.AccountID, Provider: item.Provider, Subject: item.ProviderSubject, Payload: item.Payload, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt})
+		result = append(result, IdentityModel{
+			AccountID: item.AccountID,
+			Provider:  item.Provider,
+			Subject:   item.ProviderSubject,
+			Payload:   item.Payload,
+			CreatedAt: item.CreatedAt,
+			UpdatedAt: item.UpdatedAt,
+		})
 	}
 	return result, nil
 }
@@ -77,7 +108,10 @@ func (a *Admin) BindIdentity(ctx context.Context, accountID string, params AuthI
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.BindIdentity(mergedCtx, strings.TrimSpace(accountID), repository.IdentityInput{
-		Provider: strings.TrimSpace(params.Provider), Subject: strings.TrimSpace(params.Subject), DisplayName: strings.TrimSpace(params.DisplayName), Payload: params.Payload,
+		Provider:    strings.TrimSpace(params.Provider),
+		Subject:     strings.TrimSpace(params.Subject),
+		DisplayName: strings.TrimSpace(params.DisplayName),
+		Payload:     params.Payload,
 	})
 }
 

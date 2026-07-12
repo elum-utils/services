@@ -73,8 +73,6 @@ func (a *Platega) CreatePayment(ctx context.Context, params CreatePaymentParams)
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:           order.ID,
 		ProviderCode:      ProviderCode,
-		KnownAssetCode:    utils.Ref(order.AssetCode),
-		KnownAmountMinor:  utils.Ref(order.PayableAmountMinor),
 		ProviderPaymentID: utils.Ref(transaction.TransactionID),
 		ProviderInvoiceID: utils.Ref(order.PublicID),
 		IdempotencyKey:    utils.Ref(idempotencyKey),

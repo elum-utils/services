@@ -4,12 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
+
+	importexport "github.com/elum-utils/services/internal/utils/importexport"
+	"github.com/elum-utils/services/internal/utils/target"
 )
 
 func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg ExportPackage) (ImportPreview, error) {
-	if err := validateExportPackage(pkg); err != nil {
+	if err := validateExportPackage(workspaceID, pkg); err != nil {
 		return ImportPreview{}, err
 	}
 	preview := ImportPreview{
@@ -34,7 +40,7 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 }
 
 func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportRequest) (ImportResult, error) {
-	if err := validateExportPackage(req.Package); err != nil {
+	if err := validateExportPackage(workspaceID, req.Package); err != nil {
 		return ImportResult{}, err
 	}
 	strategy := req.ConflictStrategy
@@ -44,15 +50,20 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	if strategy != ImportConflictFail && strategy != ImportConflictSkip && strategy != ImportConflictUpdate {
 		return ImportResult{}, fmt.Errorf("unsupported import conflict strategy: %s", strategy)
 	}
-	preview, err := r.PreviewImport(ctx, workspaceID, req.Package)
-	if err != nil {
-		return ImportResult{}, err
-	}
-	if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
-		return ImportResult{}, fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
-	}
 	result := ImportResult{}
-	err = r.WithTx(ctx, func(txRepo *Repository) error {
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		preview, err := txRepo.PreviewImport(ctx, workspaceID, req.Package)
+		if err != nil {
+			return err
+		}
+		if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
+			return fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
+		}
+
 		return txRepo.importBulk(ctx, workspaceID, req.Package, strategy, preview, &result)
 	})
 	if err != nil {
@@ -61,21 +72,87 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	return result, r.invalidatePromoCache(workspaceID)
 }
 
-func (r *Repository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
-	if err := r.importPromosBulk(ctx, workspaceID, pkg.Promos, strategy, preview, result); err != nil {
+func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		"promo:"+workspaceID,
+	)
+	return err
+}
+
+func (r *Repository) withWorkspaceMutation(
+	ctx context.Context,
+	workspaceID string,
+	fn func(*Repository) error,
+) error {
+	return r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		return fn(txRepo)
+	})
+}
+
+func (r *Repository) importBulk(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
+	if err := r.importPromosBulk(
+		ctx,
+		workspaceID,
+		pkg.Promos,
+		strategy,
+		preview,
+		result,
+	); err != nil {
 		return err
 	}
-	ids, err := r.importPromoIDs(ctx, workspaceID, pkg.Promos, strategy, preview)
+	ids, err := r.importPromoIDs(
+		ctx,
+		workspaceID,
+		pkg.Promos,
+		strategy,
+		preview,
+	)
 	if err != nil {
 		return err
 	}
-	if err := r.importLocalizationsBulk(ctx, workspaceID, pkg.Promos, ids, strategy, preview, result); err != nil {
+	if err := r.importLocalizationsBulk(
+		ctx,
+		workspaceID,
+		pkg.Promos,
+		ids,
+		strategy,
+		preview,
+		result,
+	); err != nil {
 		return err
 	}
-	return r.importRewardsBulk(ctx, workspaceID, pkg.Promos, ids, strategy, preview, result)
+	return r.importRewardsBulk(
+		ctx,
+		workspaceID,
+		pkg.Promos,
+		ids,
+		strategy,
+		preview,
+		result,
+	)
 }
 
-func (r *Repository) importPromosBulk(ctx context.Context, workspaceID string, promos []ExportPromo, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importPromosBulk(
+	ctx context.Context,
+	workspaceID string,
+	promos []ExportPromo,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0, len(promos))
 	for _, promo := range promos {
 		if previewHasConflict(preview, "promo", promo.Code) && strategy == ImportConflictSkip {
@@ -101,10 +178,17 @@ func (r *Repository) importPromosBulk(ctx context.Context, workspaceID string, p
 		"(workspace_id, code_normalized)",
 		"code = EXCLUDED.code, payload = EXCLUDED.payload, target = EXCLUDED.target, max_activations = EXCLUDED.max_activations, "+
 			"is_active = EXCLUDED.is_active, start_at = EXCLUDED.start_at, end_at = EXCLUDED.end_at, deleted_at = NULL, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importPromoIDs(ctx context.Context, workspaceID string, promos []ExportPromo, strategy string, preview ImportPreview) (map[string]uint64, error) {
+func (r *Repository) importPromoIDs(
+	ctx context.Context,
+	workspaceID string,
+	promos []ExportPromo,
+	strategy string,
+	preview ImportPreview,
+) (map[string]uint64, error) {
 	needed := make(map[string]struct{}, len(promos))
 	for _, promo := range promos {
 		if previewHasConflict(preview, "promo", promo.Code) && strategy == ImportConflictSkip {
@@ -112,30 +196,28 @@ func (r *Repository) importPromoIDs(ctx context.Context, workspaceID string, pro
 		}
 		needed[normalizeCode(promo.Code)] = struct{}{}
 	}
-	rows, err := r.executor.QueryContext(ctx, `
-SELECT id, code_normalized
-FROM promo_offer
-WHERE workspace_id = $1 AND deleted_at IS NULL
-`, workspaceID)
+	rows, err := r.q.ListImportPromoIDs(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	ids := make(map[string]uint64, len(needed))
-	for rows.Next() {
-		var id uint64
-		var key string
-		if err := rows.Scan(&id, &key); err != nil {
-			return nil, err
-		}
-		if _, ok := needed[key]; ok {
-			ids[key] = id
+	for _, row := range rows {
+		if _, ok := needed[row.CodeNormalized]; ok {
+			ids[row.CodeNormalized] = uint64(row.ID)
 		}
 	}
-	return ids, rows.Err()
+	return ids, nil
 }
 
-func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID string, promos []ExportPromo, ids map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importLocalizationsBulk(
+	ctx context.Context,
+	workspaceID string,
+	promos []ExportPromo,
+	ids map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, promo := range promos {
 		if previewHasConflict(preview, "promo", promo.Code) && strategy == ImportConflictSkip {
@@ -158,10 +240,19 @@ func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID st
 		rows,
 		"(workspace_id, promo_id, locale)",
 		"title = EXCLUDED.title, description = EXCLUDED.description, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, promos []ExportPromo, ids map[string]uint64, strategy string, preview ImportPreview, result *ImportResult) error {
+func (r *Repository) importRewardsBulk(
+	ctx context.Context,
+	workspaceID string,
+	promos []ExportPromo,
+	ids map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
 	rows := make([][]any, 0)
 	for _, promo := range promos {
 		if previewHasConflict(preview, "promo", promo.Code) && strategy == ImportConflictSkip {
@@ -186,19 +277,49 @@ func (r *Repository) importRewardsBulk(ctx context.Context, workspaceID string, 
 		rows,
 		"(workspace_id, promo_id, reward_key)",
 		"reward_type = EXCLUDED.reward_type, quantity = EXCLUDED.quantity, scale = EXCLUDED.scale, duration_unit = EXCLUDED.duration_unit, updated_at = now()",
+		strategy,
 	)
 }
 
-func (r *Repository) execImportBulk(ctx context.Context, table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) error {
+func (r *Repository) execImportBulk(
+	ctx context.Context,
+	table string,
+	columns []string,
+	rows [][]any,
+	conflictTarget string,
+	duplicateUpdate string,
+	strategy string,
+) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	query, args := compileImportBulkUpsert(table, columns, rows, conflictTarget, duplicateUpdate)
-	_, err := r.executor.ExecContext(ctx, query, args...)
-	return err
+	return importexport.ForEachBatch(
+		len(rows),
+		len(columns),
+		importexport.DefaultBatchLimits,
+		func(start, end int) error {
+			query, args := compileImportBulkUpsert(
+				table,
+				columns,
+				rows[start:end],
+				conflictTarget,
+				duplicateUpdate,
+				strategy,
+			)
+			_, err := r.executor.ExecContext(ctx, query, args...)
+			return err
+		},
+	)
 }
 
-func compileImportBulkUpsert(table string, columns []string, rows [][]any, conflictTarget string, duplicateUpdate string) (string, []any) {
+func compileImportBulkUpsert(
+	table string,
+	columns []string,
+	rows [][]any,
+	conflictTarget string,
+	duplicateUpdate string,
+	strategy string,
+) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("INSERT INTO ")
 	builder.WriteString(table)
@@ -221,7 +342,12 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, confl
 		builder.WriteByte(')')
 		args = append(args, row...)
 	}
-	if conflictTarget != "" && duplicateUpdate != "" {
+	switch strategy {
+	case ImportConflictSkip:
+		builder.WriteString(" ON CONFLICT ")
+		builder.WriteString(conflictTarget)
+		builder.WriteString(" DO NOTHING")
+	case ImportConflictUpdate:
 		builder.WriteString(" ON CONFLICT ")
 		builder.WriteString(conflictTarget)
 		builder.WriteString(" DO UPDATE SET ")
@@ -230,21 +356,105 @@ func compileImportBulkUpsert(table string, columns []string, rows [][]any, confl
 	return builder.String(), args
 }
 
-func validateExportPackage(pkg ExportPackage) error {
+func validateExportPackage(workspaceID string, pkg ExportPackage) error {
+	if strings.TrimSpace(workspaceID) == "" {
+		return fmt.Errorf("promo import workspace is required")
+	}
 	if pkg.Format != ExportFormat || pkg.Service != "promo" {
 		return fmt.Errorf("unsupported export package: %s/%s", pkg.Service, pkg.Format)
 	}
-	for _, item := range pkg.Items {
-		if item.ID == "" {
-			return fmt.Errorf("item id is required")
+
+	promoCodes := make(map[string]int, len(pkg.Promos))
+	for promoIndex, promo := range pkg.Promos {
+		prefix := fmt.Sprintf("promo import promos[%d]", promoIndex)
+		code := normalizeCode(promo.Code)
+		if code == "" {
+			return fmt.Errorf("%s.code: code is required", prefix)
+		}
+		if previousIndex, exists := promoCodes[code]; exists {
+			return fmt.Errorf("%s.code: duplicates promos[%d].code", prefix, previousIndex)
+		}
+		promoCodes[code] = promoIndex
+
+		if len(promo.Payload) == 0 || !json.Valid(promo.Payload) {
+			return fmt.Errorf("%s.payload: must be valid JSON", prefix)
+		}
+		if promo.MaxActivations > math.MaxInt64 {
+			return fmt.Errorf("%s.max_activations: numeric value is out of database range", prefix)
+		}
+		if err := target.Validate(promo.Target); err != nil {
+			return fmt.Errorf("%s.target: %w", prefix, err)
+		}
+		if promo.StartAt != nil && promo.EndAt != nil && !promo.StartAt.Before(*promo.EndAt) {
+			return fmt.Errorf("%s.start_at: must be before end_at", prefix)
+		}
+
+		for locale, text := range promo.Localization {
+			if strings.TrimSpace(locale) == "" {
+				return fmt.Errorf("%s.localization: locale is required", prefix)
+			}
+			if strings.TrimSpace(text.Title) == "" {
+				return fmt.Errorf("%s.localization.%s.title: title is required", prefix, locale)
+			}
+		}
+
+		rewardKeys := make(map[string]int, len(promo.Rewards))
+		for rewardIndex, reward := range promo.Rewards {
+			if strings.TrimSpace(reward.Key) == "" {
+				return fmt.Errorf("%s.rewards[%d].key: key is required", prefix, rewardIndex)
+			}
+			if previousIndex, exists := rewardKeys[reward.Key]; exists {
+				return fmt.Errorf(
+					"%s.rewards[%d].key: duplicates rewards[%d].key",
+					prefix,
+					rewardIndex,
+					previousIndex,
+				)
+			}
+			rewardKeys[reward.Key] = rewardIndex
+			if err := validateExportReward(reward); err != nil {
+				return fmt.Errorf("%s.rewards[%d]: %w", prefix, rewardIndex, err)
+			}
 		}
 	}
 	return nil
 }
 
+func validateExportReward(reward ExportReward) error {
+	if reward.Quantity <= 0 {
+		return fmt.Errorf("quantity must be positive")
+	}
+	if reward.Scale > math.MaxInt16 {
+		return fmt.Errorf("scale is out of database range")
+	}
+
+	switch defaultString(reward.Type, "quantity") {
+	case "quantity":
+		if reward.Unit != nil {
+			return fmt.Errorf("quantity reward must not have duration unit")
+		}
+	case "duration":
+		if reward.Unit == nil || !validPromoDurationUnit(*reward.Unit) {
+			return fmt.Errorf("duration reward requires a valid duration unit")
+		}
+	default:
+		return fmt.Errorf("type must be quantity or duration")
+	}
+
+	return nil
+}
+
+func validPromoDurationUnit(value string) bool {
+	switch value {
+	case "second", "minute", "hour", "day", "week", "month", "year":
+		return true
+	default:
+		return false
+	}
+}
+
 func countPackage(pkg ExportPackage) ImportCounts {
 	var counts ImportCounts
-	counts.Items = uint64(len(pkg.Items))
 	counts.Promos = uint64(len(pkg.Promos))
 	for _, promo := range pkg.Promos {
 		counts.Localizations += uint64(len(promo.Localization))
@@ -254,13 +464,13 @@ func countPackage(pkg ExportPackage) ImportCounts {
 }
 
 func (r *Repository) importExistingPromoCodes(ctx context.Context, workspaceID string) (map[string]bool, error) {
-	promos, err := r.ListPromos(ctx, workspaceID, 100000, 0)
+	rows, err := r.q.ListImportPromoCodes(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]bool, len(promos))
-	for _, promo := range promos {
-		result[normalizeCode(promo.Code)] = true
+	result := make(map[string]bool, len(rows))
+	for _, code := range rows {
+		result[code] = true
 	}
 	return result, nil
 }

@@ -49,6 +49,20 @@ FROM promo_reward
 WHERE workspace_id = $1
 ORDER BY promo_id, id;
 
+-- name: ListImportPromoCodes :many
+SELECT code_normalized
+FROM promo_offer
+WHERE workspace_id = $1
+  AND deleted_at IS NULL
+ORDER BY code_normalized;
+
+-- name: ListImportPromoIDs :many
+SELECT id, code_normalized
+FROM promo_offer
+WHERE workspace_id = $1
+  AND deleted_at IS NULL
+ORDER BY code_normalized;
+
 -- name: AdminSoftDeletePromo :execrows
 UPDATE promo_offer
 SET deleted_at = now(), is_active = FALSE, updated_at = now()
@@ -192,6 +206,7 @@ created_event AS (
 ),
 created_callback AS (
     INSERT INTO promo_clb_event (
+        workspace_id,
         source_service,
         event_type,
         event_key,
@@ -201,6 +216,7 @@ created_callback AS (
         next_attempt_at
     )
     SELECT
+        i.workspace_id,
         'promo',
         'promo.applied',
         'promo.applied:' || i.id::text,
@@ -264,7 +280,8 @@ SELECT
     COUNT(*),
     COUNT(*)
 FROM promo_redemption_event e
-WHERE e.occurred_at >= $1 AND e.occurred_at < $2
+WHERE e.workspace_id = sqlc.arg(workspace_id)
+  AND e.occurred_at >= $1 AND e.occurred_at < $2
 GROUP BY e.workspace_id, e.promo_id, e.occurred_at::date
 ON CONFLICT (workspace_id, promo_id, stats_date) DO UPDATE SET
     redemption_count = EXCLUDED.redemption_count,

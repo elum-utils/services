@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	sqlc "github.com/elum-utils/services/payment/sqlc"
@@ -198,14 +199,24 @@ func (r *PaymentRepository) ListPaymentDailyOverview(
 	return result, nil
 }
 
-func (r *PaymentRepository) RefreshPaymentDailyStats(ctx context.Context, from, until time.Time) error {
+func (r *PaymentRepository) RefreshPaymentDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+	if strings.TrimSpace(workspaceID) == "" {
+		return ErrWorkspaceRequired
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
+		return ErrInvalidDateRange
+	}
+
 	if err := r.q.RefreshPaymentDailyStats(ctx, sqlc.RefreshPaymentDailyStatsParams{
-		OccurredAt: from, OccurredAt_2: until,
+		WorkspaceID:  workspaceID,
+		OccurredAt:   from,
+		OccurredAt_2: until,
 	}); err != nil {
 		return err
 	}
 	return r.q.RefreshPaymentDailyOverview(ctx, sqlc.RefreshPaymentDailyOverviewParams{
-		OccurredAt: from, OccurredAt_2: until,
+		WorkspaceID: workspaceID,
+		OccurredAt:  from, OccurredAt_2: until,
 		OccurredAt_3: from, OccurredAt_4: until,
 		OccurredAt_5: from, OccurredAt_6: until,
 		OccurredAt_7: from, OccurredAt_8: until,

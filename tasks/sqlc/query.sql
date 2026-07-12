@@ -796,20 +796,21 @@ INSERT INTO task_stats_daily (
     unique_claimers
 )
 SELECT
-    workspace_id,
-    task_id,
-    occurred_at::date,
-    COUNT(*) FILTER (WHERE event_type = 'progress_created'),
-    COALESCE(SUM(amount) FILTER (WHERE event_type = 'progress_added'), 0)::bigint,
-    COUNT(*) FILTER (WHERE event_type = 'ready'),
-    COUNT(*) FILTER (WHERE event_type = 'claimed'),
-    COUNT(*) FILTER (WHERE event_type = 'claimed' AND claim_mode = 'manual'),
-    COUNT(*) FILTER (WHERE event_type = 'claimed' AND claim_mode = 'auto'),
-    COUNT(DISTINCT (app_id, platform_id, platform_user_id)),
-    COUNT(DISTINCT (app_id, platform_id, platform_user_id)) FILTER (WHERE event_type = 'claimed')
-FROM task_stats_event
-WHERE occurred_at >= $1 AND occurred_at < $2
-GROUP BY workspace_id, task_id, occurred_at::date
+    e.workspace_id,
+    e.task_id,
+    e.occurred_at::date,
+    COUNT(*) FILTER (WHERE e.event_type = 'progress_created'),
+    COALESCE(SUM(e.amount) FILTER (WHERE e.event_type = 'progress_added'), 0)::bigint,
+    COUNT(*) FILTER (WHERE e.event_type = 'ready'),
+    COUNT(*) FILTER (WHERE e.event_type = 'claimed'),
+    COUNT(*) FILTER (WHERE e.event_type = 'claimed' AND e.claim_mode = 'manual'),
+    COUNT(*) FILTER (WHERE e.event_type = 'claimed' AND e.claim_mode = 'auto'),
+    COUNT(DISTINCT (e.app_id, e.platform_id, e.platform_user_id)),
+    COUNT(DISTINCT (e.app_id, e.platform_id, e.platform_user_id)) FILTER (WHERE e.event_type = 'claimed')
+FROM task_stats_event e
+WHERE e.workspace_id = sqlc.arg(refresh_workspace_id)
+  AND e.occurred_at >= $1 AND e.occurred_at < $2
+GROUP BY e.workspace_id, e.task_id, e.occurred_at::date
 ON CONFLICT (workspace_id, task_id, stats_date) DO UPDATE SET
     progress_created = EXCLUDED.progress_created,
     progress_amount = EXCLUDED.progress_amount,
@@ -864,7 +865,8 @@ FROM (
         COUNT(DISTINCT (app_id, platform_id, platform_user_id)) AS unique_participants,
         COUNT(DISTINCT (app_id, platform_id, platform_user_id)) FILTER (WHERE event_type = 'claimed') AS unique_claimers
     FROM task_stats_event refresh_events
-    WHERE refresh_events.occurred_at >= $1 AND refresh_events.occurred_at < $2
+    WHERE refresh_events.workspace_id = sqlc.arg(refresh_workspace_id)
+      AND refresh_events.occurred_at >= $1 AND refresh_events.occurred_at < $2
     GROUP BY refresh_events.workspace_id, refresh_events.occurred_at::date
 ) event_rows
 JOIN (
@@ -885,6 +887,7 @@ JOIN (
             AND (end_at IS NULL OR end_at > now())
         ) AS visible_tasks
     FROM task_definition
+    WHERE workspace_id = sqlc.arg(refresh_workspace_id)
     GROUP BY workspace_id
 ) definitions ON definitions.workspace_id = event_rows.workspace_id
 ON CONFLICT (workspace_id, stats_date) DO UPDATE SET

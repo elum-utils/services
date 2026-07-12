@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	services "github.com/elum-utils/services"
+	"github.com/elum-utils/services/cpa/model"
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -81,7 +82,7 @@ func (r *Repository) ListUserAssignments(ctx context.Context, scope UserScope) (
 	return result, nil
 }
 
-func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, status string, limit, offset int32) ([]Assignment, error) {
+func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID string, status model.AssignmentStatus, limit, offset int32) ([]Assignment, error) {
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, st
 	rows, err := r.q.AdminListAssignments(ctx, cpasqlc.AdminListAssignmentsParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
-		Column3:     status,
+		Column3:     string(status),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -104,7 +105,7 @@ func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID, st
 	return result, nil
 }
 
-func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status string, limit, offset int32) ([]Code, error) {
+func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID string, status model.CodeStatus, limit, offset int32) ([]Code, error) {
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 	rows, err := r.q.AdminListCodes(ctx, cpasqlc.AdminListCodesParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
-		Column3:     status,
+		Column3:     string(status),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -128,7 +129,7 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 			CPAID:       row.CpaID,
 			Code:        row.Code,
 			Source:      string(row.Source),
-			Status:      string(row.Status),
+			Status:      model.CodeStatus(row.Status),
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
 			DeletedAt:   sqlwrap.NullTimePtr(row.DeletedAt),
@@ -137,7 +138,7 @@ func (r *Repository) ListCodes(ctx context.Context, workspaceID, cpaID, status s
 	return result, nil
 }
 
-func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaID, eventType string, limit, offset int32) ([]AssignmentEvent, error) {
+func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaID string, eventType model.AssignmentEventType, limit, offset int32) ([]AssignmentEvent, error) {
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return nil, err
 	}
@@ -146,7 +147,7 @@ func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaI
 	rows, err := r.q.AdminListAssignmentEvents(ctx, cpasqlc.AdminListAssignmentEventsParams{
 		WorkspaceID: workspaceID,
 		CpaID:       cpaID,
-		Column3:     eventType,
+		Column3:     string(eventType),
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -160,7 +161,7 @@ func (r *Repository) ListAssignmentEvents(ctx context.Context, workspaceID, cpaI
 			WorkspaceID:  row.WorkspaceID,
 			CPAID:        row.CpaID,
 			AssignmentID: uint64(row.AssignmentID),
-			EventType:    string(row.EventType),
+			EventType:    model.AssignmentEventType(row.EventType),
 			OccurredAt:   row.OccurredAt,
 		})
 	}
@@ -242,7 +243,7 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 		if err != nil {
 			return err
 		}
-		return txRepo.recordEvent(ctx, result.Assignment, result.Rewards, StatusIssued)
+		return txRepo.recordEvent(ctx, result.Assignment, result.Rewards, model.AssignmentEventTypeIssued)
 	})
 	return result, err
 }
@@ -277,7 +278,7 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 		if err != nil {
 			return err
 		}
-		if result.Assignment.Status == StatusCompleted {
+		if result.Assignment.Status == model.AssignmentStatusCompleted {
 			result.AlreadyDone = true
 			return nil
 		}
@@ -297,9 +298,9 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 			}
 		}
 		now := time.Now()
-		result.Assignment.Status = StatusCompleted
+		result.Assignment.Status = model.AssignmentStatusCompleted
 		result.Assignment.CompletedAt = &now
-		return txRepo.recordEvent(ctx, result.Assignment, result.Rewards, StatusCompleted)
+		return txRepo.recordEvent(ctx, result.Assignment, result.Rewards, model.AssignmentEventTypeCompleted)
 	})
 	return result, err
 }
@@ -432,7 +433,7 @@ func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (
 	return "", nil, errors.New("cpa: generated code collision limit reached")
 }
 
-func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rewards []Reward, eventType string) error {
+func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rewards []Reward, eventType model.AssignmentEventType) error {
 	_, err := r.q.CreateAssignmentEvent(ctx, cpasqlc.CreateAssignmentEventParams{
 		WorkspaceID:  assignment.WorkspaceID,
 		CpaID:        assignment.CPAID,
@@ -469,8 +470,9 @@ func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rew
 	}
 	eventKey := fmt.Sprintf("cpa.%s:%d", eventType, assignment.ID)
 	_, err = r.callbacks.CreateEvent(ctx, callbackutil.CreateParams{
+		WorkspaceID:        assignment.WorkspaceID,
 		SourceService:      "cpa",
-		EventType:          "cpa." + eventType,
+		EventType:          "cpa." + string(eventType),
 		EventKey:           eventKey,
 		IdempotencyKey:     eventKey,
 		Payload:            raw,
@@ -480,16 +482,16 @@ func (r *Repository) recordEvent(ctx context.Context, assignment Assignment, rew
 }
 
 type callbackPayload struct {
-	AssignmentID   uint64           `json:"assignment_id"`
-	WorkspaceID    string           `json:"workspace_id"`
-	CPAID          string           `json:"cpa_id"`
-	AppID          int64            `json:"app_id"`
-	PlatformID     int64            `json:"platform_id"`
-	PlatformUserID string           `json:"platform_user_id"`
-	Code           string           `json:"code"`
-	CodeMode       string           `json:"code_mode"`
-	Status         string           `json:"status"`
-	Rewards        []callbackReward `json:"rewards"`
+	AssignmentID   uint64                    `json:"assignment_id"`
+	WorkspaceID    string                    `json:"workspace_id"`
+	CPAID          string                    `json:"cpa_id"`
+	AppID          int64                     `json:"app_id"`
+	PlatformID     int64                     `json:"platform_id"`
+	PlatformUserID string                    `json:"platform_user_id"`
+	Code           string                    `json:"code"`
+	CodeMode       string                    `json:"code_mode"`
+	Status         model.AssignmentEventType `json:"status"`
+	Rewards        []callbackReward          `json:"rewards"`
 }
 
 type callbackReward struct {
@@ -530,7 +532,7 @@ func mapAssignment(row cpasqlc.CpaAssignment) Assignment {
 		CodeID:         codeID,
 		Code:           row.Code,
 		CodeMode:       string(row.CodeMode),
-		Status:         string(row.Status),
+		Status:         model.AssignmentStatus(row.Status),
 		IssuedAt:       row.IssuedAt,
 		CompletedAt:    sqlwrap.NullTimePtr(row.CompletedAt),
 	}

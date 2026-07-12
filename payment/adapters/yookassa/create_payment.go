@@ -78,8 +78,6 @@ func (a *YooKassa) CreatePayment(ctx context.Context, params CreatePaymentParams
 	attempt, err := a.repository.CreateAttempt(ctx, repository.AttemptCreateParams{
 		OrderID:           order.ID,
 		ProviderCode:      ProviderCode,
-		KnownAssetCode:    utils.Ref(order.AssetCode),
-		KnownAmountMinor:  utils.Ref(order.PayableAmountMinor),
 		ProviderPaymentID: utils.Ref(payment.ID),
 		IdempotencyKey:    utils.Ref(idempotencyKey),
 		ConfirmationURL:   nilIfEmpty(payment.Confirmation.ConfirmationURL),

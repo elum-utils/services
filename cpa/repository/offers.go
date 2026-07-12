@@ -14,6 +14,7 @@ import (
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
 	serviceerrors "github.com/elum-utils/services/errors"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/internal/utils/target"
 )
 
 type UpsertOfferParams struct {
@@ -66,8 +67,8 @@ func ValidateOffer(params UpsertOfferParams) error {
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
 		return invalidOfferField("payload", "payload must be valid JSON")
 	}
-	if len(params.Target) > 0 && !json.Valid(params.Target) {
-		return invalidOfferField("target", "target must be valid JSON")
+	if err := target.Validate(params.Target); err != nil {
+		return invalidOfferField("target", err.Error())
 	}
 	if params.StartAt != nil && params.EndAt != nil && !params.StartAt.Before(*params.EndAt) {
 		return invalidOfferField("start_at", "start_at must be before end_at")
@@ -208,34 +209,40 @@ func (r *Repository) UpsertOffer(ctx context.Context, params UpsertOfferParams) 
 	if len(target) == 0 {
 		target = []byte("null")
 	}
-	if err := r.q.AdminUpsertOffer(ctx, cpasqlc.AdminUpsertOfferParams{
-		WorkspaceID: params.WorkspaceID,
-		ID:          params.ID,
-		Payload:     params.Payload,
-		Target:      rawMessageParam(target),
-		CodeMode:    cpasqlc.CpaCodeMode(params.CodeMode),
-		CodeSource: sqlwrap.NullFromPtr(params.CodeSource, func(v string) cpasqlc.NullCpaCodeSource {
-			return cpasqlc.NullCpaCodeSource{
-				CpaCodeSource: cpasqlc.CpaCodeSource(v),
-				Valid:         true,
-			}
-		}),
-		SharedCode: sqlwrap.NullFromPtr(params.SharedCode, func(v string) sql.NullString {
-			return sql.NullString{String: v, Valid: true}
-		}),
-		GeneratedLength: sqlwrap.NullFromPtr(params.GeneratedLength, func(v int16) sql.NullInt16 {
-			return sql.NullInt16{Int16: v, Valid: true}
-		}),
-		GeneratedAlphabet: sqlwrap.NullFromPtr(params.GeneratedAlphabet, func(v string) sql.NullString {
-			return sql.NullString{String: v, Valid: true}
-		}),
-		IsActive: params.IsActive,
-		StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
-			return sql.NullTime{Time: v, Valid: true}
-		}),
-		EndAt: sqlwrap.NullFromPtr(params.EndAt, func(v time.Time) sql.NullTime {
-			return sql.NullTime{Time: v, Valid: true}
-		}),
+	if err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, params.WorkspaceID); err != nil {
+			return err
+		}
+
+		return txRepo.q.AdminUpsertOffer(ctx, cpasqlc.AdminUpsertOfferParams{
+			WorkspaceID: params.WorkspaceID,
+			ID:          params.ID,
+			Payload:     params.Payload,
+			Target:      rawMessageParam(target),
+			CodeMode:    cpasqlc.CpaCodeMode(params.CodeMode),
+			CodeSource: sqlwrap.NullFromPtr(params.CodeSource, func(v string) cpasqlc.NullCpaCodeSource {
+				return cpasqlc.NullCpaCodeSource{
+					CpaCodeSource: cpasqlc.CpaCodeSource(v),
+					Valid:         true,
+				}
+			}),
+			SharedCode: sqlwrap.NullFromPtr(params.SharedCode, func(v string) sql.NullString {
+				return sql.NullString{String: v, Valid: true}
+			}),
+			GeneratedLength: sqlwrap.NullFromPtr(params.GeneratedLength, func(v int16) sql.NullInt16 {
+				return sql.NullInt16{Int16: v, Valid: true}
+			}),
+			GeneratedAlphabet: sqlwrap.NullFromPtr(params.GeneratedAlphabet, func(v string) sql.NullString {
+				return sql.NullString{String: v, Valid: true}
+			}),
+			IsActive: params.IsActive,
+			StartAt: sqlwrap.NullFromPtr(params.StartAt, func(v time.Time) sql.NullTime {
+				return sql.NullTime{Time: v, Valid: true}
+			}),
+			EndAt: sqlwrap.NullFromPtr(params.EndAt, func(v time.Time) sql.NullTime {
+				return sql.NullTime{Time: v, Valid: true}
+			}),
+		})
 	}); err != nil {
 		return err
 	}
@@ -358,6 +365,18 @@ func (r *Repository) ListActiveForUser(ctx context.Context, scope UserScope, loc
 	if len(catalog) == 0 {
 		return nil, nil
 	}
+
+	now := time.Now().UTC()
+	activeCatalog := make([]OfferBundle, 0, len(catalog))
+	for _, bundle := range catalog {
+		if isOfferActiveAt(bundle.Offer, now) {
+			activeCatalog = append(activeCatalog, bundle)
+		}
+	}
+	if len(activeCatalog) == 0 {
+		return nil, nil
+	}
+
 	assignments, err := r.ListUserAssignments(ctx, scope)
 	if err != nil {
 		return nil, err
@@ -366,8 +385,8 @@ func (r *Repository) ListActiveForUser(ctx context.Context, scope UserScope, loc
 	for _, assignment := range assignments {
 		assignmentByCPAID[assignment.CPAID] = assignment
 	}
-	result := make([]OfferBundle, len(catalog))
-	copy(result, catalog)
+	result := make([]OfferBundle, len(activeCatalog))
+	copy(result, activeCatalog)
 	for index := range result {
 		if assignment, ok := assignmentByCPAID[result[index].Offer.ID]; ok {
 			value := assignment
@@ -375,6 +394,19 @@ func (r *Repository) ListActiveForUser(ctx context.Context, scope UserScope, loc
 		}
 	}
 	return result, nil
+}
+
+func isOfferActiveAt(offer Offer, now time.Time) bool {
+	if !offer.IsActive {
+		return false
+	}
+	if offer.StartAt != nil && now.Before(*offer.StartAt) {
+		return false
+	}
+	if offer.EndAt != nil && !now.Before(*offer.EndAt) {
+		return false
+	}
+	return true
 }
 
 func (r *Repository) listActiveOfferCatalog(ctx context.Context, workspaceID, locale string) ([]OfferBundle, error) {
@@ -401,9 +433,18 @@ func (r *Repository) DeleteOffer(ctx context.Context, workspaceID, cpaID string)
 	if err := requireScope(workspaceID, cpaID); err != nil {
 		return 0, err
 	}
-	rows, err := r.q.AdminDeleteOffer(ctx, cpasqlc.AdminDeleteOfferParams{
-		WorkspaceID: workspaceID,
-		ID:          cpaID,
+	var rows int64
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		var err error
+		rows, err = txRepo.q.AdminDeleteOffer(ctx, cpasqlc.AdminDeleteOfferParams{
+			WorkspaceID: workspaceID,
+			ID:          cpaID,
+		})
+		return err
 	})
 	if err != nil || rows == 0 {
 		return rows, err

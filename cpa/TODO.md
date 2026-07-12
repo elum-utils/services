@@ -4,6 +4,12 @@
 
 ## P1
 
+- [x] Сделать `fail_on_conflict` и `skip_existing` атомарными относительно
+  конкурентных admin write. Import берёт transaction-level workspace lock до
+  preview и bulk insert; test подтверждает, что конкурентный оффер не
+  перезаписывается.
+  [import.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/import.go:74)
+
 - [x] Валидировать весь вложенный import-пакет до транзакции. Localization и
   reward используют те же repository rules, что admin upsert; проверяются
   дубли `offer.id` и `reward.key`. Ошибка возвращает путь вида
@@ -37,9 +43,25 @@
 
 ## P2
 
+- [x] Убрать зависимость доступности оффера от TTL каталога. Каталог кэширует
+  конфигурацию, но `start_at`/`end_at` фильтруются на каждом user request.
+  [offers.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/offers.go:350)
+
+- [x] Строго валидировать target rules до сохранения и import. Некорректные
+  формы, неизвестные поля и пустые элементы списков отклоняются.
+  [target.go](/Volumes/CLOUD/GitHub/elum-utils/services/internal/utils/target/target.go:66)
+
+- [x] Читать CPA export в `REPEATABLE READ READ ONLY` snapshot, чтобы offer,
+  localization и rewards не расходились при параллельном admin update.
+  [export.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/export.go:16)
+
+- [x] Проверять generation всех SQLC-конфигураций в CI: обход `sqlc.yaml`
+  плюс чистый diff.
+  [.github/workflows/ci.yml](/Volumes/CLOUD/GitHub/elum-utils/services/.github/workflows/ci.yml:1)
+
 - [x] Разделить параметры admin audit. `ListAssignmentEvents` принимает
-  `AssignmentEventListParams{WorkspaceID, CPAID, EventType, Page}`; assignments
-  и codes продолжают использовать `AuditListParams.Status`. Добавлен тест
+  `AssignmentEventListParams{WorkspaceID, CPAID, EventType, Page}`;
+  assignments и codes используют отдельные typed params. Добавлен тест
   фильтрации completed event.
   [audit.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/service/admin/audit.go:111)
 

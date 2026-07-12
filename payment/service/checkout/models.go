@@ -53,8 +53,6 @@ type Order struct {
 type CreateAttemptParams struct {
 	OrderID                uint64
 	ProviderCode           string
-	AssetCode              *string
-	AmountMinor            *uint64
 	ProviderPaymentID      *string
 	ProviderInvoiceID      *string
 	ProviderChargeID       *string

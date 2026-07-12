@@ -11,6 +11,7 @@ import (
 	"time"
 
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
+	goroutinemanager "github.com/elum-utils/services/internal/utils/goroutine"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/elum-utils/services/payment/service/admin"
 	"github.com/elum-utils/services/payment/service/asset"
 	"github.com/elum-utils/services/payment/service/checkout"
+	"github.com/elum-utils/services/payment/service/operational"
 	"github.com/elum-utils/services/payment/service/product"
 	"github.com/elum-utils/services/payment/service/refund"
 	"github.com/elum-utils/services/payment/service/subscription"
@@ -31,8 +33,9 @@ import (
 )
 
 type Payment struct {
-	Admin *admin.Admin
-	User  *user.User
+	Admin       *admin.Admin
+	Operational *operational.Operational
+	User        *user.User
 
 	Adapters *Adapters
 
@@ -46,12 +49,11 @@ type Payment struct {
 	ownsClient        bool
 	rootCtx           context.Context
 	rootCancel        context.CancelFunc
-	background        sync.WaitGroup
+	goroutines        *goroutinemanager.Manager
 	pricing           *repository.PaymentRepository
 	pricingHTTPClient *http.Client
 	pricingInterval   time.Duration
 	pricingBaseURL    string
-	pricingDone       <-chan struct{}
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -107,13 +109,11 @@ func (a *Payment) Run(ctx context.Context) error {
 	defer a.Close()
 
 	errCh := make(chan error, len(registrations))
-	a.background.Add(len(registrations))
 	for _, registration := range registrations {
 		registration := registration
-		go func() {
-			defer a.background.Done()
+		a.goroutines.Go("payment.callback", func() {
 			errCh <- a.runCallback(registration.ctx, registration.handler, registration.options...)
-		}()
+		})
 	}
 
 	select {
@@ -144,9 +144,10 @@ func open(ctx context.Context, params DatabaseParams) (*Payment, error) {
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "payment sql client initialization failed", err)
 	}
 	bootstrap := repository.NewPaymentRepositoryWithOptions(client, repository.Options{
-		QueryTimeout: params.Options.QueryTimeout,
-		CacheL1Delay: params.Options.CacheL1Delay,
-		CacheL2Delay: params.Options.CacheL2Delay,
+		QueryTimeout:             params.Options.QueryTimeout,
+		CacheL1Delay:             params.Options.CacheL1Delay,
+		CacheL2Delay:             params.Options.CacheL2Delay,
+		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
 	})
 	if err := bootstrap.Bootstrap(ctx); err != nil {
 		_ = bootstrap.Close()
@@ -185,6 +186,7 @@ func (a *Payment) adopt(running *Payment) {
 	a.lifecycleMu.Lock()
 	defer a.lifecycleMu.Unlock()
 	a.Admin = running.Admin
+	a.Operational = running.Operational
 	a.User = running.User
 	a.asset = running.asset
 	a.product = running.product
@@ -201,15 +203,16 @@ func (a *Payment) adopt(running *Payment) {
 	a.pricingHTTPClient = running.pricingHTTPClient
 	a.pricingInterval = running.pricingInterval
 	a.pricingBaseURL = running.pricingBaseURL
-	a.pricingDone = running.pricingDone
+	a.goroutines = running.goroutines
 }
 
 func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Payment {
 	rootCtx, rootCancel := context.WithCancel(normalizeLifecycleContext(ctx))
 	repositoryOptions := repository.Options{
-		QueryTimeout: options.QueryTimeout,
-		CacheL1Delay: options.CacheL1Delay,
-		CacheL2Delay: options.CacheL2Delay,
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 	telegramStarsAPI := telegramstars.NewWithOptions(rootCtx, db, repositoryOptions)
 	tonAPI := ton.NewWithOptions(rootCtx, db, repositoryOptions)
@@ -222,7 +225,8 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 	subscriptionAPI := subscription.NewWithOptions(rootCtx, db, repositoryOptions)
 	refundAPI := refund.NewWithOptions(rootCtx, db, refundProviders(telegramStarsAPI, tonAPI, plategaAPI, yooKassaAPI), repositoryOptions)
 	payments := &Payment{
-		Admin:        admin.NewWithServices(rootCtx, db, repositoryOptions, assetAPI, productAPI, checkoutAPI, refundAPI),
+		Admin:        admin.NewWithServices(rootCtx, db, repositoryOptions, productAPI, refundAPI),
+		Operational:  operational.New(rootCtx, db, repositoryOptions, checkoutAPI),
 		User:         user.New(assetAPI, productAPI, checkoutAPI, subscriptionAPI),
 		asset:        assetAPI,
 		product:      productAPI,
@@ -245,8 +249,11 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 		pricingHTTPClient: options.PriceUpdateHTTPClient,
 		pricingInterval:   options.PriceUpdateInterval,
 		pricingBaseURL:    options.PriceUpdateBaseURL,
+		goroutines:        goroutinemanager.New(),
 	}
-	payments.startPriceUpdater()
+	if !options.DisablePriceUpdater {
+		payments.startPriceUpdater()
+	}
 	tonAPI.StartManagedSubscribers(rootCtx, options.TONWalletSyncInterval)
 	return payments
 }
@@ -276,9 +283,8 @@ func (a *Payment) Close() error {
 			err = errors.Join(err, a.Adapters.YooKassa.Close())
 		}
 	}
-	a.background.Wait()
-	if a.pricingDone != nil {
-		<-a.pricingDone
+	if a.goroutines != nil {
+		a.goroutines.Close()
 	}
 	if a.pricing != nil {
 		err = errors.Join(err, a.pricing.Close())
@@ -288,6 +294,9 @@ func (a *Payment) Close() error {
 	}
 	if a.Admin != nil {
 		err = errors.Join(err, a.Admin.Close())
+	}
+	if a.Operational != nil {
+		err = errors.Join(err, a.Operational.Close())
 	}
 	if a.asset != nil {
 		err = errors.Join(err, a.asset.Close())
@@ -318,7 +327,7 @@ func (a *Payment) IsReady() bool {
 	a.lifecycleMu.Lock()
 	defer a.lifecycleMu.Unlock()
 	return a.rootCtx != nil && a.rootCtx.Err() == nil &&
-		a.Admin != nil && a.User != nil && a.Adapters != nil
+		a.Admin != nil && a.Operational != nil && a.User != nil && a.Adapters != nil
 }
 
 func (a *Payment) bindContext(ctx context.Context) (context.Context, context.CancelFunc) {

@@ -10,9 +10,9 @@
 
 | Направление | Оценка | Краткий вывод |
 | --- | ---: | --- |
-| Качество кода | 8/10 | Ручной код выровнен по блокам и импортам; неиспользуемые SQLC API удалены. Слои и типизированный SQL читаются последовательно. |
-| Безопасность и надёжность | 8/10 | SQL параметризован, коды генерируются через `crypto/rand`, выдача и completion используют транзакции. Import валидирует вложенные данные до transaction и возвращает структурированный путь ошибки. |
-| Проектирование | 8/10 | Admin/user/repository, FK и versioned cache образуют хорошую основу. Audit API разделяет status assignment/code и event type. |
+| Качество кода | 9/10 | Ручной код выровнен по блокам и импортам; статусы публичных моделей типизированы, а SQLC-код проверяется в CI. |
+| Безопасность и надёжность | 9/10 | SQL параметризован, import защищён от конкурентных конфликтов, target конфигурация валидируется строго, выдача и completion используют транзакции. |
+| Проектирование | 9/10 | Admin/user/repository, FK, versioned cache и snapshot export образуют последовательную основу. Audit API разделяет assignment/code status и event type. |
 
 ## Что сделано хорошо
 
@@ -23,8 +23,66 @@
 - У схемы есть FK, `CHECK` и уникальные ограничения для конфигурации оффера,
   наград и кодов.
 - Генерируемые промокоды используют криптографический источник случайности.
-- Unit-тесты `internal/utils/sql` и `internal/utils/importexport`, а также
-  `go vet` и компиляция CPA проходят в текущем рабочем окружении.
+- CI проверяет форматирование, `go vet`, компиляцию, весь test suite и
+  актуальность сгенерированного SQLC-кода.
+
+### Исправлено 2026-07-11: import conflict strategy была уязвима к конкурентной записи
+
+`Import` получает transaction-scoped advisory lock по `workspace_id` внутри
+той же transaction, где строит preview и выполняет bulk write. `UpsertOffer`
+и `DeleteOffer` используют тот же ключ, поэтому конфликт не может появиться
+между проверкой и записью, но разные workspace не блокируют друг друга.
+`fail_on_conflict` возвращает ошибку, а `skip_existing` сохраняет свою
+семантику. Интеграционный тест удерживает competing lock, создаёт оффер в
+конкурентной transaction и подтверждает, что import не перезаписывает его.
+
+Ссылки: [import.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/import.go:74), [cpa_test.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/cpa_test.go:1032).
+
+### Исправлено 2026-07-11: time window не должен устаревать вместе с каталогом
+
+Кэшированный SQL-каталог содержит все `is_active` офферы и их конфигурацию.
+`ListActiveForUser` на каждом запросе вычисляет `start_at` и `end_at` по
+текущему UTC-времени. Поэтому оффер исчезает сразу после срока действия,
+даже когда каталог взят из L1/L2 cache. Отдельный тест прогревает cache,
+ждёт окончания оффера и подтверждает его отсутствие.
+
+Ссылки: [offers.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/offers.go:350), [query.sql](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/sqlc/query.sql:87), [cpa_test.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/cpa_test.go:334).
+
+### Исправлено 2026-07-11: target принимает только корректные правила
+
+`target.Validate` требует объект с разрешёнными ключами; `is_premium` должен
+быть bool, а списковые правила — непустыми строками/числами либо массивами
+таких значений. `ValidateOffer` вызывает эту проверку и для admin upsert, и
+для import preflight. Некорректный JSON больше не может превратиться в пустое
+правило и открыть оффер всем пользователям.
+
+Ссылки: [target.go](/Volumes/CLOUD/GitHub/elum-utils/services/internal/utils/target/target.go:66), [offers.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/offers.go:59), [target_test.go](/Volumes/CLOUD/GitHub/elum-utils/services/internal/utils/target/target_test.go:73).
+
+### Исправлено 2026-07-11: export собирает консистентный снимок
+
+`Export` читает offer, localization и rewards в `REPEATABLE READ READ ONLY`
+transaction. Параллельная admin-запись теперь не может смешать разные версии
+одного оффера в экспортируемом пакете.
+
+Ссылки: [export.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/repository/export.go:16).
+
+### Исправлено 2026-07-11: CI проверяет SQLC generation
+
+Workflow устанавливает закреплённую версию `sqlc`, находит и генерирует все
+`sqlc.yaml` в репозитории, затем требует чистый `git diff`. Изменение
+`query.sql` без обновления generated-кода любого сервиса теперь не пройдёт CI.
+
+Ссылки: [ci.yml](/Volumes/CLOUD/GitHub/elum-utils/services/.github/workflows/ci.yml:1), [sqlc.yaml](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/sqlc.yaml:1).
+
+### Исправлено 2026-07-11: статусы публичных контрактов имеют доменные типы
+
+Введены `cpa.AssignmentStatus`, `cpa.CodeStatus` и
+`cpa.AssignmentEventType`. Public models, callback payload и list-фильтры
+используют эти типы; `AssignmentListParams` и `CodeListParams` разделены,
+чтобы не смешивать разные enum. JSON остается строковым и не меняет API для
+клиентов.
+
+Ссылки: [types.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/types.go:1), [audit.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/service/admin/audit.go:10), [cpa_test.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/cpa_test.go:68).
 
 ## Подтверждённые проблемы
 
@@ -132,9 +190,10 @@ lookup. Вместо `strings.Split` bootstrap использует `sqlwrap.Spl
 ### Исправлено 2026-07-11: event filter отделён от status
 
 `ListAssignmentEvents` принимает отдельный
-`AssignmentEventListParams{WorkspaceID, CPAID, EventType, Page}`. Поле
-`AuditListParams.Status` осталось только у assignment/code list. Новый тест
-создаёт issued и completed event и проверяет выборку только completed.
+`AssignmentEventListParams{WorkspaceID, CPAID, EventType, Page}`.
+`AssignmentListParams.Status` и `CodeListParams.Status` используют разные
+доменные enum. Новый тест создаёт issued и completed event и проверяет выборку
+только completed.
 
 Ссылки: [audit.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/service/admin/audit.go:17), [assignments.go](/Volumes/CLOUD/GitHub/el-utils/services/cpa/repository/assignments.go:132), [cpa_test.go](/Volumes/CLOUD/GitHub/elum-utils/services/cpa/cpa_test.go:729).
 
@@ -153,11 +212,9 @@ lookup. Вместо `strings.Split` bootstrap использует `sqlwrap.Spl
 В текущем окружении успешно выполнены:
 
 ```text
-go test -count=1 ./internal/utils/sql ./internal/utils/importexport
-go test -run '^$' ./cpa/...
-go vet ./internal/utils/sql ./internal/utils/importexport ./cpa/...
+sqlc generate -f cpa/sqlc.yaml
+test -z "$(gofmt -l .)"
+go vet ./...
+go build ./...
+go test -count=1 ./...
 ```
-
-Полный `go test -count=1 ./cpa/...` и benchmark не были повторены после P3:
-локальный PostgreSQL на `localhost:5432` сейчас недоступен. Это test gap
-окружения, а не успешный результат проверки DB-сценариев.

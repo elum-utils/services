@@ -45,3 +45,23 @@ item между сервисами.
 
 При миграции сервиса на этот контракт нужно добавить тест пакета, который
 превышает предел параметров для его самой широкой bulk-вставки.
+
+## Consistency
+
+- Export читает связанные таблицы в одной `REPEATABLE READ READ ONLY`
+  транзакции. Файл не должен смешивать состояние до и после параллельного
+  admin update.
+- Import валидирует весь пакет до открытия write-транзакции: корневые сущности,
+  localization, rewards, target, дубли и числовые границы PostgreSQL.
+- Preview конфликтов и bulk write выполняются в одной транзакции под
+  transaction-level advisory lock конкретной workspace.
+- Обычные admin catalog writes используют тот же lock. Иначе
+  `fail_on_conflict` и `skip_existing` не имеют корректной семантики при
+  конкурентном запросе.
+- Cache version изменяется только после успешного commit. Ошибка внешнего cache
+  backend передается в диагностический callback и не превращает успешный DB
+  write в ошибку API.
+
+Минимальные integration tests для каждого import/export: invalid preflight без
+частичной записи, все conflict strategies, пакет больше лимита параметров,
+конкурентный admin write и согласованный export snapshot.

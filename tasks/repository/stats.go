@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
@@ -164,13 +166,21 @@ func (r *Repository) ListDailyOverview(
 	return result, nil
 }
 
-func (r *Repository) RefreshDailyStats(ctx context.Context, from, until time.Time) error {
+func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
+	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+		return fmt.Errorf("tasks stats workspace or date range is invalid")
+	}
+
 	if err := r.q.RefreshTaskDailyStats(ctx, tasksqlc.RefreshTaskDailyStatsParams{
-		OccurredAt: from, OccurredAt_2: until,
+		RefreshWorkspaceID: workspaceID,
+		OccurredAt:         from,
+		OccurredAt_2:       until,
 	}); err != nil {
 		return err
 	}
 	return r.q.RefreshTaskDailyOverview(ctx, tasksqlc.RefreshTaskDailyOverviewParams{
-		OccurredAt: from, OccurredAt_2: until,
+		RefreshWorkspaceID: workspaceID,
+		OccurredAt:         from,
+		OccurredAt_2:       until,
 	})
 }

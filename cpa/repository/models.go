@@ -4,6 +4,8 @@ import (
 	"time"
 
 	json "github.com/goccy/go-json"
+
+	"github.com/elum-utils/services/cpa/model"
 )
 
 const (
@@ -12,9 +14,6 @@ const (
 
 	CodeSourceGenerated = "generated"
 	CodeSourcePool      = "pool"
-
-	StatusIssued    = "issued"
-	StatusCompleted = "completed"
 )
 
 type Offer struct {
@@ -72,7 +71,7 @@ type Assignment struct {
 	CodeID         *uint64
 	Code           string
 	CodeMode       string
-	Status         string
+	Status         model.AssignmentStatus
 	IssuedAt       time.Time
 	CompletedAt    *time.Time
 }
@@ -83,7 +82,7 @@ type Code struct {
 	CPAID       string
 	Code        string
 	Source      string
-	Status      string
+	Status      model.CodeStatus
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   *time.Time
@@ -94,7 +93,7 @@ type AssignmentEvent struct {
 	WorkspaceID  string
 	CPAID        string
 	AssignmentID uint64
-	EventType    string
+	EventType    model.AssignmentEventType
 	OccurredAt   time.Time
 }
 

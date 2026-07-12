@@ -15,6 +15,11 @@ type NextParams struct {
 func (u *User) Next(ctx context.Context, params NextParams) (RecordResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return RecordResult{}, err
+	}
+
 	value, err := u.repository.Next(
 		mergedCtx, repositoryIdentity(params.Identity), params.CalendarRef, params.Locale, params.Now,
 	)

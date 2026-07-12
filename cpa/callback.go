@@ -7,6 +7,7 @@ import (
 	json "github.com/goccy/go-json"
 
 	services "github.com/elum-utils/services"
+	"github.com/elum-utils/services/cpa/model"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 )
@@ -19,16 +20,16 @@ const (
 type CallbackReward = services.Reward
 
 type CallbackPayload struct {
-	AssignmentID   uint64           `json:"assignment_id"`
-	WorkspaceID    string           `json:"workspace_id"`
-	CPAID          string           `json:"cpa_id"`
-	AppID          int64            `json:"app_id"`
-	PlatformID     int64            `json:"platform_id"`
-	PlatformUserID string           `json:"platform_user_id"`
-	Code           string           `json:"code"`
-	CodeMode       string           `json:"code_mode"`
-	Status         string           `json:"status"`
-	Rewards        []CallbackReward `json:"rewards,omitempty"`
+	AssignmentID   uint64                    `json:"assignment_id"`
+	WorkspaceID    string                    `json:"workspace_id"`
+	CPAID          string                    `json:"cpa_id"`
+	AppID          int64                     `json:"app_id"`
+	PlatformID     int64                     `json:"platform_id"`
+	PlatformUserID string                    `json:"platform_user_id"`
+	Code           string                    `json:"code"`
+	CodeMode       string                    `json:"code_mode"`
+	Status         model.AssignmentEventType `json:"status"`
+	Rewards        []CallbackReward          `json:"rewards,omitempty"`
 }
 
 type Context struct {

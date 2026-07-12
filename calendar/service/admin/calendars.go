@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -108,6 +109,9 @@ func validateCalendar(params *SaveCalendarParams) error {
 	}
 	if params.ResetAfterIntervals == 0 {
 		params.ResetAfterIntervals = 1
+	}
+	if params.IntervalCount > math.MaxInt32 || params.ResetAfterIntervals > math.MaxInt32 {
+		return ErrCalendarNumberOutOfRange
 	}
 	if params.Timezone == "" {
 		params.Timezone = "UTC"

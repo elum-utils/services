@@ -39,7 +39,6 @@
 | `Admin.ListRolePermissions(ctx, workspaceID, roleID)` | `workspaceID`, `roleID`. | Возвращает включённые method keys роли. |
 | `Admin.SetRolePermission(ctx, params)` | `SetRolePermissionParams{ActorID, WorkspaceID, RoleID, MethodKey, Enabled}`. | Включает или выключает method key у роли, если роль строго ниже actor. |
 | `Admin.ClearRolePermissions(ctx, params)` | `ClearRolePermissionsParams{ActorID, WorkspaceID, RoleID}`. | Удаляет все включённые methods роли, если роль строго ниже actor. |
-| `Admin.RegisterMethod(ctx, params)` | `RegisterMethodParams{Key, Service, GroupKey}`. | Регистрирует method/access key из статического manifest-а сервиса. Используется для инициализации каталога доступов, а не для произвольного создания прав из UI. |
 | `Admin.ListMethods(ctx)` | Нет параметров. | Возвращает все зарегистрированные методы для административного интерфейса. |
 | `Admin.GetMethod(ctx, methodKey)` | `methodKey`. | Возвращает публичные метаданные зарегистрированного метода. |
 | `Admin.ListAccess(ctx, locale)` | `locale`. | Возвращает локализованный каталог access: сервисы, группы и access-keys в правильном порядке для UI управления ролями. |

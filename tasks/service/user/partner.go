@@ -23,6 +23,11 @@ const (
 func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]TaskModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -95,6 +100,11 @@ func (u *User) ListPartner(ctx context.Context, params PartnerListParams) ([]Tas
 func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (PartnerCheckOutput, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return PartnerCheckOutput{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -155,6 +165,11 @@ func (u *User) CheckPartner(ctx context.Context, params PartnerCheckParams) (Par
 func (u *User) StartPartner(ctx context.Context, params PartnerStartParams) (PartnerStartOutput, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
+
+	if err := params.Identity.Validate(); err != nil {
+		return PartnerStartOutput{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()

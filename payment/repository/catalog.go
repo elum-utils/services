@@ -3,11 +3,15 @@ package repository
 import (
 	"context"
 	"database/sql"
-	json "github.com/goccy/go-json"
+	"math"
+	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
 
 	serviceerrors "github.com/elum-utils/services/errors"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/internal/utils/target"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -15,6 +19,7 @@ var (
 	ErrInvalidPrice        = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment price is invalid")
 	ErrInvalidItemQuantity = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment item quantity must be positive")
 	ErrInvalidReward       = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment reward type or duration unit is invalid")
+	ErrInvalidProduct      = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment product is invalid")
 )
 
 type ProductGroupUpsertParams struct {
@@ -57,16 +62,6 @@ type LocalizationUpsertParams struct {
 	Locale          string
 	LocalizationKey string
 	Value           string
-}
-
-type ItemUpsertParams struct {
-	WorkspaceID    string
-	ID             string
-	ItemType       *string
-	TitleKey       string
-	DescriptionKey *string
-	Rarity         string
-	Position       int32
 }
 
 type ProductItemUpsertParams struct {
@@ -116,20 +111,24 @@ func (r *PaymentRepository) UpsertProductGroup(ctx context.Context, params Produ
 	if err != nil {
 		return err
 	}
-	if err := r.q.UpsertProductGroup(ctx, paymentsqlc.UpsertProductGroupParams{
-		WorkspaceID: workspaceID,
-		Code:        params.Code,
-		TitleKey: sqlwrap.NullFromPtr(params.TitleKey, func(v string) sql.NullString {
-			return sql.NullString{String: v, Valid: true}
-		}),
-		DescriptionKey: sqlwrap.NullFromPtr(params.DescriptionKey, func(v string) sql.NullString {
-			return sql.NullString{String: v, Valid: true}
-		}),
-		Position: params.Position,
-		IsActive: params.IsActive,
-	}); err != nil {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
+		return tx.q.UpsertProductGroup(ctx, paymentsqlc.UpsertProductGroupParams{
+			WorkspaceID: workspaceID,
+			Code:        params.Code,
+			TitleKey: sqlwrap.NullFromPtr(params.TitleKey, func(v string) sql.NullString {
+				return sql.NullString{String: v, Valid: true}
+			}),
+			DescriptionKey: sqlwrap.NullFromPtr(params.DescriptionKey, func(v string) sql.NullString {
+				return sql.NullString{String: v, Valid: true}
+			}),
+			Position: params.Position,
+			IsActive: params.IsActive,
+		})
+	})
+	if err != nil {
 		return err
 	}
+
 	return r.invalidateWorkspaceCache(workspaceID)
 }
 
@@ -138,13 +137,19 @@ func (r *PaymentRepository) DeleteProductGroup(ctx context.Context, workspaceID 
 	if err != nil {
 		return 0, err
 	}
-	rows, err := r.q.DeleteProductGroup(ctx, paymentsqlc.DeleteProductGroupParams{
-		WorkspaceID: workspaceID,
-		Code:        code,
+	var rows int64
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
+		var err error
+		rows, err = tx.q.DeleteProductGroup(ctx, paymentsqlc.DeleteProductGroupParams{
+			WorkspaceID: workspaceID,
+			Code:        code,
+		})
+		return err
 	})
 	if err != nil {
 		return 0, err
 	}
+
 	return rows, r.invalidateWorkspaceCache(workspaceID)
 }
 
@@ -152,6 +157,16 @@ func (r *PaymentRepository) UpsertProduct(ctx context.Context, params ProductUps
 	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
 	if err != nil {
 		return err
+	}
+	if err := target.Validate(params.Target); err != nil {
+		return err
+	}
+	if strings.TrimSpace(params.ID) == "" || strings.TrimSpace(params.TitleKey) == "" ||
+		(params.PeriodSeconds != nil && *params.PeriodSeconds < 0) ||
+		(params.TrialDurationSeconds != nil && *params.TrialDurationSeconds < 0) ||
+		params.GlobalLimit < 0 || params.GlobalIntervalCount < 0 ||
+		params.UserLimit < 0 || params.UserIntervalCount < 0 {
+		return ErrInvalidProduct
 	}
 	availableFrom := sqlwrap.ValueFromPtr(params.AvailableFrom)
 	if availableFrom.IsZero() {
@@ -180,8 +195,14 @@ func (r *PaymentRepository) UpsertProduct(ctx context.Context, params ProductUps
 	if len(target) == 0 {
 		target = []byte("null")
 	}
+	if (quantityMode != "fixed" && quantityMode != "flexible") ||
+		!validPaymentInterval(globalInterval) ||
+		!validPaymentInterval(userInterval) ||
+		!availableFrom.Before(availableUntil) {
+		return ErrInvalidProduct
+	}
 
-	return r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	return r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		if err := tx.q.UpsertProduct(ctx, paymentsqlc.UpsertProductParams{
 			WorkspaceID: workspaceID,
 			ID:          params.ID,
@@ -233,7 +254,7 @@ func (r *PaymentRepository) DeleteProduct(ctx context.Context, workspaceID strin
 		return 0, err
 	}
 	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		var err error
 		rows, err = tx.q.DeleteProduct(ctx, paymentsqlc.DeleteProductParams{
 			WorkspaceID: workspaceID,
@@ -259,7 +280,7 @@ func (r *PaymentRepository) UpsertLocalization(ctx context.Context, params Local
 	if err != nil {
 		return err
 	}
-	return r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	return r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		if err := tx.q.UpsertLocalization(ctx, paymentsqlc.UpsertLocalizationParams{
 			WorkspaceID:     workspaceID,
 			Locale:          params.Locale,
@@ -278,7 +299,7 @@ func (r *PaymentRepository) DeleteLocalization(ctx context.Context, workspaceID 
 		return 0, err
 	}
 	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		var err error
 		rows, err = tx.q.DeleteLocalization(ctx, paymentsqlc.DeleteLocalizationParams{
 			Locale:          locale,
@@ -293,88 +314,12 @@ func (r *PaymentRepository) DeleteLocalization(ctx context.Context, workspaceID 
 	return rows, err
 }
 
-func (r *PaymentRepository) UpsertItem(ctx context.Context, params ItemUpsertParams) error {
-	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	rarity := params.Rarity
-	if rarity == "" {
-		rarity = "common"
-	}
-
-	return r.inTransaction(ctx, func(tx *PaymentRepository) error {
-		if err := tx.q.UpsertItem(ctx, paymentsqlc.UpsertItemParams{
-			WorkspaceID: workspaceID,
-			ID:          params.ID,
-			ItemType: sqlwrap.NullFromPtr(params.ItemType, func(v string) sql.NullString {
-				return sql.NullString{String: v, Valid: true}
-			}),
-			TitleKey: params.TitleKey,
-			DescriptionKey: sqlwrap.NullFromPtr(params.DescriptionKey, func(v string) sql.NullString {
-				return sql.NullString{String: v, Valid: true}
-			}),
-			Rarity:   rarity,
-			Position: params.Position,
-		}); err != nil {
-			return err
-		}
-		productIDs, err := tx.q.ListProductIDsForItem(ctx, paymentsqlc.ListProductIDsForItemParams{
-			WorkspaceID: workspaceID,
-			ItemID:      params.ID,
-		})
-		if err != nil {
-			return err
-		}
-		for _, productID := range productIDs {
-			if err := tx.RebuildProductCache(ctx, workspaceID, productID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func (r *PaymentRepository) DeleteItem(ctx context.Context, workspaceID string, id string) (int64, error) {
-	workspaceID, err := requireWorkspaceID(workspaceID)
-	if err != nil {
-		return 0, err
-	}
-	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
-		productIDs, err := tx.q.ListProductIDsForItem(ctx, paymentsqlc.ListProductIDsForItemParams{
-			WorkspaceID: workspaceID,
-			ItemID:      id,
-		})
-		if err != nil {
-			return err
-		}
-		rows, err = tx.q.DeleteItem(ctx, paymentsqlc.DeleteItemParams{
-			WorkspaceID: workspaceID,
-			ID:          id,
-		})
-		if err != nil {
-			return err
-		}
-		for _, productID := range productIDs {
-			if err := tx.RebuildProductCache(ctx, workspaceID, productID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return rows, r.invalidateWorkspaceCache(workspaceID)
-}
-
 func (r *PaymentRepository) UpsertProductItem(ctx context.Context, params ProductItemUpsertParams) error {
 	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
 	if err != nil {
 		return err
 	}
-	if params.Quantity <= 0 {
+	if params.Quantity <= 0 || params.Scale > math.MaxInt16 {
 		return ErrInvalidItemQuantity
 	}
 	rewardType := params.RewardType
@@ -384,7 +329,7 @@ func (r *PaymentRepository) UpsertProductItem(ctx context.Context, params Produc
 	if !validReward(rewardType, params.DurationUnit) {
 		return ErrInvalidReward
 	}
-	return r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	return r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		if err := tx.q.UpsertProductItem(ctx, paymentsqlc.UpsertProductItemParams{
 			WorkspaceID: workspaceID,
 			ProductID:   params.ProductID,
@@ -431,7 +376,7 @@ func (r *PaymentRepository) DeleteProductItem(ctx context.Context, workspaceID s
 		return 0, err
 	}
 	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		var err error
 		rows, err = tx.q.DeleteProductItem(ctx, paymentsqlc.DeleteProductItemParams{
 			ProductID:   productID,
@@ -460,9 +405,13 @@ func (r *PaymentRepository) CreateProductPrice(ctx context.Context, params Produ
 	if endsAt.IsZero() {
 		endsAt = time.Date(2124, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
+	if strings.TrimSpace(params.ProductID) == "" || strings.TrimSpace(params.AssetCode) == "" ||
+		!startsAt.Before(endsAt) {
+		return 0, ErrInvalidPrice
+	}
 
 	var id int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		amounts, err := tx.resolveProductPriceAmounts(ctx, workspaceID, productPriceInput{
 			AssetCode: params.AssetCode, ListAmountMinor: params.ListAmountMinor,
 			DiscountAmountMinor: params.DiscountAmountMinor, PricingMode: params.PricingMode,
@@ -509,9 +458,13 @@ func (r *PaymentRepository) UpdateProductPrice(ctx context.Context, params Produ
 	if endsAt.IsZero() {
 		endsAt = time.Date(2124, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
+	if params.ID == 0 || params.ID > math.MaxInt64 || strings.TrimSpace(params.AssetCode) == "" ||
+		!startsAt.Before(endsAt) {
+		return 0, ErrInvalidPrice
+	}
 
 	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		productID, err := tx.q.GetProductPriceProductID(ctx, paymentsqlc.GetProductPriceProductIDParams{
 			WorkspaceID: workspaceID,
 			ID:          int64(params.ID),
@@ -552,8 +505,11 @@ func (r *PaymentRepository) DeleteProductPrice(ctx context.Context, workspaceID 
 	if err != nil {
 		return 0, err
 	}
+	if id == 0 || id > math.MaxInt64 {
+		return 0, ErrInvalidPrice
+	}
 	var rows int64
-	err = r.inTransaction(ctx, func(tx *PaymentRepository) error {
+	err = r.withWorkspaceMutation(ctx, workspaceID, func(tx *PaymentRepository) error {
 		productID, err := tx.q.GetProductPriceProductID(ctx, paymentsqlc.GetProductPriceProductIDParams{
 			WorkspaceID: workspaceID,
 			ID:          int64(id),

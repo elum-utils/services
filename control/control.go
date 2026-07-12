@@ -79,7 +79,12 @@ func open(ctx context.Context, params DatabaseParams) (*Control, error) {
 		_ = db.Close()
 		return nil, serviceerrors.Wrap(serviceerrors.CodeInternalError, "control sql client initialization failed", err)
 	}
-	bootstrap := repository.NewWithOptions(client, repository.Options{QueryTimeout: params.Options.QueryTimeout, CacheL1Delay: params.Options.CacheL1Delay, CacheL2Delay: params.Options.CacheL2Delay})
+	bootstrap := repository.NewWithOptions(client, repository.Options{
+		QueryTimeout:             params.Options.QueryTimeout,
+		CacheL1Delay:             params.Options.CacheL1Delay,
+		CacheL2Delay:             params.Options.CacheL2Delay,
+		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
+	})
 	if err := bootstrap.Bootstrap(contextutil.Normalize(ctx)); err != nil {
 		_ = bootstrap.Close()
 		_ = client.Close()
@@ -120,11 +125,19 @@ func openPostgres(ctx context.Context, params DatabaseParams) (*sql.DB, error) {
 
 func newControl(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Control {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
-	repositoryOptions := repository.Options{QueryTimeout: options.QueryTimeout, CacheL1Delay: options.CacheL1Delay, CacheL2Delay: options.CacheL2Delay}
+	repositoryOptions := repository.Options{
+		QueryTimeout:             options.QueryTimeout,
+		CacheL1Delay:             options.CacheL1Delay,
+		CacheL2Delay:             options.CacheL2Delay,
+		OnCacheInvalidationError: options.OnCacheInvalidationError,
+	}
 	return &Control{
-		Admin:    admin.NewWithOptions(rootCtx, db, repositoryOptions),
-		Internal: internalapi.NewWithOptions(rootCtx, db, repositoryOptions),
-		client:   db, ownsClient: ownsClient, rootCtx: rootCtx, rootCancel: cancel,
+		Admin:      admin.NewWithOptions(rootCtx, db, repositoryOptions),
+		Internal:   internalapi.NewWithOptions(rootCtx, db, repositoryOptions),
+		client:     db,
+		ownsClient: ownsClient,
+		rootCtx:    rootCtx,
+		rootCancel: cancel,
 	}
 }
 

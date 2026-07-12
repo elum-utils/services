@@ -18,10 +18,14 @@ type RecordParams struct {
 func (u *User) Record(ctx context.Context, params RecordParams) (RecordResult, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
-	if params.Identity.WorkspaceID == "" || params.Identity.PlatformUserID == "" ||
-		strings.TrimSpace(params.CalendarRef) == "" || strings.TrimSpace(params.OperationID) == "" {
+
+	if err := params.Identity.Validate(); err != nil {
+		return RecordResult{}, err
+	}
+	if strings.TrimSpace(params.CalendarRef) == "" || strings.TrimSpace(params.OperationID) == "" {
 		return RecordResult{}, ErrRecordParamsRequired
 	}
+
 	value, err := u.repository.Record(mergedCtx, repository.RecordParams{
 		Identity: repositoryIdentity(params.Identity), CalendarRef: params.CalendarRef,
 		OperationID: params.OperationID, Now: params.Now,

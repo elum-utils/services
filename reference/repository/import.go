@@ -4,8 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
+
+	importexport "github.com/elum-utils/services/internal/utils/importexport"
 )
+
+var referenceImportItemKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{0,127}$`)
 
 func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg ExportPackage) (ImportPreview, error) {
 	if err := requireWorkspace(workspaceID); err != nil {
@@ -41,15 +49,20 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	if strategy != ImportConflictFail && strategy != ImportConflictSkip && strategy != ImportConflictUpdate {
 		return ImportResult{}, fmt.Errorf("unsupported import conflict strategy: %s", strategy)
 	}
-	preview, err := r.PreviewImport(ctx, workspaceID, req.Package)
-	if err != nil {
-		return ImportResult{}, err
-	}
-	if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
-		return ImportResult{}, fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
-	}
 	result := ImportResult{}
-	err = r.WithTx(ctx, func(txRepo *Repository) error {
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		preview, err := txRepo.PreviewImport(ctx, workspaceID, req.Package)
+		if err != nil {
+			return err
+		}
+		if strategy == ImportConflictFail && len(preview.Conflicts) > 0 {
+			return fmt.Errorf("import conflicts found: %d", len(preview.Conflicts))
+		}
+
 		return txRepo.importBulk(ctx, workspaceID, req.Package, strategy, preview, &result)
 	})
 	if err != nil {
@@ -60,15 +73,65 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	return result, r.bumpReferenceCacheVersions(workspaceID, methods...)
 }
 
-func (r *Repository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
-	conflicts := importConflictSet(preview)
-	if err := r.importItemsBulk(ctx, workspaceID, pkg.Items, strategy, conflicts, result); err != nil {
-		return err
-	}
-	return r.importLocalizationsBulk(ctx, workspaceID, pkg.Items, strategy, conflicts, result)
+func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		"reference:"+workspaceID,
+	)
+	return err
 }
 
-func (r *Repository) importItemsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, conflicts map[string]struct{}, result *ImportResult) error {
+func (r *Repository) withWorkspaceMutation(
+	ctx context.Context,
+	workspaceID string,
+	fn func(*Repository) error,
+) error {
+	return r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+		return fn(txRepo)
+	})
+}
+
+func (r *Repository) importBulk(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+	strategy string,
+	preview ImportPreview,
+	result *ImportResult,
+) error {
+	conflicts := importConflictSet(preview)
+	if err := r.importItemsBulk(
+		ctx,
+		workspaceID,
+		pkg.Items,
+		strategy,
+		conflicts,
+		result,
+	); err != nil {
+		return err
+	}
+	return r.importLocalizationsBulk(
+		ctx,
+		workspaceID,
+		pkg.Items,
+		strategy,
+		conflicts,
+		result,
+	)
+}
+
+func (r *Repository) importItemsBulk(
+	ctx context.Context,
+	workspaceID string,
+	items []ExportItem,
+	strategy string,
+	conflicts map[string]struct{},
+	result *ImportResult,
+) error {
 	keys := make([]string, 0, len(items))
 	types := make([]string, 0, len(items))
 	payloads := make([]string, 0, len(items))
@@ -89,7 +152,7 @@ func (r *Repository) importItemsBulk(ctx context.Context, workspaceID string, it
 	if len(keys) == 0 {
 		return nil
 	}
-	_, err := r.executor.ExecContext(ctx, `
+	query := `
 INSERT INTO reference_item (
     workspace_id, key, item_type, payload, is_active, deleted_at
 )
@@ -107,23 +170,35 @@ FROM unnest(
     $5::boolean[],
     $6::timestamptz[]
 ) AS value(key, item_type, payload, is_active, deleted_at)
-ON CONFLICT (workspace_id, key) DO UPDATE SET
-    item_type = EXCLUDED.item_type,
-    payload = EXCLUDED.payload,
-    is_active = EXCLUDED.is_active,
-    deleted_at = EXCLUDED.deleted_at,
-    updated_at = now()`,
-		workspaceID,
-		keys,
-		types,
-		payloads,
-		active,
-		deletedAt,
+	` + referenceItemConflictClause(strategy)
+	return importexport.ForEachBatch(
+		len(keys),
+		5,
+		importexport.DefaultBatchLimits,
+		func(start, end int) error {
+			_, err := r.executor.ExecContext(
+				ctx,
+				query,
+				workspaceID,
+				keys[start:end],
+				types[start:end],
+				payloads[start:end],
+				active[start:end],
+				deletedAt[start:end],
+			)
+			return err
+		},
 	)
-	return err
 }
 
-func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID string, items []ExportItem, strategy string, conflicts map[string]struct{}, result *ImportResult) error {
+func (r *Repository) importLocalizationsBulk(
+	ctx context.Context,
+	workspaceID string,
+	items []ExportItem,
+	strategy string,
+	conflicts map[string]struct{},
+	result *ImportResult,
+) error {
 	itemKeys := make([]string, 0)
 	locales := make([]string, 0)
 	titles := make([]string, 0)
@@ -143,7 +218,7 @@ func (r *Repository) importLocalizationsBulk(ctx context.Context, workspaceID st
 	if len(itemKeys) == 0 {
 		return nil
 	}
-	_, err := r.executor.ExecContext(ctx, `
+	query := `
 INSERT INTO reference_localization (
     workspace_id, item_key, locale, title, description
 )
@@ -159,17 +234,54 @@ FROM unnest(
     $4::text[],
     $5::text[]
 ) AS value(item_key, locale, title, description)
-ON CONFLICT (workspace_id, item_key, locale) DO UPDATE SET
+	` + referenceLocalizationConflictClause(strategy)
+	return importexport.ForEachBatch(
+		len(itemKeys),
+		4,
+		importexport.DefaultBatchLimits,
+		func(start, end int) error {
+			_, err := r.executor.ExecContext(
+				ctx,
+				query,
+				workspaceID,
+				itemKeys[start:end],
+				locales[start:end],
+				titles[start:end],
+				descriptions[start:end],
+			)
+			return err
+		},
+	)
+}
+
+func referenceItemConflictClause(strategy string) string {
+	switch strategy {
+	case ImportConflictSkip:
+		return " ON CONFLICT (workspace_id, key) DO NOTHING"
+	case ImportConflictUpdate:
+		return ` ON CONFLICT (workspace_id, key) DO UPDATE SET
+    item_type = EXCLUDED.item_type,
+    payload = EXCLUDED.payload,
+    is_active = EXCLUDED.is_active,
+    deleted_at = EXCLUDED.deleted_at,
+    updated_at = now()`
+	default:
+		return ""
+	}
+}
+
+func referenceLocalizationConflictClause(strategy string) string {
+	switch strategy {
+	case ImportConflictSkip:
+		return " ON CONFLICT (workspace_id, item_key, locale) DO NOTHING"
+	case ImportConflictUpdate:
+		return ` ON CONFLICT (workspace_id, item_key, locale) DO UPDATE SET
     title = EXCLUDED.title,
     description = EXCLUDED.description,
-    updated_at = now()`,
-		workspaceID,
-		itemKeys,
-		locales,
-		titles,
-		descriptions,
-	)
-	return err
+    updated_at = now()`
+	default:
+		return ""
+	}
 }
 
 func validateExportPackage(pkg ExportPackage) error {
@@ -179,6 +291,36 @@ func validateExportPackage(pkg ExportPackage) error {
 	if pkg.Service != "reference" {
 		return fmt.Errorf("unsupported export service: %s", pkg.Service)
 	}
+
+	itemKeys := make(map[string]int, len(pkg.Items))
+	for itemIndex, item := range pkg.Items {
+		prefix := fmt.Sprintf("reference import items[%d]", itemIndex)
+		if !referenceImportItemKeyPattern.MatchString(item.Key) {
+			return fmt.Errorf("%s.key: invalid item key", prefix)
+		}
+		if previousIndex, exists := itemKeys[item.Key]; exists {
+			return fmt.Errorf("%s.key: duplicates items[%d].key", prefix, previousIndex)
+		}
+		itemKeys[item.Key] = itemIndex
+
+		itemType := defaultString(item.Type, ItemTypeQuantity)
+		if itemType != ItemTypeQuantity && itemType != ItemTypeDuration {
+			return fmt.Errorf("%s.type: unsupported value %q", prefix, itemType)
+		}
+		if len(item.Payload) == 0 || !json.Valid(item.Payload) {
+			return fmt.Errorf("%s.payload: must be valid JSON", prefix)
+		}
+
+		for locale, text := range item.Localization {
+			if strings.TrimSpace(locale) == "" {
+				return fmt.Errorf("%s.localization: locale is required", prefix)
+			}
+			if strings.TrimSpace(text.Title) == "" {
+				return fmt.Errorf("%s.localization.%s.title: title is required", prefix, locale)
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -86,7 +86,7 @@ func (r *PaymentRepository) resolveProductPriceAmounts(
 		mode = PricingModeFixed
 	}
 	if mode == PricingModeFixed {
-		if input.DiscountAmountMinor > input.ListAmountMinor {
+		if input.ListAmountMinor > math.MaxInt64 || input.DiscountAmountMinor > input.ListAmountMinor {
 			return resolvedProductPrice{}, ErrInvalidPrice
 		}
 		return resolvedProductPrice{
@@ -143,6 +143,9 @@ func (r *PaymentRepository) resolveProductPriceAmounts(
 		return resolvedProductPrice{}, err
 	}
 	if discount > list {
+		return resolvedProductPrice{}, ErrInvalidPrice
+	}
+	if list > math.MaxInt64 {
 		return resolvedProductPrice{}, ErrInvalidPrice
 	}
 
@@ -214,7 +217,7 @@ func (r *PaymentRepository) UpdateAssetRate(
 	params.Source = strings.TrimSpace(params.Source)
 	if params.AssetCode == "" || params.ReferenceAssetCode == "" ||
 		params.AssetCode == params.ReferenceAssetCode || params.Source == "" ||
-		params.ReferencePerAssetMinor == 0 {
+		params.ReferencePerAssetMinor == 0 || params.ReferencePerAssetMinor > math.MaxInt64 {
 		return AssetRateUpdateResult{}, ErrInvalidAssetRate
 	}
 	if params.ObservedAt.IsZero() {

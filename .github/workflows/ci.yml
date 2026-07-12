@@ -38,6 +38,16 @@ jobs:
           go-version: "1.26.1"
           cache: true
 
+      - name: Install SQLC
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+
+      - name: Verify generated SQLC code
+        run: |
+          while IFS= read -r config; do
+            sqlc generate -f "$config"
+          done < <(find . -name sqlc.yaml -not -path './.git/*' -print | sort)
+          git diff --exit-code
+
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
 

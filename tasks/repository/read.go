@@ -67,11 +67,11 @@ func (r *Repository) attachComplexConditions(ctx context.Context, workspaceID st
 		return nil
 	}
 	key := activeComplexConditionsCacheKey(workspaceID)
-	rememberTaskCacheKey(workspaceID, key)
 	rows, err := repositoryQuery(ctx, r, sqlwrap.Params{
-		Key:          key,
-		CacheL1Delay: r.cacheL1Delay,
-		CacheL2Delay: r.cacheL2Delay,
+		Key:               key,
+		CacheL1Delay:      r.cacheL1Delay,
+		CacheL2Delay:      r.cacheL2Delay,
+		CacheVersionScope: taskCatalogCacheScope(workspaceID),
 	}, func(ctx context.Context) ([]tasksqlc.ListActiveComplexConditionsRow, error) {
 		return r.q.ListActiveComplexConditions(ctx, workspaceID)
 	})
@@ -98,11 +98,11 @@ func (r *Repository) attachComplexConditions(ctx context.Context, workspaceID st
 
 func (r *Repository) listActiveCatalog(ctx context.Context, workspaceID, locale, groupKey string) ([]ActiveTask, error) {
 	key := activeCatalogCacheKey(workspaceID, locale, groupKey)
-	rememberTaskCacheKey(workspaceID, key)
 	out, err := repositoryQuery(ctx, r, sqlwrap.Params{
-		Key:          key,
-		CacheL1Delay: r.cacheL1Delay,
-		CacheL2Delay: r.cacheL2Delay,
+		Key:               key,
+		CacheL1Delay:      r.cacheL1Delay,
+		CacheL2Delay:      r.cacheL2Delay,
+		CacheVersionScope: taskCatalogCacheScope(workspaceID),
 	}, func(ctx context.Context) ([]ActiveTask, error) {
 		rows, err := r.q.ListActiveTaskBundles(ctx, tasksqlc.ListActiveTaskBundlesParams{
 			Locale:      locale,

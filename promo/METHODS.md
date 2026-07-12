@@ -32,10 +32,10 @@
 | `Admin.GetUserRedemption(ctx, identity, promoID)` | `Identity`, `promoID`. | Возвращает активацию промокода конкретным пользователем. |
 | `Admin.ListRedemptions(ctx, workspaceID, promoID, page)` | `workspaceID`, `promoID`, `Page`. | Возвращает список активаций. |
 | `Admin.ListDailyStats(ctx, workspaceID, promoID, from, until)` | `workspaceID`, `promoID`, `from`, `until`. | Возвращает дневную статистику промокода. |
-| `Admin.RefreshDailyStats(ctx, from, until)` | `from`, `until`. | Пересчитывает дневную статистику. |
-| `Admin.ListCallbackEvents(ctx, params)` | `CallbackEventListParams{Status, Page}`. | Возвращает callback-события promo. |
-| `Admin.GetCallbackEvent(ctx, id)` | `id`. | Возвращает callback-событие. |
-| `Admin.RetryCallbackEventNow(ctx, id)` | `id`. | Отправляет callback-событие на повторную обработку. |
-| `Admin.MarkCallbackEventOK(ctx, id)` | `id`. | Помечает callback-событие успешным. |
-| `Admin.MarkCallbackEventReject(ctx, id, reason)` | `id`, `reason`. | Помечает callback-событие отклоненным. |
-| `Admin.ResetExpiredCallbackProcessing(ctx)` | Только `ctx`. | Сбрасывает зависшие callback-события в обработке. |
+| `Admin.RefreshDailyStats(ctx, workspaceID, from, until)` | `workspaceID`, `from`, `until`. | Пересчитывает дневную статистику только указанной workspace. |
+| `Admin.ListCallbackEvents(ctx, params)` | `CallbackEventListParams{WorkspaceID, Status, Page}`. | Возвращает callback-события promo только указанной workspace. |
+| `Admin.GetCallbackEvent(ctx, workspaceID, id)` | `workspaceID`, `id`. | Возвращает callback-событие указанной workspace. |
+| `Admin.RetryCallbackEventNow(ctx, workspaceID, id)` | `workspaceID`, `id`. | Отправляет callback-событие workspace на повторную обработку. |
+| `Admin.MarkCallbackEventOK(ctx, workspaceID, id)` | `workspaceID`, `id`. | Помечает callback-событие workspace успешным. |
+| `Admin.MarkCallbackEventReject(ctx, workspaceID, id, reason)` | `workspaceID`, `id`, `reason`. | Помечает callback-событие workspace отклоненным. |
+| `Admin.ResetExpiredCallbackProcessing(ctx, workspaceID)` | `workspaceID`. | Сбрасывает зависшие callback-события workspace. |

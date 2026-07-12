@@ -21,18 +21,20 @@ var (
 const bootstrapQueryTimeout = 30 * time.Second
 
 type Options struct {
-	QueryTimeout time.Duration
-	CacheL1Delay time.Duration
-	CacheL2Delay time.Duration
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	OnCacheInvalidationError func(error)
 }
 
 type Repository struct {
-	db       *sqlwrap.Client
-	q        *refsqlc.Queries
-	executor refsqlc.DBTX
-	timeout  time.Duration
-	cacheL1  time.Duration
-	cacheL2  time.Duration
+	db                       *sqlwrap.Client
+	q                        *refsqlc.Queries
+	executor                 refsqlc.DBTX
+	timeout                  time.Duration
+	cacheL1                  time.Duration
+	cacheL2                  time.Duration
+	onCacheInvalidationError func(error)
 }
 
 func New(db *sqlwrap.Client) *Repository {
@@ -49,8 +51,13 @@ func NewWithOptions(db *sqlwrap.Client, options Options) *Repository {
 	}
 	executor := db.WithQueryTimeout(timeout)
 	return &Repository{
-		db: db, q: refsqlc.New(executor), executor: executor,
-		timeout: timeout, cacheL1: options.CacheL1Delay, cacheL2: options.CacheL2Delay,
+		db:                       db,
+		q:                        refsqlc.New(executor),
+		executor:                 executor,
+		timeout:                  timeout,
+		cacheL1:                  options.CacheL1Delay,
+		cacheL2:                  options.CacheL2Delay,
+		onCacheInvalidationError: options.OnCacheInvalidationError,
 	}
 }
 
@@ -75,8 +82,13 @@ func (r *Repository) Close() error {
 func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
 	_, err := sqlwrap.Transaction(ctx, r.db, sqlwrap.Params{Timeout: r.timeout}, func(ctx context.Context, tx *sql.Tx) (struct{}, error) {
 		txRepo := &Repository{
-			db: r.db, q: r.q.WithTx(tx), executor: tx,
-			timeout: r.timeout, cacheL1: r.cacheL1, cacheL2: r.cacheL2,
+			db:                       r.db,
+			q:                        r.q.WithTx(tx),
+			executor:                 tx,
+			timeout:                  r.timeout,
+			cacheL1:                  r.cacheL1,
+			cacheL2:                  r.cacheL2,
+			onCacheInvalidationError: r.onCacheInvalidationError,
 		}
 		return struct{}{}, fn(txRepo)
 	})
@@ -84,7 +96,11 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 }
 
 func (r *Repository) Bootstrap(ctx context.Context) error {
-	for _, statement := range splitSQLStatements(refsqlc.SchemaSQL) {
+	statements, err := sqlwrap.SplitStatements(refsqlc.SchemaSQL)
+	if err != nil {
+		return fmt.Errorf("reference schema SQL parse failed: %w", err)
+	}
+	for _, statement := range statements {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
@@ -92,7 +108,11 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 			return fmt.Errorf("reference schema statement failed: %w\n%s", err, statement)
 		}
 	}
-	for _, statement := range splitSQLStatements(refsqlc.TriggerSQL) {
+	statements, err = sqlwrap.SplitStatements(refsqlc.TriggerSQL)
+	if err != nil {
+		return fmt.Errorf("reference trigger SQL parse failed: %w", err)
+	}
+	for _, statement := range statements {
 		if err := sqlwrap.Exec(ctx, r.db, sqlwrap.Params{Timeout: bootstrapQueryTimeout}, func(ctx context.Context) error {
 			_, err := r.db.DB().ExecContext(ctx, statement)
 			return err
@@ -101,17 +121,6 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func splitSQLStatements(raw string) []string {
-	parts := strings.Split(raw, ";")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if statement := strings.TrimSpace(part); statement != "" {
-			result = append(result, statement)
-		}
-	}
-	return result
 }
 
 func requireWorkspace(workspaceID string) error {

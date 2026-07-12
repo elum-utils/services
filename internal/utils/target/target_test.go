@@ -1,8 +1,9 @@
 package target
 
 import (
-	json "github.com/goccy/go-json"
 	"testing"
+
+	json "github.com/goccy/go-json"
 )
 
 func TestMatchEmptyTargetAllowsAll(t *testing.T) {
@@ -68,6 +69,41 @@ func TestMatchPlatform(t *testing.T) {
 func TestMatchInvalidJSONDenies(t *testing.T) {
 	if Match(json.RawMessage(`{`), Context{}) {
 		t.Fatal("invalid JSON target must deny")
+	}
+}
+
+func TestValidateRejectsInvalidRules(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+	}{
+		{
+			name: "object value for sex",
+			raw:  json.RawMessage(`{"sex":{}}`),
+		},
+		{
+			name: "invalid premium type",
+			raw:  json.RawMessage(`{"is_premium":"yes"}`),
+		},
+		{
+			name: "unknown field",
+			raw:  json.RawMessage(`{"platforms":["tma"]}`),
+		},
+		{
+			name: "empty list item",
+			raw:  json.RawMessage(`{"country":[""]}`),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := Validate(test.raw); err == nil {
+				t.Fatalf("target %s must be rejected", test.raw)
+			}
+			if Match(test.raw, Context{}) {
+				t.Fatalf("invalid target %s must deny visibility", test.raw)
+			}
+		})
 	}
 }
 

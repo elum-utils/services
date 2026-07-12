@@ -36,33 +36,9 @@ func (a *Payment) startPriceUpdater() {
 	}
 
 	workerID := newPriceUpdaterWorkerID()
-	done := make(chan struct{})
-	a.pricingDone = done
-	go func() {
-		defer close(done)
-		a.runPriceUpdater(workerID)
-	}()
-}
-
-func (a *Payment) runPriceUpdater(workerID string) {
-	for {
-		if a.rootCtx.Err() != nil {
-			return
-		}
-		panicked := func() (panicked bool) {
-			defer func() {
-				if recovered := recover(); recovered != nil {
-					log.Printf("payment price updater recovered from panic: %v", recovered)
-					panicked = true
-				}
-			}()
-			a.priceUpdaterLoop(workerID)
-			return false
-		}()
-		if !panicked || !waitContext(a.rootCtx, time.Second) {
-			return
-		}
-	}
+	a.goroutines.GoRestart(a.rootCtx, "payment.price_updater", time.Second, func() {
+		a.priceUpdaterLoop(workerID)
+	})
 }
 
 func (a *Payment) priceUpdaterLoop(workerID string) {
@@ -95,6 +71,9 @@ func (a *Payment) runDuePriceUpdates(ctx context.Context, workerID string) error
 	groups := groupDuePriceUpdates(updates)
 	for _, group := range groups {
 		if err := a.updateDexScreenerGroup(ctx, workerID, group); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
 			log.Printf("payment price updater source=%s chain=%s: %v", group.source, group.chainID, err)
 		}
 	}

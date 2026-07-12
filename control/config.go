@@ -25,16 +25,17 @@ type Codec interface {
 }
 
 type Options struct {
-	MaxConnections int
-	QueryTimeout   time.Duration
-	CacheL1Delay   time.Duration
-	CacheL2Delay   time.Duration
-	Cache          Storage
-	CacheEnabled   bool
-	CacheSize      int
-	CacheTTLCheck  time.Duration
-	Codec          Codec
-	Mutex          Mutex
+	MaxConnections           int
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	Cache                    Storage
+	CacheEnabled             bool
+	CacheSize                int
+	CacheTTLCheck            time.Duration
+	Codec                    Codec
+	Mutex                    Mutex
+	OnCacheInvalidationError func(error)
 }
 
 type DatabaseParams struct {
@@ -45,19 +46,25 @@ type DatabaseParams struct {
 
 func toSQLWrapOptions(value Options) sqlwrap.Options {
 	result := sqlwrap.Options{
-		MaxConnections: value.MaxConnections, QueryTimeout: value.QueryTimeout,
-		CacheEnabled: value.CacheEnabled, CacheSize: value.CacheSize,
-		CacheTTLCheck: value.CacheTTLCheck,
+		MaxConnections: value.MaxConnections,
+		QueryTimeout:   value.QueryTimeout,
+		CacheEnabled:   value.CacheEnabled,
+		CacheSize:      value.CacheSize,
+		CacheTTLCheck:  value.CacheTTLCheck,
 	}
+
 	if value.Cache != nil {
 		result.Cache = storageAdapter{value.Cache}
 	}
+
 	if value.Codec != nil {
 		result.Codec = codecAdapter{value.Codec}
 	}
+
 	if value.Mutex != nil {
 		result.Mutex = mutexAdapter{value.Mutex}
 	}
+
 	return result
 }
 

@@ -27,16 +27,17 @@ type Codec interface {
 }
 
 type Options struct {
-	MaxConnections int
-	QueryTimeout   time.Duration
-	CacheL1Delay   time.Duration
-	CacheL2Delay   time.Duration
-	Cache          Storage
-	CacheEnabled   bool
-	CacheSize      int
-	CacheTTLCheck  time.Duration
-	Codec          Codec
-	Mutex          Mutex
+	MaxConnections           int
+	QueryTimeout             time.Duration
+	CacheL1Delay             time.Duration
+	CacheL2Delay             time.Duration
+	Cache                    Storage
+	CacheEnabled             bool
+	CacheSize                int
+	CacheTTLCheck            time.Duration
+	Codec                    Codec
+	Mutex                    Mutex
+	OnCacheInvalidationError func(error)
 }
 
 type DatabaseParams struct {

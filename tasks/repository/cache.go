@@ -2,12 +2,9 @@ package repository
 
 import (
 	"context"
-	"sync"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
-
-var taskCacheKeys sync.Map
 
 func activeCatalogCacheKey(workspaceID, locale, groupKey string) string {
 	return sqlwrap.CreateKey("tasks", "active_catalog", workspaceID, locale, groupKey)
@@ -81,43 +78,42 @@ func partnerScriptListCacheKey() string {
 	return sqlwrap.CreateKey("tasks", "partner_script_list")
 }
 
-func rememberTaskCacheKey(workspaceID, key string) {
-	if workspaceID == "" || key == "" {
-		return
-	}
-	taskCacheKeys.Store(key, workspaceID)
+func taskCatalogCacheScope(workspaceID string) []any {
+	return []any{"tasks", "catalog", workspaceID}
 }
 
 func (r *Repository) invalidateTaskCache(_ context.Context, workspaceID string) error {
 	if r == nil || r.db == nil || workspaceID == "" {
 		return nil
 	}
-	var outErr error
-	taskCacheKeys.Range(func(rawKey, rawWorkspaceID any) bool {
-		key, keyOK := rawKey.(string)
-		cachedWorkspaceID, workspaceOK := rawWorkspaceID.(string)
-		if !keyOK || !workspaceOK || cachedWorkspaceID != workspaceID {
-			return true
-		}
-		if err := r.db.DeleteCache(key); err != nil && outErr == nil {
-			outErr = err
-		}
-		taskCacheKeys.Delete(rawKey)
-		return true
-	})
-	return outErr
+	if err := r.db.BumpCacheVersion(taskCatalogCacheScope(workspaceID)...); err != nil {
+		r.reportCacheInvalidationError(err)
+	}
+	return nil
 }
 
 func (r *Repository) bumpPartnerConfigCache(workspaceID string) error {
 	if r == nil || r.db == nil || workspaceID == "" {
 		return nil
 	}
-	return r.db.BumpCacheVersion(partnerConfigCacheScope(workspaceID)...)
+	if err := r.db.BumpCacheVersion(partnerConfigCacheScope(workspaceID)...); err != nil {
+		r.reportCacheInvalidationError(err)
+	}
+	return nil
 }
 
 func (r *Repository) bumpPartnerScriptCache() error {
 	if r == nil || r.db == nil {
 		return nil
 	}
-	return r.db.BumpCacheVersion(partnerScriptCacheScope()...)
+	if err := r.db.BumpCacheVersion(partnerScriptCacheScope()...); err != nil {
+		r.reportCacheInvalidationError(err)
+	}
+	return nil
+}
+
+func (r *Repository) reportCacheInvalidationError(err error) {
+	if err != nil && r != nil && r.onCacheInvalidationError != nil {
+		r.onCacheInvalidationError(err)
+	}
 }

@@ -168,6 +168,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listWorkspacesForAccountStmt, err = db.PrepareContext(ctx, listWorkspacesForAccount); err != nil {
 		return nil, fmt.Errorf("error preparing query ListWorkspacesForAccount: %w", err)
 	}
+	if q.lockMethodRegistryStmt, err = db.PrepareContext(ctx, lockMethodRegistry); err != nil {
+		return nil, fmt.Errorf("error preparing query LockMethodRegistry: %w", err)
+	}
 	if q.removeRoleMemberStmt, err = db.PrepareContext(ctx, removeRoleMember); err != nil {
 		return nil, fmt.Errorf("error preparing query RemoveRoleMember: %w", err)
 	}
@@ -467,6 +470,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listWorkspacesForAccountStmt: %w", cerr)
 		}
 	}
+	if q.lockMethodRegistryStmt != nil {
+		if cerr := q.lockMethodRegistryStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockMethodRegistryStmt: %w", cerr)
+		}
+	}
 	if q.removeRoleMemberStmt != nil {
 		if cerr := q.removeRoleMemberStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing removeRoleMemberStmt: %w", cerr)
@@ -644,6 +652,7 @@ type Queries struct {
 	listSessionsStmt                             *sql.Stmt
 	listWorkspaceMembersStmt                     *sql.Stmt
 	listWorkspacesForAccountStmt                 *sql.Stmt
+	lockMethodRegistryStmt                       *sql.Stmt
 	removeRoleMemberStmt                         *sql.Stmt
 	removeWorkspaceMemberStmt                    *sql.Stmt
 	removeWorkspaceMemberRolesStmt               *sql.Stmt
@@ -716,6 +725,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listSessionsStmt:                             q.listSessionsStmt,
 		listWorkspaceMembersStmt:                     q.listWorkspaceMembersStmt,
 		listWorkspacesForAccountStmt:                 q.listWorkspacesForAccountStmt,
+		lockMethodRegistryStmt:                       q.lockMethodRegistryStmt,
 		removeRoleMemberStmt:                         q.removeRoleMemberStmt,
 		removeWorkspaceMemberStmt:                    q.removeWorkspaceMemberStmt,
 		removeWorkspaceMemberRolesStmt:               q.removeWorkspaceMemberRolesStmt,

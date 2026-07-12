@@ -3,21 +3,29 @@ package admin
 import (
 	"context"
 
+	"github.com/elum-utils/services/cpa/model"
 	"github.com/elum-utils/services/cpa/repository"
 	"github.com/elum-utils/services/cpa/service/user"
 )
 
-type AuditListParams struct {
+type AssignmentListParams struct {
 	WorkspaceID string
 	CPAID       string
-	Status      string
+	Status      model.AssignmentStatus
+	Page        Page
+}
+
+type CodeListParams struct {
+	WorkspaceID string
+	CPAID       string
+	Status      model.CodeStatus
 	Page        Page
 }
 
 type AssignmentEventListParams struct {
 	WorkspaceID string
 	CPAID       string
-	EventType   string
+	EventType   model.AssignmentEventType
 	Page        Page
 }
 
@@ -42,7 +50,7 @@ func (a *Admin) GetUserAssignment(ctx context.Context, params user.GetStatusPara
 
 }
 
-func (a *Admin) ListAssignments(ctx context.Context, params AuditListParams) ([]AssignmentModel, error) {
+func (a *Admin) ListAssignments(ctx context.Context, params AssignmentListParams) ([]AssignmentModel, error) {
 
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
@@ -69,7 +77,7 @@ func (a *Admin) ListAssignments(ctx context.Context, params AuditListParams) ([]
 
 }
 
-func (a *Admin) ListCodes(ctx context.Context, params AuditListParams) ([]CodeModel, error) {
+func (a *Admin) ListCodes(ctx context.Context, params CodeListParams) ([]CodeModel, error) {
 
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
