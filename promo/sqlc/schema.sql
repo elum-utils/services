@@ -144,6 +144,14 @@ CREATE TABLE IF NOT EXISTS promo_clb_event (
     CONSTRAINT promo_clb_event_idempotency_key_uq UNIQUE (idempotency_key)
 );
 
+-- Existing installations may have created this table before workspace scoping.
+ALTER TABLE promo_clb_event
+    ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(36) NOT NULL
+        DEFAULT '00000000-0000-0000-0000-000000000000';
+
+ALTER TABLE promo_clb_event
+    ALTER COLUMN workspace_id DROP DEFAULT;
+
 CREATE INDEX IF NOT EXISTS promo_clb_event_due_idx
     ON promo_clb_event (status, next_attempt_at, locked_until, id);
 
