@@ -15,7 +15,10 @@ import (
 	"github.com/elum-utils/services/payment/repository"
 )
 
-const maxDexScreenerResponseSize = 4 << 20
+const (
+	maxDexScreenerResponseSize  = 4 << 20
+	tonNativeDexScreenerAddress = "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"
+)
 
 type dexScreenerPair struct {
 	BaseToken struct {
@@ -43,11 +46,17 @@ func fetchDexScreenerPrices(
 	}
 	addresses := make([]string, 0, len(updates))
 	seen := make(map[string]struct{}, len(updates))
+	requested := make(map[string]struct{}, len(updates))
+	priceAddresses := make(map[string]string, len(updates))
 	for _, update := range updates {
+		assetCode := strings.TrimSpace(update.AssetCode)
 		address := strings.TrimSpace(update.SourceTokenAddress)
-		if address == "" {
+		priceAddress := dexScreenerPriceTokenAddress(update)
+		if assetCode == "" || address == "" || priceAddress == "" {
 			continue
 		}
+		requested[priceAddress] = struct{}{}
+		priceAddresses[assetCode] = priceAddress
 		if _, ok := seen[address]; ok {
 			continue
 		}
@@ -84,7 +93,27 @@ func fetchDexScreenerPrices(
 	if err := decoder.Decode(&pairs); err != nil {
 		return nil, err
 	}
-	return selectDexScreenerPrices(pairs, seen), nil
+	selected := selectDexScreenerPrices(pairs, requested)
+	result := make(map[string]uint64, len(priceAddresses))
+	for assetCode, priceAddress := range priceAddresses {
+		if price, ok := selected[priceAddress]; ok {
+			result[assetCode] = price
+		}
+	}
+	return result, nil
+}
+
+func dexScreenerPriceTokenAddress(update repository.DueAssetRateUpdate) string {
+	if update.AssetKind != "crypto_native" {
+		return strings.TrimSpace(update.SourceTokenAddress)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(update.SourceChainID)) {
+	case "ton":
+		return tonNativeDexScreenerAddress
+	default:
+		return ""
+	}
 }
 
 func selectDexScreenerPrices(

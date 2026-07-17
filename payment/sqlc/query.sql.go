@@ -7766,7 +7766,8 @@ func (q *Queries) ListAssets(ctx context.Context) ([]PaymentAsset, error) {
 const listDueAssetRateUpdates = `-- name: ListDueAssetRateUpdates :many
 SELECT
     r.asset_code, r.reference_asset_code, r.auto_update_source, r.source_chain_id,
-    COALESCE(r.source_token_address, a.contract_address) AS source_token_address
+    COALESCE(r.source_token_address, a.contract_address) AS source_token_address,
+    a.asset_kind
 FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.auto_update_enabled = true
@@ -7779,11 +7780,12 @@ LIMIT $1
 `
 
 type ListDueAssetRateUpdatesRow struct {
-	AssetCode          string         `json:"asset_code"`
-	ReferenceAssetCode string         `json:"reference_asset_code"`
-	AutoUpdateSource   sql.NullString `json:"auto_update_source"`
-	SourceChainID      sql.NullString `json:"source_chain_id"`
-	SourceTokenAddress sql.NullString `json:"source_token_address"`
+	AssetCode          string                `json:"asset_code"`
+	ReferenceAssetCode string                `json:"reference_asset_code"`
+	AutoUpdateSource   sql.NullString        `json:"auto_update_source"`
+	SourceChainID      sql.NullString        `json:"source_chain_id"`
+	SourceTokenAddress sql.NullString        `json:"source_token_address"`
+	AssetKind          PaymentAssetAssetKind `json:"asset_kind"`
 }
 
 func (q *Queries) ListDueAssetRateUpdates(ctx context.Context, limit int32) ([]ListDueAssetRateUpdatesRow, error) {
@@ -7801,6 +7803,7 @@ func (q *Queries) ListDueAssetRateUpdates(ctx context.Context, limit int32) ([]L
 			&i.AutoUpdateSource,
 			&i.SourceChainID,
 			&i.SourceTokenAddress,
+			&i.AssetKind,
 		); err != nil {
 			return nil, err
 		}
@@ -10204,22 +10207,32 @@ INSERT INTO payment_asset_rate (
 )
 SELECT
     a.code,
-    $1,
-    CASE WHEN a.code = $2 THEN 1000000 ELSE 1 END,
-    CASE WHEN a.code = $3 THEN 'fixed' ELSE 'pending' END,
+    reference.code,
+    CASE WHEN a.code = reference.code THEN 1000000 ELSE 1 END,
+    CASE WHEN a.code = reference.code THEN 'fixed' ELSE 'pending' END,
     now(),
-    CASE WHEN a.code = $4 THEN false ELSE true END,
-    CASE WHEN a.code = $5 THEN NULL ELSE 'dexscreener' END,
-    CASE WHEN a.code = $6 THEN NULL ELSE a.chain END,
-    CASE WHEN a.code = $7 THEN NULL ELSE a.contract_address END
+    CASE WHEN a.code = reference.code THEN false ELSE true END,
+    CASE WHEN a.code = reference.code THEN NULL ELSE 'dexscreener' END,
+    CASE WHEN a.code = reference.code THEN NULL ELSE a.chain END,
+    CASE
+        WHEN a.code = reference.code THEN NULL
+        WHEN a.asset_kind = 'crypto_native' THEN reference.contract_address
+        ELSE a.contract_address
+    END
 FROM payment_asset a
+JOIN payment_asset reference
+    ON reference.code = $1
 WHERE a.is_active = true
   AND (
-      a.code = $8
+      a.code = reference.code
       OR (
           a.asset_kind IN ('crypto_native', 'crypto_jetton')
           AND a.chain IS NOT NULL
-          AND a.contract_address IS NOT NULL
+          AND (
+              (a.asset_kind = 'crypto_native' AND reference.contract_address IS NOT NULL)
+              OR
+              (a.asset_kind = 'crypto_jetton' AND a.contract_address IS NOT NULL)
+          )
       )
   )
 ON CONFLICT (asset_code, reference_asset_code) DO UPDATE SET
@@ -10245,28 +10258,8 @@ ON CONFLICT (asset_code, reference_asset_code) DO UPDATE SET
     updated_at = now()
 `
 
-type SyncAutomaticAssetRatesParams struct {
-	ReferenceAssetCode string `json:"reference_asset_code"`
-	Code               string `json:"code"`
-	Code_2             string `json:"code_2"`
-	Code_3             string `json:"code_3"`
-	Code_4             string `json:"code_4"`
-	Code_5             string `json:"code_5"`
-	Code_6             string `json:"code_6"`
-	Code_7             string `json:"code_7"`
-}
-
-func (q *Queries) SyncAutomaticAssetRates(ctx context.Context, arg SyncAutomaticAssetRatesParams) (int64, error) {
-	result, err := q.exec(ctx, q.syncAutomaticAssetRatesStmt, syncAutomaticAssetRates,
-		arg.ReferenceAssetCode,
-		arg.Code,
-		arg.Code_2,
-		arg.Code_3,
-		arg.Code_4,
-		arg.Code_5,
-		arg.Code_6,
-		arg.Code_7,
-	)
+func (q *Queries) SyncAutomaticAssetRates(ctx context.Context, referenceAssetCode string) (int64, error) {
+	result, err := q.exec(ctx, q.syncAutomaticAssetRatesStmt, syncAutomaticAssetRates, referenceAssetCode)
 	if err != nil {
 		return 0, err
 	}

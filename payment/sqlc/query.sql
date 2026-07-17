@@ -382,22 +382,32 @@ INSERT INTO payment_asset_rate (
 )
 SELECT
     a.code,
-    $1,
-    CASE WHEN a.code = $2 THEN 1000000 ELSE 1 END,
-    CASE WHEN a.code = $3 THEN 'fixed' ELSE 'pending' END,
+    reference.code,
+    CASE WHEN a.code = reference.code THEN 1000000 ELSE 1 END,
+    CASE WHEN a.code = reference.code THEN 'fixed' ELSE 'pending' END,
     now(),
-    CASE WHEN a.code = $4 THEN false ELSE true END,
-    CASE WHEN a.code = $5 THEN NULL ELSE 'dexscreener' END,
-    CASE WHEN a.code = $6 THEN NULL ELSE a.chain END,
-    CASE WHEN a.code = $7 THEN NULL ELSE a.contract_address END
+    CASE WHEN a.code = reference.code THEN false ELSE true END,
+    CASE WHEN a.code = reference.code THEN NULL ELSE 'dexscreener' END,
+    CASE WHEN a.code = reference.code THEN NULL ELSE a.chain END,
+    CASE
+        WHEN a.code = reference.code THEN NULL
+        WHEN a.asset_kind = 'crypto_native' THEN reference.contract_address
+        ELSE a.contract_address
+    END
 FROM payment_asset a
+JOIN payment_asset reference
+    ON reference.code = sqlc.arg(reference_asset_code)
 WHERE a.is_active = true
   AND (
-      a.code = $8
+      a.code = reference.code
       OR (
           a.asset_kind IN ('crypto_native', 'crypto_jetton')
           AND a.chain IS NOT NULL
-          AND a.contract_address IS NOT NULL
+          AND (
+              (a.asset_kind = 'crypto_native' AND reference.contract_address IS NOT NULL)
+              OR
+              (a.asset_kind = 'crypto_jetton' AND a.contract_address IS NOT NULL)
+          )
       )
   )
 ON CONFLICT (asset_code, reference_asset_code) DO UPDATE SET
@@ -438,7 +448,8 @@ WHERE asset_code = $5
 -- name: ListDueAssetRateUpdates :many
 SELECT
     r.asset_code, r.reference_asset_code, r.auto_update_source, r.source_chain_id,
-    COALESCE(r.source_token_address, a.contract_address) AS source_token_address
+    COALESCE(r.source_token_address, a.contract_address) AS source_token_address,
+    a.asset_kind
 FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.auto_update_enabled = true

@@ -388,9 +388,9 @@ func TestFetchDexScreenerPricesBatchesAddressesAndSelectsLiquidity(t *testing.T)
 		"https://dex.example",
 		"ton",
 		[]repository.DueAssetRateUpdate{
-			{SourceTokenAddress: "token-a"},
-			{SourceTokenAddress: "token-b"},
-			{SourceTokenAddress: "token-a"},
+			{AssetCode: "token-a", AssetKind: "crypto_jetton", SourceTokenAddress: "token-a"},
+			{AssetCode: "token-b", AssetKind: "crypto_jetton", SourceTokenAddress: "token-b"},
+			{AssetCode: "token-a", AssetKind: "crypto_jetton", SourceTokenAddress: "token-a"},
 		},
 	)
 	if err != nil {
@@ -404,6 +404,51 @@ func TestFetchDexScreenerPricesBatchesAddressesAndSelectsLiquidity(t *testing.T)
 	}
 	if _, ok := prices["unexpected"]; ok {
 		t.Fatal("unexpected token must not be returned")
+	}
+}
+
+func TestFetchDexScreenerPricesCalculatesNativeTONFromUSDTPair(t *testing.T) {
+	const usdtAddress = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs"
+
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/tokens/v1/ton/"+usdtAddress {
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(`[
+				{
+					"baseToken":{"address":"` + usdtAddress + `"},
+					"quoteToken":{"address":"` + tonNativeDexScreenerAddress + `"},
+					"priceNative":"0.6599",
+					"priceUsd":"0.9984",
+					"liquidity":{"usd":6152967.9}
+				}
+			]`)),
+			Request: r,
+		}, nil
+	})}
+
+	prices, err := fetchDexScreenerPrices(
+		context.Background(),
+		client,
+		"https://dex.example",
+		"ton",
+		[]repository.DueAssetRateUpdate{
+			{
+				AssetCode:          "TON",
+				AssetKind:          "crypto_native",
+				SourceChainID:      "ton",
+				SourceTokenAddress: usdtAddress,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("fetch native TON price: %v", err)
+	}
+	if prices["TON"] != 1_512_957 {
+		t.Fatalf("native TON price = %d, want 1512957 micro-USDT", prices["TON"])
 	}
 }
 
@@ -3620,6 +3665,16 @@ func TestPaymentPriceUpdaterStopsWithService(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("automatic DOGS_TON rate was not stored: rate=%#v err=%v", rate, rateErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for {
+		rate, rateErr := service.User.GetUSDTPrice(env.ctx, user.GetUSDTPriceParams{AssetCode: "TON"})
+		if rateErr == nil && rate.USDTPerAssetMinor == 1_000_000 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("automatic native TON rate was not stored: rate=%#v err=%v", rate, rateErr)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

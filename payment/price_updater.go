@@ -134,9 +134,13 @@ func (a *Payment) updateDexScreenerGroup(
 			continue
 		}
 		for _, update := range batch {
-			price, ok := prices[update.SourceTokenAddress]
+			price, ok := prices[update.AssetCode]
 			if !ok {
-				updateErr := fmt.Errorf("dexscreener price not found for %s", update.SourceTokenAddress)
+				updateErr := fmt.Errorf(
+					"dexscreener price not found for asset %s via %s",
+					update.AssetCode,
+					update.SourceTokenAddress,
+				)
 				groupErrors = append(groupErrors, updateErr)
 				if err := a.pricing.FailAssetRateAutoUpdate(ctx, workerID, update, updateErr); err != nil {
 					groupErrors = append(groupErrors, err)
