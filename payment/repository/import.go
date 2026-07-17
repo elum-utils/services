@@ -135,10 +135,14 @@ func (r *PaymentRepository) importBulk(
 	preview ImportPreview,
 	result *ImportResult,
 ) error {
+	products := flattenProducts(pkg)
+	if err := r.resolveImportedDynamicPrices(ctx, products, strategy, preview); err != nil {
+		return err
+	}
+
 	if err := r.importGroupsBulk(ctx, workspaceID, pkg.Groups, strategy, preview, result); err != nil {
 		return err
 	}
-	products := flattenProducts(pkg)
 	if err := r.importProductsBulk(ctx, workspaceID, products, strategy, preview, result); err != nil {
 		return err
 	}
@@ -162,6 +166,136 @@ func (r *PaymentRepository) importBulk(
 		return err
 	}
 	return r.importTONWalletsBulk(ctx, workspaceID, pkg.TONWallets, strategy, preview, result)
+}
+
+type importedAssetRateKey struct {
+	assetCode          string
+	referenceAssetCode string
+}
+
+type importedAssetRate struct {
+	referencePerAssetMinor uint64
+	targetScale            uint16
+}
+
+func (r *PaymentRepository) resolveImportedDynamicPrices(
+	ctx context.Context,
+	products []ExportProduct,
+	strategy string,
+	preview ImportPreview,
+) error {
+	requested := make(map[importedAssetRateKey]struct{})
+	assetCodes := make([]string, 0)
+	referenceAssetCodes := make([]string, 0)
+
+	for _, product := range products {
+		if previewHasConflict(preview, "product", product.ID) && strategy == ImportConflictSkip {
+			continue
+		}
+
+		for _, price := range product.Prices {
+			if defaultString(price.PricingMode, PricingModeFixed) != PricingModeDynamic {
+				continue
+			}
+			if price.ReferenceAssetCode == nil {
+				return ErrInvalidPrice
+			}
+
+			key := importedAssetRateKey{
+				assetCode:          strings.TrimSpace(price.AssetCode),
+				referenceAssetCode: strings.TrimSpace(*price.ReferenceAssetCode),
+			}
+			if _, exists := requested[key]; exists {
+				continue
+			}
+
+			requested[key] = struct{}{}
+			assetCodes = append(assetCodes, key.assetCode)
+			referenceAssetCodes = append(referenceAssetCodes, key.referenceAssetCode)
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
+
+	rows, err := r.q.ListAssetRatesForPricing(ctx, paymentsqlc.ListAssetRatesForPricingParams{
+		AssetCodes:          assetCodes,
+		ReferenceAssetCodes: referenceAssetCodes,
+	})
+	if err != nil {
+		return err
+	}
+
+	rates := make(map[importedAssetRateKey]importedAssetRate, len(rows))
+	for _, row := range rows {
+		if row.ReferencePerAssetMinor <= 0 || row.TargetScale < 0 {
+			return ErrInvalidAssetRate
+		}
+
+		rates[importedAssetRateKey{
+			assetCode:          row.AssetCode,
+			referenceAssetCode: row.ReferenceAssetCode,
+		}] = importedAssetRate{
+			referencePerAssetMinor: uint64(row.ReferencePerAssetMinor),
+			targetScale:            uint16(row.TargetScale),
+		}
+	}
+
+	for productIndex := range products {
+		product := &products[productIndex]
+		if previewHasConflict(preview, "product", product.ID) && strategy == ImportConflictSkip {
+			continue
+		}
+
+		for priceIndex := range product.Prices {
+			price := &product.Prices[priceIndex]
+			if defaultString(price.PricingMode, PricingModeFixed) != PricingModeDynamic {
+				continue
+			}
+			if price.ReferenceAssetCode == nil || price.ReferenceListAmountMinor == nil ||
+				price.ReferenceDiscountAmountMinor == nil || price.Coefficient == nil {
+				return ErrInvalidPrice
+			}
+
+			key := importedAssetRateKey{
+				assetCode:          strings.TrimSpace(price.AssetCode),
+				referenceAssetCode: strings.TrimSpace(*price.ReferenceAssetCode),
+			}
+			rate, exists := rates[key]
+			if !exists {
+				return fmt.Errorf(
+					"payment import product %q price %q: %w",
+					product.ID,
+					price.AssetCode,
+					ErrAssetRateNotFound,
+				)
+			}
+
+			list, err := convertReferenceAmount(
+				*price.ReferenceListAmountMinor,
+				rate.targetScale,
+				rate.referencePerAssetMinor,
+				*price.Coefficient,
+			)
+			if err != nil {
+				return err
+			}
+			discount, err := convertReferenceAmount(
+				*price.ReferenceDiscountAmountMinor,
+				rate.targetScale,
+				rate.referencePerAssetMinor,
+				*price.Coefficient,
+			)
+			if err != nil {
+				return err
+			}
+
+			price.ListAmountMinor = list
+			price.DiscountAmountMinor = discount
+		}
+	}
+
+	return nil
 }
 
 func (r *PaymentRepository) replaceImportedPaymentChildren(

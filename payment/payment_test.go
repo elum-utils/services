@@ -3649,6 +3649,25 @@ func (f paymentTestRateRoundTrip) RoundTrip(request *http.Request) (*http.Respon
 func TestPaymentStarsTopupExampleImportExport(t *testing.T) {
 	env := setupPaymentIntegrationTest(t)
 	req := loadPaymentImportExample(t, "stars_topup_import.json")
+	now := time.Now().UTC()
+
+	for assetCode, referencePerAssetMinor := range map[string]uint64{
+		"TON":       1_530_000,
+		"NOT_TON":   1_000_000,
+		"DOGS_TON":  1_000_000,
+		"MAJOR_TON": 1_000_000,
+		"UTYA_TON":  1_000_000,
+	} {
+		if _, err := env.api.Operational.UpdateAssetRate(env.ctx, operational.UpdateAssetRateParams{
+			AssetCode:              assetCode,
+			ReferenceAssetCode:     repository.USDTAssetCode,
+			ReferencePerAssetMinor: referencePerAssetMinor,
+			Source:                 "integration-test",
+			ObservedAt:             now,
+		}); err != nil {
+			t.Fatalf("seed %s rate: %v", assetCode, err)
+		}
+	}
 
 	preview, err := env.api.Admin.PreviewImport(env.ctx, testWorkspaceID, req.Package)
 	if err != nil {
@@ -3696,6 +3715,37 @@ func TestPaymentStarsTopupExampleImportExport(t *testing.T) {
 	}
 	if product.Items[0].ItemID != "stars" || product.Items[0].Quantity != 100 || product.Items[0].Scale != 2 {
 		t.Fatalf("unexpected product item: %+v", product.Items[0])
+	}
+
+	usdtOrder, err := env.api.User.CreateOrder(env.ctx, checkout.CreateOrderParams{
+		Identity:  paymentTestIdentity(testWorkspaceID, 7007, 2, "dynamic-usdt-user"),
+		ProductID: "topup.stars.flexible",
+		Quantity:  10,
+		AssetCode: repository.USDTAssetCode,
+		Locale:    "ru",
+	})
+	if err != nil {
+		t.Fatalf("create USDT order: %v", err)
+	}
+	if usdtOrder.PayableAmountMinor != 150_000 {
+		t.Fatalf("USDT amount = %d, want 150000 micro-USDT", usdtOrder.PayableAmountMinor)
+	}
+
+	tonOrder, err := env.api.User.CreateOrder(env.ctx, checkout.CreateOrderParams{
+		Identity:  paymentTestIdentity(testWorkspaceID, 7007, 2, "dynamic-ton-user"),
+		ProductID: "topup.stars.flexible",
+		Quantity:  10,
+		AssetCode: "TON",
+		Locale:    "ru",
+	})
+	if err != nil {
+		t.Fatalf("create dynamic TON order: %v", err)
+	}
+	if tonOrder.PayableAmountMinor != 98_039_220 {
+		t.Fatalf(
+			"dynamic TON amount = %d, want 98039220 nanoTON for 0.15 USDT at 1.53 USDT/TON",
+			tonOrder.PayableAmountMinor,
+		)
 	}
 
 	prices := indexExportPrices(product.Prices)
@@ -3782,6 +3832,33 @@ func TestPaymentStarsTopupExampleImportExport(t *testing.T) {
 	}
 	if quantity != 300 || scale != 2 {
 		t.Fatalf("unexpected opaque fulfillment reward: quantity=%d scale=%d", quantity, scale)
+	}
+}
+
+func TestPaymentImportRejectsDynamicPriceWithPendingRate(t *testing.T) {
+	env := setupPaymentIntegrationTest(t)
+	req := loadPaymentImportExample(t, "stars_topup_import.json")
+
+	if _, err := env.db.ExecContext(env.ctx, `
+INSERT INTO payment_asset_rate (
+    asset_code,
+    reference_asset_code,
+    reference_per_asset_minor,
+    source,
+    observed_at
+)
+VALUES ('TON', 'USDT_TON', 1, 'pending', now())
+ON CONFLICT (asset_code, reference_asset_code) DO UPDATE SET
+    reference_per_asset_minor = EXCLUDED.reference_per_asset_minor,
+    source = EXCLUDED.source,
+    observed_at = EXCLUDED.observed_at
+`); err != nil {
+		t.Fatalf("seed pending TON rate: %v", err)
+	}
+
+	_, err := env.api.Admin.Import(env.ctx, testWorkspaceID, req)
+	if !errors.Is(err, repository.ErrAssetRateNotFound) {
+		t.Fatalf("import error = %v, want %v", err, repository.ErrAssetRateNotFound)
 	}
 }
 

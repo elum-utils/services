@@ -459,6 +459,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listActiveProductLimitCountersStmt, err = db.PrepareContext(ctx, listActiveProductLimitCounters); err != nil {
 		return nil, fmt.Errorf("error preparing query ListActiveProductLimitCounters: %w", err)
 	}
+	if q.listAssetRatesForPricingStmt, err = db.PrepareContext(ctx, listAssetRatesForPricing); err != nil {
+		return nil, fmt.Errorf("error preparing query ListAssetRatesForPricing: %w", err)
+	}
 	if q.listAssetUSDTPricesStmt, err = db.PrepareContext(ctx, listAssetUSDTPrices); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAssetUSDTPrices: %w", err)
 	}
@@ -1372,6 +1375,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listActiveProductLimitCountersStmt: %w", cerr)
 		}
 	}
+	if q.listAssetRatesForPricingStmt != nil {
+		if cerr := q.listAssetRatesForPricingStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listAssetRatesForPricingStmt: %w", cerr)
+		}
+	}
 	if q.listAssetUSDTPricesStmt != nil {
 		if cerr := q.listAssetUSDTPricesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAssetUSDTPricesStmt: %w", cerr)
@@ -1861,6 +1869,7 @@ type Queries struct {
 	incrementProductLimitCounterStmt                      *sql.Stmt
 	insertPaidOrderIndexFromOrderStmt                     *sql.Stmt
 	listActiveProductLimitCountersStmt                    *sql.Stmt
+	listAssetRatesForPricingStmt                          *sql.Stmt
 	listAssetUSDTPricesStmt                               *sql.Stmt
 	listAssetsStmt                                        *sql.Stmt
 	listDueAssetRateUpdatesStmt                           *sql.Stmt
@@ -2073,6 +2082,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		incrementProductLimitCounterStmt:                      q.incrementProductLimitCounterStmt,
 		insertPaidOrderIndexFromOrderStmt:                     q.insertPaidOrderIndexFromOrderStmt,
 		listActiveProductLimitCountersStmt:                    q.listActiveProductLimitCountersStmt,
+		listAssetRatesForPricingStmt:                          q.listAssetRatesForPricingStmt,
 		listAssetUSDTPricesStmt:                               q.listAssetUSDTPricesStmt,
 		listAssetsStmt:                                        q.listAssetsStmt,
 		listDueAssetRateUpdatesStmt:                           q.listDueAssetRateUpdatesStmt,

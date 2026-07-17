@@ -317,8 +317,22 @@ FROM payment_asset_rate r
 JOIN payment_asset target ON target.code = r.asset_code
 WHERE r.asset_code = $1
   AND r.reference_asset_code = $2
+  AND r.source <> 'pending'
 LIMIT 1
 FOR UPDATE;
+
+-- name: ListAssetRatesForPricing :many
+SELECT
+    r.asset_code,
+    r.reference_asset_code,
+    r.reference_per_asset_minor,
+    target.scale AS target_scale
+FROM payment_asset_rate r
+JOIN payment_asset target ON target.code = r.asset_code
+WHERE r.asset_code = ANY(CAST(sqlc.arg(asset_codes) AS text[]))
+  AND r.reference_asset_code = ANY(CAST(sqlc.arg(reference_asset_codes) AS text[]))
+  AND r.source <> 'pending'
+FOR SHARE OF r;
 
 -- name: GetAssetUSDTPrice :one
 SELECT
@@ -328,6 +342,7 @@ FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.asset_code = $1
   AND r.reference_asset_code = $2
+  AND r.source <> 'pending'
   AND a.is_active = true
 LIMIT 1;
 
@@ -338,6 +353,7 @@ SELECT
 FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.reference_asset_code = $1
+  AND r.source <> 'pending'
   AND a.is_active = true
 ORDER BY r.asset_code;
 

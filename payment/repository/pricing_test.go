@@ -32,6 +32,14 @@ func TestConvertReferenceAmount(t *testing.T) {
 			want:            312_500_000,
 		},
 		{
+			name:            "micro USDT to nano TON",
+			referenceAmount: 15_000,
+			targetScale:     9,
+			rate:            "1.53",
+			coefficient:     "1",
+			want:            9_803_922,
+		},
+		{
 			name:            "rounds minor unit upward",
 			referenceAmount: 1,
 			targetScale:     0,

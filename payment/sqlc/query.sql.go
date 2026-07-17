@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -5407,6 +5408,7 @@ FROM payment_asset_rate r
 JOIN payment_asset target ON target.code = r.asset_code
 WHERE r.asset_code = $1
   AND r.reference_asset_code = $2
+  AND r.source <> 'pending'
 LIMIT 1
 FOR UPDATE
 `
@@ -5436,6 +5438,7 @@ FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.asset_code = $1
   AND r.reference_asset_code = $2
+  AND r.source <> 'pending'
   AND a.is_active = true
 LIMIT 1
 `
@@ -7601,6 +7604,60 @@ func (q *Queries) ListActiveProductLimitCounters(ctx context.Context, arg ListAc
 	return items, nil
 }
 
+const listAssetRatesForPricing = `-- name: ListAssetRatesForPricing :many
+SELECT
+    r.asset_code,
+    r.reference_asset_code,
+    r.reference_per_asset_minor,
+    target.scale AS target_scale
+FROM payment_asset_rate r
+JOIN payment_asset target ON target.code = r.asset_code
+WHERE r.asset_code = ANY(CAST($1 AS text[]))
+  AND r.reference_asset_code = ANY(CAST($2 AS text[]))
+  AND r.source <> 'pending'
+FOR SHARE OF r
+`
+
+type ListAssetRatesForPricingParams struct {
+	AssetCodes          []string `json:"asset_codes"`
+	ReferenceAssetCodes []string `json:"reference_asset_codes"`
+}
+
+type ListAssetRatesForPricingRow struct {
+	AssetCode              string `json:"asset_code"`
+	ReferenceAssetCode     string `json:"reference_asset_code"`
+	ReferencePerAssetMinor int64  `json:"reference_per_asset_minor"`
+	TargetScale            int16  `json:"target_scale"`
+}
+
+func (q *Queries) ListAssetRatesForPricing(ctx context.Context, arg ListAssetRatesForPricingParams) ([]ListAssetRatesForPricingRow, error) {
+	rows, err := q.query(ctx, q.listAssetRatesForPricingStmt, listAssetRatesForPricing, pq.Array(arg.AssetCodes), pq.Array(arg.ReferenceAssetCodes))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetRatesForPricingRow
+	for rows.Next() {
+		var i ListAssetRatesForPricingRow
+		if err := rows.Scan(
+			&i.AssetCode,
+			&i.ReferenceAssetCode,
+			&i.ReferencePerAssetMinor,
+			&i.TargetScale,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssetUSDTPrices = `-- name: ListAssetUSDTPrices :many
 SELECT
     r.asset_code, a.title AS asset_title, a.scale, r.reference_asset_code,
@@ -7608,6 +7665,7 @@ SELECT
 FROM payment_asset_rate r
 JOIN payment_asset a ON a.code = r.asset_code
 WHERE r.reference_asset_code = $1
+  AND r.source <> 'pending'
   AND a.is_active = true
 ORDER BY r.asset_code
 `
