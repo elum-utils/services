@@ -326,7 +326,7 @@ func (q *Queries) AdminListAssignmentEvents(ctx context.Context, arg AdminListAs
 }
 
 const adminListAssignments = `-- name: AdminListAssignments :many
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
+SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, rewards_snapshot, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
 WHERE workspace_id = $1
   AND cpa_id = $2
@@ -368,6 +368,7 @@ func (q *Queries) AdminListAssignments(ctx context.Context, arg AdminListAssignm
 			&i.CodeID,
 			&i.Code,
 			&i.CodeMode,
+			&i.RewardsSnapshot,
 			&i.Status,
 			&i.IssuedAt,
 			&i.CompletedAt,
@@ -531,7 +532,7 @@ type AdminListOfferBundleRewardsRow struct {
 	RewardKey      string              `json:"reward_key"`
 	RewardType     CpaRewardType       `json:"reward_type"`
 	RewardQuantity int64               `json:"reward_quantity"`
-	RewardScale    int16               `json:"reward_scale"`
+	RewardScale    int32               `json:"reward_scale"`
 	DurationUnit   NullCpaDurationUnit `json:"duration_unit"`
 }
 
@@ -681,58 +682,6 @@ func (q *Queries) AdminListOfferIDs(ctx context.Context, workspaceID string) ([]
 	return items, nil
 }
 
-const adminListOffers = `-- name: AdminListOffers :many
-SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
-FROM cpa_offer
-WHERE workspace_id = $1
-ORDER BY created_at DESC, id
-LIMIT $2 OFFSET $3
-`
-
-type AdminListOffersParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	Limit       int32  `json:"limit"`
-	Offset      int32  `json:"offset"`
-}
-
-func (q *Queries) AdminListOffers(ctx context.Context, arg AdminListOffersParams) ([]CpaOffer, error) {
-	rows, err := q.query(ctx, q.adminListOffersStmt, adminListOffers, arg.WorkspaceID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CpaOffer
-	for rows.Next() {
-		var i CpaOffer
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.ID,
-			&i.Payload,
-			&i.Target,
-			&i.CodeMode,
-			&i.CodeSource,
-			&i.SharedCode,
-			&i.GeneratedLength,
-			&i.GeneratedAlphabet,
-			&i.IsActive,
-			&i.StartAt,
-			&i.EndAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const adminUpsertLocalization = `-- name: AdminUpsertLocalization :exec
 INSERT INTO cpa_localization (
     workspace_id, cpa_id, locale, title, description
@@ -832,7 +781,7 @@ type AdminUpsertRewardParams struct {
 	RewardKey    string              `json:"reward_key"`
 	RewardType   CpaRewardType       `json:"reward_type"`
 	Quantity     int64               `json:"quantity"`
-	Scale        int16               `json:"scale"`
+	Scale        int32               `json:"scale"`
 	DurationUnit NullCpaDurationUnit `json:"duration_unit"`
 }
 
@@ -873,20 +822,21 @@ func (q *Queries) CompleteAssignment(ctx context.Context, arg CompleteAssignment
 const createAssignment = `-- name: CreateAssignment :one
 INSERT INTO cpa_assignment (
     workspace_id, cpa_id, app_id, platform_id, platform_user_id,
-    code_id, code, code_mode
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    code_id, code, code_mode, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id
 `
 
 type CreateAssignmentParams struct {
-	WorkspaceID    string        `json:"workspace_id"`
-	CpaID          string        `json:"cpa_id"`
-	AppID          int64         `json:"app_id"`
-	PlatformID     int64         `json:"platform_id"`
-	PlatformUserID string        `json:"platform_user_id"`
-	CodeID         sql.NullInt64 `json:"code_id"`
-	Code           string        `json:"code"`
-	CodeMode       CpaCodeMode   `json:"code_mode"`
+	WorkspaceID     string          `json:"workspace_id"`
+	CpaID           string          `json:"cpa_id"`
+	AppID           int64           `json:"app_id"`
+	PlatformID      int64           `json:"platform_id"`
+	PlatformUserID  string          `json:"platform_user_id"`
+	CodeID          sql.NullInt64   `json:"code_id"`
+	Code            string          `json:"code"`
+	CodeMode        CpaCodeMode     `json:"code_mode"`
+	RewardsSnapshot json.RawMessage `json:"rewards_snapshot"`
 }
 
 func (q *Queries) CreateAssignment(ctx context.Context, arg CreateAssignmentParams) (int64, error) {
@@ -899,6 +849,7 @@ func (q *Queries) CreateAssignment(ctx context.Context, arg CreateAssignmentPara
 		arg.CodeID,
 		arg.Code,
 		arg.CodeMode,
+		arg.RewardsSnapshot,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -952,7 +903,7 @@ func (q *Queries) CreateGeneratedCode(ctx context.Context, arg CreateGeneratedCo
 	return id, err
 }
 
-const getActiveOfferForUpdate = `-- name: GetActiveOfferForUpdate :one
+const getActiveOffer = `-- name: GetActiveOffer :one
 SELECT workspace_id, id, payload, target, code_mode, code_source, shared_code, generated_length, generated_alphabet, is_active, start_at, end_at, created_at, updated_at
 FROM cpa_offer
 WHERE workspace_id = $1
@@ -961,16 +912,15 @@ WHERE workspace_id = $1
   AND (start_at IS NULL OR start_at <= now())
   AND (end_at IS NULL OR end_at > now())
 LIMIT 1
-FOR UPDATE
 `
 
-type GetActiveOfferForUpdateParams struct {
+type GetActiveOfferParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	ID          string `json:"id"`
 }
 
-func (q *Queries) GetActiveOfferForUpdate(ctx context.Context, arg GetActiveOfferForUpdateParams) (CpaOffer, error) {
-	row := q.queryRow(ctx, q.getActiveOfferForUpdateStmt, getActiveOfferForUpdate, arg.WorkspaceID, arg.ID)
+func (q *Queries) GetActiveOffer(ctx context.Context, arg GetActiveOfferParams) (CpaOffer, error) {
+	row := q.queryRow(ctx, q.getActiveOfferStmt, getActiveOffer, arg.WorkspaceID, arg.ID)
 	var i CpaOffer
 	err := row.Scan(
 		&i.WorkspaceID,
@@ -992,7 +942,7 @@ func (q *Queries) GetActiveOfferForUpdate(ctx context.Context, arg GetActiveOffe
 }
 
 const getAssignment = `-- name: GetAssignment :one
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
+SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, rewards_snapshot, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
 WHERE workspace_id = $1
   AND cpa_id = $2
@@ -1029,6 +979,7 @@ func (q *Queries) GetAssignment(ctx context.Context, arg GetAssignmentParams) (C
 		&i.CodeID,
 		&i.Code,
 		&i.CodeMode,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.CompletedAt,
@@ -1039,7 +990,7 @@ func (q *Queries) GetAssignment(ctx context.Context, arg GetAssignmentParams) (C
 }
 
 const getAssignmentByID = `-- name: GetAssignmentByID :one
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
+SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, rewards_snapshot, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
 WHERE workspace_id = $1 AND id = $2
 LIMIT 1
@@ -1063,6 +1014,7 @@ func (q *Queries) GetAssignmentByID(ctx context.Context, arg GetAssignmentByIDPa
 		&i.CodeID,
 		&i.Code,
 		&i.CodeMode,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.CompletedAt,
@@ -1073,7 +1025,7 @@ func (q *Queries) GetAssignmentByID(ctx context.Context, arg GetAssignmentByIDPa
 }
 
 const getAssignmentForUpdate = `-- name: GetAssignmentForUpdate :one
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
+SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, rewards_snapshot, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
 WHERE workspace_id = $1
   AND cpa_id = $2
@@ -1111,6 +1063,7 @@ func (q *Queries) GetAssignmentForUpdate(ctx context.Context, arg GetAssignmentF
 		&i.CodeID,
 		&i.Code,
 		&i.CodeMode,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.CompletedAt,
@@ -1279,7 +1232,7 @@ type ListActiveOfferCatalogRow struct {
 	RewardKey            sql.NullString        `json:"reward_key"`
 	RewardType           NullCpaRewardType     `json:"reward_type"`
 	RewardQuantity       sql.NullInt64         `json:"reward_quantity"`
-	RewardScale          sql.NullInt16         `json:"reward_scale"`
+	RewardScale          sql.NullInt32         `json:"reward_scale"`
 	DurationUnit         NullCpaDurationUnit   `json:"duration_unit"`
 }
 
@@ -1419,7 +1372,7 @@ func (q *Queries) ListRewards(ctx context.Context, arg ListRewardsParams) ([]Cpa
 }
 
 const listUserAssignments = `-- name: ListUserAssignments :many
-SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, status, issued_at, completed_at, deleted_at, updated_at
+SELECT id, workspace_id, cpa_id, app_id, platform_id, platform_user_id, code_id, code, code_mode, rewards_snapshot, status, issued_at, completed_at, deleted_at, updated_at
 FROM cpa_assignment
 WHERE workspace_id = $1
   AND app_id = $2
@@ -1459,6 +1412,7 @@ func (q *Queries) ListUserAssignments(ctx context.Context, arg ListUserAssignmen
 			&i.CodeID,
 			&i.Code,
 			&i.CodeMode,
+			&i.RewardsSnapshot,
 			&i.Status,
 			&i.IssuedAt,
 			&i.CompletedAt,
@@ -1514,7 +1468,7 @@ INSERT INTO cpa_stats_daily (
 SELECT
     e.workspace_id,
     e.cpa_id,
-    e.occurred_at::date,
+    (e.occurred_at AT TIME ZONE 'UTC')::date,
     SUM((e.event_type = 'issued')::int)::bigint,
     SUM((e.event_type = 'completed')::int)::bigint,
     COUNT(DISTINCT e.assignment_id)::bigint
@@ -1522,7 +1476,7 @@ FROM cpa_assignment_event e
 WHERE e.workspace_id = $3
   AND e.occurred_at >= $1
   AND e.occurred_at < $2
-GROUP BY e.workspace_id, e.cpa_id, e.occurred_at::date
+GROUP BY e.workspace_id, e.cpa_id, (e.occurred_at AT TIME ZONE 'UTC')::date
 ON CONFLICT (workspace_id, cpa_id, stats_date) DO UPDATE SET
     issued_count = EXCLUDED.issued_count,
     completed_count = EXCLUDED.completed_count,

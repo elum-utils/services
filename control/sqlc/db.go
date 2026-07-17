@@ -54,6 +54,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createInviteStmt, err = db.PrepareContext(ctx, createInvite); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateInvite: %w", err)
 	}
+	if q.createInviteAcceptanceStmt, err = db.PrepareContext(ctx, createInviteAcceptance); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateInviteAcceptance: %w", err)
+	}
 	if q.createRoleStmt, err = db.PrepareContext(ctx, createRole); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateRole: %w", err)
 	}
@@ -90,11 +93,11 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getAccountPositionStmt, err = db.PrepareContext(ctx, getAccountPosition); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAccountPosition: %w", err)
 	}
-	if q.getActiveInviteByHashForUpdateStmt, err = db.PrepareContext(ctx, getActiveInviteByHashForUpdate); err != nil {
-		return nil, fmt.Errorf("error preparing query GetActiveInviteByHashForUpdate: %w", err)
-	}
 	if q.getActiveSessionByHashStmt, err = db.PrepareContext(ctx, getActiveSessionByHash); err != nil {
 		return nil, fmt.Errorf("error preparing query GetActiveSessionByHash: %w", err)
+	}
+	if q.getInviteByHashForUpdateStmt, err = db.PrepareContext(ctx, getInviteByHashForUpdate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetInviteByHashForUpdate: %w", err)
 	}
 	if q.getMethodStmt, err = db.PrepareContext(ctx, getMethod); err != nil {
 		return nil, fmt.Errorf("error preparing query GetMethod: %w", err)
@@ -170,6 +173,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.lockMethodRegistryStmt, err = db.PrepareContext(ctx, lockMethodRegistry); err != nil {
 		return nil, fmt.Errorf("error preparing query LockMethodRegistry: %w", err)
+	}
+	if q.lockWorkspaceAuthorizationStmt, err = db.PrepareContext(ctx, lockWorkspaceAuthorization); err != nil {
+		return nil, fmt.Errorf("error preparing query LockWorkspaceAuthorization: %w", err)
 	}
 	if q.removeRoleMemberStmt, err = db.PrepareContext(ctx, removeRoleMember); err != nil {
 		return nil, fmt.Errorf("error preparing query RemoveRoleMember: %w", err)
@@ -280,6 +286,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createInviteStmt: %w", cerr)
 		}
 	}
+	if q.createInviteAcceptanceStmt != nil {
+		if cerr := q.createInviteAcceptanceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createInviteAcceptanceStmt: %w", cerr)
+		}
+	}
 	if q.createRoleStmt != nil {
 		if cerr := q.createRoleStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createRoleStmt: %w", cerr)
@@ -340,14 +351,14 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getAccountPositionStmt: %w", cerr)
 		}
 	}
-	if q.getActiveInviteByHashForUpdateStmt != nil {
-		if cerr := q.getActiveInviteByHashForUpdateStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getActiveInviteByHashForUpdateStmt: %w", cerr)
-		}
-	}
 	if q.getActiveSessionByHashStmt != nil {
 		if cerr := q.getActiveSessionByHashStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getActiveSessionByHashStmt: %w", cerr)
+		}
+	}
+	if q.getInviteByHashForUpdateStmt != nil {
+		if cerr := q.getInviteByHashForUpdateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getInviteByHashForUpdateStmt: %w", cerr)
 		}
 	}
 	if q.getMethodStmt != nil {
@@ -473,6 +484,11 @@ func (q *Queries) Close() error {
 	if q.lockMethodRegistryStmt != nil {
 		if cerr := q.lockMethodRegistryStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing lockMethodRegistryStmt: %w", cerr)
+		}
+	}
+	if q.lockWorkspaceAuthorizationStmt != nil {
+		if cerr := q.lockWorkspaceAuthorizationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockWorkspaceAuthorizationStmt: %w", cerr)
 		}
 	}
 	if q.removeRoleMemberStmt != nil {
@@ -614,6 +630,7 @@ type Queries struct {
 	createAccountStmt                            *sql.Stmt
 	createAuditEventStmt                         *sql.Stmt
 	createInviteStmt                             *sql.Stmt
+	createInviteAcceptanceStmt                   *sql.Stmt
 	createRoleStmt                               *sql.Stmt
 	createSessionStmt                            *sql.Stmt
 	createTwoFactorChallengeStmt                 *sql.Stmt
@@ -626,8 +643,8 @@ type Queries struct {
 	findAccountByIdentityStmt                    *sql.Stmt
 	getAccountStmt                               *sql.Stmt
 	getAccountPositionStmt                       *sql.Stmt
-	getActiveInviteByHashForUpdateStmt           *sql.Stmt
 	getActiveSessionByHashStmt                   *sql.Stmt
+	getInviteByHashForUpdateStmt                 *sql.Stmt
 	getMethodStmt                                *sql.Stmt
 	getRoleStmt                                  *sql.Stmt
 	getTwoFactorStmt                             *sql.Stmt
@@ -653,6 +670,7 @@ type Queries struct {
 	listWorkspaceMembersStmt                     *sql.Stmt
 	listWorkspacesForAccountStmt                 *sql.Stmt
 	lockMethodRegistryStmt                       *sql.Stmt
+	lockWorkspaceAuthorizationStmt               *sql.Stmt
 	removeRoleMemberStmt                         *sql.Stmt
 	removeWorkspaceMemberStmt                    *sql.Stmt
 	removeWorkspaceMemberRolesStmt               *sql.Stmt
@@ -687,6 +705,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createAccountStmt:                  q.createAccountStmt,
 		createAuditEventStmt:               q.createAuditEventStmt,
 		createInviteStmt:                   q.createInviteStmt,
+		createInviteAcceptanceStmt:         q.createInviteAcceptanceStmt,
 		createRoleStmt:                     q.createRoleStmt,
 		createSessionStmt:                  q.createSessionStmt,
 		createTwoFactorChallengeStmt:       q.createTwoFactorChallengeStmt,
@@ -699,8 +718,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		findAccountByIdentityStmt:          q.findAccountByIdentityStmt,
 		getAccountStmt:                     q.getAccountStmt,
 		getAccountPositionStmt:             q.getAccountPositionStmt,
-		getActiveInviteByHashForUpdateStmt: q.getActiveInviteByHashForUpdateStmt,
 		getActiveSessionByHashStmt:         q.getActiveSessionByHashStmt,
+		getInviteByHashForUpdateStmt:       q.getInviteByHashForUpdateStmt,
 		getMethodStmt:                      q.getMethodStmt,
 		getRoleStmt:                        q.getRoleStmt,
 		getTwoFactorStmt:                   q.getTwoFactorStmt,
@@ -726,6 +745,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listWorkspaceMembersStmt:                     q.listWorkspaceMembersStmt,
 		listWorkspacesForAccountStmt:                 q.listWorkspacesForAccountStmt,
 		lockMethodRegistryStmt:                       q.lockMethodRegistryStmt,
+		lockWorkspaceAuthorizationStmt:               q.lockWorkspaceAuthorizationStmt,
 		removeRoleMemberStmt:                         q.removeRoleMemberStmt,
 		removeWorkspaceMemberStmt:                    q.removeWorkspaceMemberStmt,
 		removeWorkspaceMemberRolesStmt:               q.removeWorkspaceMemberRolesStmt,

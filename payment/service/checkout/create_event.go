@@ -12,6 +12,7 @@ func (a *Checkout) CreateEvent(ctx context.Context, params CreateEventParams) (u
 	ctx = mergedCtx
 
 	return a.repository.CreateEvent(ctx, repository.EventCreateParams{
+		WorkspaceID:       params.WorkspaceID,
 		ProviderCode:      params.ProviderCode,
 		AttemptID:         params.AttemptID,
 		OrderID:           params.OrderID,

@@ -91,6 +91,10 @@ func (r *Repository) UpdateCalendar(ctx context.Context, params SaveCalendarPara
 }
 
 func (r *Repository) GetCalendarDefinition(ctx context.Context, workspaceID, id string) (Calendar, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Calendar{}, err
+	}
+
 	key := calendarCacheKey(calendarCacheAdminCalendar, workspaceID, id)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -111,6 +115,10 @@ func (r *Repository) GetCalendarDefinition(ctx context.Context, workspaceID, id 
 }
 
 func (r *Repository) ListCalendars(ctx context.Context, workspaceID string, limit, offset int32) ([]Calendar, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	key := calendarCacheKey(calendarCacheAdminList, workspaceID, limit, offset)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
@@ -228,6 +236,10 @@ func (r *Repository) GetLocalization(
 }
 
 func (r *Repository) ListLocalizations(ctx context.Context, workspaceID, calendarID string) ([]Localization, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	key := calendarCacheKey(calendarCacheAdminLocalizations, workspaceID, calendarID)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -403,6 +415,10 @@ func (r *Repository) UpdateReward(
 }
 
 func (r *Repository) GetReward(ctx context.Context, workspaceID, calendarID string, id uint64) (Reward, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Reward{}, err
+	}
+
 	key := calendarCacheKey(calendarCacheAdminReward, workspaceID, calendarID, id)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,

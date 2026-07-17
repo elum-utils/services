@@ -24,6 +24,9 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.acquirePartnerIssueStartLeaseStmt, err = db.PrepareContext(ctx, acquirePartnerIssueStartLease); err != nil {
+		return nil, fmt.Errorf("error preparing query AcquirePartnerIssueStartLease: %w", err)
+	}
 	if q.adminCreateTaskStmt, err = db.PrepareContext(ctx, adminCreateTask); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminCreateTask: %w", err)
 	}
@@ -144,6 +147,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.ensureProgressStmt, err = db.PrepareContext(ctx, ensureProgress); err != nil {
 		return nil, fmt.Errorf("error preparing query EnsureProgress: %w", err)
 	}
+	if q.expirePartnerIssueStmt, err = db.PrepareContext(ctx, expirePartnerIssue); err != nil {
+		return nil, fmt.Errorf("error preparing query ExpirePartnerIssue: %w", err)
+	}
 	if q.exportListTasksStmt, err = db.PrepareContext(ctx, exportListTasks); err != nil {
 		return nil, fmt.Errorf("error preparing query ExportListTasks: %w", err)
 	}
@@ -180,17 +186,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getPartnerIssueByExternalClickIDStmt, err = db.PrepareContext(ctx, getPartnerIssueByExternalClickID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerIssueByExternalClickID: %w", err)
 	}
-	if q.getPartnerIssueByExternalUserStmt, err = db.PrepareContext(ctx, getPartnerIssueByExternalUser); err != nil {
-		return nil, fmt.Errorf("error preparing query GetPartnerIssueByExternalUser: %w", err)
-	}
 	if q.getPartnerIssueByIDStmt, err = db.PrepareContext(ctx, getPartnerIssueByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerIssueByID: %w", err)
 	}
 	if q.getPartnerIssueByIDForUpdateStmt, err = db.PrepareContext(ctx, getPartnerIssueByIDForUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerIssueByIDForUpdate: %w", err)
 	}
-	if q.getPartnerIssueByPrivatePayloadUserStmt, err = db.PrepareContext(ctx, getPartnerIssueByPrivatePayloadUser); err != nil {
-		return nil, fmt.Errorf("error preparing query GetPartnerIssueByPrivatePayloadUser: %w", err)
+	if q.getPartnerIssuesByExternalUserStmt, err = db.PrepareContext(ctx, getPartnerIssuesByExternalUser); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPartnerIssuesByExternalUser: %w", err)
+	}
+	if q.getPartnerIssuesByPrivatePayloadUserStmt, err = db.PrepareContext(ctx, getPartnerIssuesByPrivatePayloadUser); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPartnerIssuesByPrivatePayloadUser: %w", err)
 	}
 	if q.getPartnerRewardGrantByIssueStmt, err = db.PrepareContext(ctx, getPartnerRewardGrantByIssue); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPartnerRewardGrantByIssue: %w", err)
@@ -203,6 +209,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getStartTaskByKeyStmt, err = db.PrepareContext(ctx, getStartTaskByKey); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStartTaskByKey: %w", err)
+	}
+	if q.hasActivePartnerIssueStartLeaseStmt, err = db.PrepareContext(ctx, hasActivePartnerIssueStartLease); err != nil {
+		return nil, fmt.Errorf("error preparing query HasActivePartnerIssueStartLease: %w", err)
 	}
 	if q.incrementPartnerStatsDailyStmt, err = db.PrepareContext(ctx, incrementPartnerStatsDaily); err != nil {
 		return nil, fmt.Errorf("error preparing query IncrementPartnerStatsDaily: %w", err)
@@ -267,6 +276,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.refreshTaskDailyStatsStmt, err = db.PrepareContext(ctx, refreshTaskDailyStats); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshTaskDailyStats: %w", err)
 	}
+	if q.releasePartnerIssueStartLeaseStmt, err = db.PrepareContext(ctx, releasePartnerIssueStartLease); err != nil {
+		return nil, fmt.Errorf("error preparing query ReleasePartnerIssueStartLease: %w", err)
+	}
+	if q.renewPartnerIssueStartLeaseStmt, err = db.PrepareContext(ctx, renewPartnerIssueStartLease); err != nil {
+		return nil, fmt.Errorf("error preparing query RenewPartnerIssueStartLease: %w", err)
+	}
+	if q.reserveRewardOperationStmt, err = db.PrepareContext(ctx, reserveRewardOperation); err != nil {
+		return nil, fmt.Errorf("error preparing query ReserveRewardOperation: %w", err)
+	}
 	if q.revokePartnerIssueStmt, err = db.PrepareContext(ctx, revokePartnerIssue); err != nil {
 		return nil, fmt.Errorf("error preparing query RevokePartnerIssue: %w", err)
 	}
@@ -287,6 +305,11 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.acquirePartnerIssueStartLeaseStmt != nil {
+		if cerr := q.acquirePartnerIssueStartLeaseStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing acquirePartnerIssueStartLeaseStmt: %w", cerr)
+		}
+	}
 	if q.adminCreateTaskStmt != nil {
 		if cerr := q.adminCreateTaskStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminCreateTaskStmt: %w", cerr)
@@ -487,6 +510,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing ensureProgressStmt: %w", cerr)
 		}
 	}
+	if q.expirePartnerIssueStmt != nil {
+		if cerr := q.expirePartnerIssueStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing expirePartnerIssueStmt: %w", cerr)
+		}
+	}
 	if q.exportListTasksStmt != nil {
 		if cerr := q.exportListTasksStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing exportListTasksStmt: %w", cerr)
@@ -547,11 +575,6 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getPartnerIssueByExternalClickIDStmt: %w", cerr)
 		}
 	}
-	if q.getPartnerIssueByExternalUserStmt != nil {
-		if cerr := q.getPartnerIssueByExternalUserStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getPartnerIssueByExternalUserStmt: %w", cerr)
-		}
-	}
 	if q.getPartnerIssueByIDStmt != nil {
 		if cerr := q.getPartnerIssueByIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getPartnerIssueByIDStmt: %w", cerr)
@@ -562,9 +585,14 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getPartnerIssueByIDForUpdateStmt: %w", cerr)
 		}
 	}
-	if q.getPartnerIssueByPrivatePayloadUserStmt != nil {
-		if cerr := q.getPartnerIssueByPrivatePayloadUserStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getPartnerIssueByPrivatePayloadUserStmt: %w", cerr)
+	if q.getPartnerIssuesByExternalUserStmt != nil {
+		if cerr := q.getPartnerIssuesByExternalUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPartnerIssuesByExternalUserStmt: %w", cerr)
+		}
+	}
+	if q.getPartnerIssuesByPrivatePayloadUserStmt != nil {
+		if cerr := q.getPartnerIssuesByPrivatePayloadUserStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPartnerIssuesByPrivatePayloadUserStmt: %w", cerr)
 		}
 	}
 	if q.getPartnerRewardGrantByIssueStmt != nil {
@@ -585,6 +613,11 @@ func (q *Queries) Close() error {
 	if q.getStartTaskByKeyStmt != nil {
 		if cerr := q.getStartTaskByKeyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getStartTaskByKeyStmt: %w", cerr)
+		}
+	}
+	if q.hasActivePartnerIssueStartLeaseStmt != nil {
+		if cerr := q.hasActivePartnerIssueStartLeaseStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing hasActivePartnerIssueStartLeaseStmt: %w", cerr)
 		}
 	}
 	if q.incrementPartnerStatsDailyStmt != nil {
@@ -692,6 +725,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing refreshTaskDailyStatsStmt: %w", cerr)
 		}
 	}
+	if q.releasePartnerIssueStartLeaseStmt != nil {
+		if cerr := q.releasePartnerIssueStartLeaseStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing releasePartnerIssueStartLeaseStmt: %w", cerr)
+		}
+	}
+	if q.renewPartnerIssueStartLeaseStmt != nil {
+		if cerr := q.renewPartnerIssueStartLeaseStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing renewPartnerIssueStartLeaseStmt: %w", cerr)
+		}
+	}
+	if q.reserveRewardOperationStmt != nil {
+		if cerr := q.reserveRewardOperationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing reserveRewardOperationStmt: %w", cerr)
+		}
+	}
 	if q.revokePartnerIssueStmt != nil {
 		if cerr := q.revokePartnerIssueStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing revokePartnerIssueStmt: %w", cerr)
@@ -756,6 +804,7 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                                        DBTX
 	tx                                        *sql.Tx
+	acquirePartnerIssueStartLeaseStmt         *sql.Stmt
 	adminCreateTaskStmt                       *sql.Stmt
 	adminDeleteComplexConditionStmt           *sql.Stmt
 	adminDeletePartnerRewardRuleStmt          *sql.Stmt
@@ -796,6 +845,7 @@ type Queries struct {
 	countProgressEventsByExternalKeyStmt      *sql.Stmt
 	createPartnerIssueStmt                    *sql.Stmt
 	ensureProgressStmt                        *sql.Stmt
+	expirePartnerIssueStmt                    *sql.Stmt
 	exportListTasksStmt                       *sql.Stmt
 	getClaimBundleByIDForUpdateStmt           *sql.Stmt
 	getClaimBundleByKeyForUpdateStmt          *sql.Stmt
@@ -808,14 +858,15 @@ type Queries struct {
 	getNextSequenceTaskIDStmt                 *sql.Stmt
 	getPartnerConfigByWebhookSecretStmt       *sql.Stmt
 	getPartnerIssueByExternalClickIDStmt      *sql.Stmt
-	getPartnerIssueByExternalUserStmt         *sql.Stmt
 	getPartnerIssueByIDStmt                   *sql.Stmt
 	getPartnerIssueByIDForUpdateStmt          *sql.Stmt
-	getPartnerIssueByPrivatePayloadUserStmt   *sql.Stmt
+	getPartnerIssuesByExternalUserStmt        *sql.Stmt
+	getPartnerIssuesByPrivatePayloadUserStmt  *sql.Stmt
 	getPartnerRewardGrantByIssueStmt          *sql.Stmt
 	getSequenceStateForUpdateStmt             *sql.Stmt
 	getStartTaskByIDStmt                      *sql.Stmt
 	getStartTaskByKeyStmt                     *sql.Stmt
+	hasActivePartnerIssueStartLeaseStmt       *sql.Stmt
 	incrementPartnerStatsDailyStmt            *sql.Stmt
 	insertPartnerRewardGrantStmt              *sql.Stmt
 	insertPartnerStatsEventStmt               *sql.Stmt
@@ -837,6 +888,9 @@ type Queries struct {
 	listSequenceStatesForUserStmt             *sql.Stmt
 	refreshTaskDailyOverviewStmt              *sql.Stmt
 	refreshTaskDailyStatsStmt                 *sql.Stmt
+	releasePartnerIssueStartLeaseStmt         *sql.Stmt
+	renewPartnerIssueStartLeaseStmt           *sql.Stmt
+	reserveRewardOperationStmt                *sql.Stmt
 	revokePartnerIssueStmt                    *sql.Stmt
 	updatePartnerIssueStartStmt               *sql.Stmt
 	updateProgressStmt                        *sql.Stmt
@@ -848,6 +902,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                                        tx,
 		tx:                                        tx,
+		acquirePartnerIssueStartLeaseStmt:         q.acquirePartnerIssueStartLeaseStmt,
 		adminCreateTaskStmt:                       q.adminCreateTaskStmt,
 		adminDeleteComplexConditionStmt:           q.adminDeleteComplexConditionStmt,
 		adminDeletePartnerRewardRuleStmt:          q.adminDeletePartnerRewardRuleStmt,
@@ -888,6 +943,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		countProgressEventsByExternalKeyStmt:      q.countProgressEventsByExternalKeyStmt,
 		createPartnerIssueStmt:                    q.createPartnerIssueStmt,
 		ensureProgressStmt:                        q.ensureProgressStmt,
+		expirePartnerIssueStmt:                    q.expirePartnerIssueStmt,
 		exportListTasksStmt:                       q.exportListTasksStmt,
 		getClaimBundleByIDForUpdateStmt:           q.getClaimBundleByIDForUpdateStmt,
 		getClaimBundleByKeyForUpdateStmt:          q.getClaimBundleByKeyForUpdateStmt,
@@ -900,14 +956,15 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getNextSequenceTaskIDStmt:                 q.getNextSequenceTaskIDStmt,
 		getPartnerConfigByWebhookSecretStmt:       q.getPartnerConfigByWebhookSecretStmt,
 		getPartnerIssueByExternalClickIDStmt:      q.getPartnerIssueByExternalClickIDStmt,
-		getPartnerIssueByExternalUserStmt:         q.getPartnerIssueByExternalUserStmt,
 		getPartnerIssueByIDStmt:                   q.getPartnerIssueByIDStmt,
 		getPartnerIssueByIDForUpdateStmt:          q.getPartnerIssueByIDForUpdateStmt,
-		getPartnerIssueByPrivatePayloadUserStmt:   q.getPartnerIssueByPrivatePayloadUserStmt,
+		getPartnerIssuesByExternalUserStmt:        q.getPartnerIssuesByExternalUserStmt,
+		getPartnerIssuesByPrivatePayloadUserStmt:  q.getPartnerIssuesByPrivatePayloadUserStmt,
 		getPartnerRewardGrantByIssueStmt:          q.getPartnerRewardGrantByIssueStmt,
 		getSequenceStateForUpdateStmt:             q.getSequenceStateForUpdateStmt,
 		getStartTaskByIDStmt:                      q.getStartTaskByIDStmt,
 		getStartTaskByKeyStmt:                     q.getStartTaskByKeyStmt,
+		hasActivePartnerIssueStartLeaseStmt:       q.hasActivePartnerIssueStartLeaseStmt,
 		incrementPartnerStatsDailyStmt:            q.incrementPartnerStatsDailyStmt,
 		insertPartnerRewardGrantStmt:              q.insertPartnerRewardGrantStmt,
 		insertPartnerStatsEventStmt:               q.insertPartnerStatsEventStmt,
@@ -929,6 +986,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listSequenceStatesForUserStmt:             q.listSequenceStatesForUserStmt,
 		refreshTaskDailyOverviewStmt:              q.refreshTaskDailyOverviewStmt,
 		refreshTaskDailyStatsStmt:                 q.refreshTaskDailyStatsStmt,
+		releasePartnerIssueStartLeaseStmt:         q.releasePartnerIssueStartLeaseStmt,
+		renewPartnerIssueStartLeaseStmt:           q.renewPartnerIssueStartLeaseStmt,
+		reserveRewardOperationStmt:                q.reserveRewardOperationStmt,
 		revokePartnerIssueStmt:                    q.revokePartnerIssueStmt,
 		updatePartnerIssueStartStmt:               q.updatePartnerIssueStartStmt,
 		updateProgressStmt:                        q.updateProgressStmt,

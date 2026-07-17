@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	json "github.com/goccy/go-json"
 	"time"
 
@@ -12,6 +13,10 @@ import (
 )
 
 func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale string) (ApplyResult, error) {
+	if err := identity.Validate(); err != nil {
+		return ApplyResult{}, err
+	}
+
 	result := ApplyResult{Status: StatusNotFound}
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
 		rows, err := txRepo.q.GetApplyBundleForUpdate(ctx, promosqlc.GetApplyBundleForUpdateParams{
@@ -28,7 +33,10 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 		if len(rows) == 0 {
 			return nil
 		}
-		result = mapApplyBundle(rows)
+		result, err = mapApplyBundle(rows)
+		if err != nil {
+			return err
+		}
 		if result.Redemption != nil {
 			result.Status = StatusAlreadyApplied
 			return nil
@@ -63,7 +71,7 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 			if err != nil {
 				return err
 			}
-			id, err := txRepo.q.CreateRedemption(ctx, promosqlc.CreateRedemptionParams{
+			created, err := txRepo.q.CreateRedemption(ctx, promosqlc.CreateRedemptionParams{
 				WorkspaceID:    identity.WorkspaceID,
 				PromoID:        int64(result.Promo.ID),
 				AppID:          identity.AppID,
@@ -75,13 +83,13 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 				return err
 			}
 			redemption := Redemption{
-				ID:             uint64(id),
+				ID:             uint64(created.ID),
 				WorkspaceID:    identity.WorkspaceID,
 				PromoID:        result.Promo.ID,
 				AppID:          identity.AppID,
 				PlatformID:     identity.PlatformID,
 				PlatformUserID: identity.PlatformUserID,
-				RedeemedAt:     now,
+				RedeemedAt:     created.RedeemedAt,
 			}
 			result.Redemption = &redemption
 			result.Status = StatusSuccess
@@ -92,7 +100,7 @@ func (r *Repository) Apply(ctx context.Context, identity Identity, code, locale 
 	return result, err
 }
 
-func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
+func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) (ApplyResult, error) {
 	first := rows[0]
 	result := ApplyResult{
 		Status: StatusNotFound,
@@ -132,6 +140,11 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 			PlatformUserID: first.RedemptionPlatformUserID.String,
 			RedeemedAt:     first.RedemptionRedeemedAt.Time,
 		}
+		if err := json.Unmarshal(nullRawMessage(first.RedemptionRewardSnapshot), &result.Rewards); err != nil {
+			return ApplyResult{}, fmt.Errorf("promo redemption reward snapshot decode failed: %w", err)
+		}
+
+		return result, nil
 	}
 	for _, row := range rows {
 		if row.RewardID.Valid {
@@ -144,7 +157,7 @@ func mapApplyBundle(rows []promosqlc.GetApplyBundleForUpdateRow) ApplyResult {
 			})
 		}
 	}
-	return result
+	return result, nil
 }
 
 func uint16FromNull(value sql.NullInt16) uint16 {

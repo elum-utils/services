@@ -10,6 +10,7 @@ import (
 
 	json "github.com/goccy/go-json"
 
+	services "github.com/elum-utils/services"
 	importexport "github.com/elum-utils/services/internal/utils/importexport"
 	"github.com/elum-utils/services/internal/utils/target"
 )
@@ -73,6 +74,10 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 }
 
 func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
 	_, err := r.executor.ExecContext(
 		ctx,
 		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -123,6 +128,16 @@ func (r *Repository) importBulk(
 	if err != nil {
 		return err
 	}
+	if err := r.replaceImportedPromoChildren(
+		ctx,
+		workspaceID,
+		pkg.Promos,
+		ids,
+		strategy,
+		preview,
+	); err != nil {
+		return err
+	}
 	if err := r.importLocalizationsBulk(
 		ctx,
 		workspaceID,
@@ -143,6 +158,49 @@ func (r *Repository) importBulk(
 		preview,
 		result,
 	)
+}
+
+func (r *Repository) replaceImportedPromoChildren(
+	ctx context.Context,
+	workspaceID string,
+	promos []ExportPromo,
+	ids map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	promoIDs := make([]int64, 0, len(promos))
+	for _, promo := range promos {
+		if previewHasConflict(preview, "promo", promo.Code) {
+			promoIDs = append(promoIDs, int64(ids[normalizeCode(promo.Code)]))
+		}
+	}
+	if len(promoIDs) == 0 {
+		return nil
+	}
+
+	if _, err := r.executor.ExecContext(
+		ctx,
+		`DELETE FROM promo_localization
+WHERE workspace_id = $1
+  AND promo_id = ANY($2::bigint[])`,
+		workspaceID,
+		promoIDs,
+	); err != nil {
+		return err
+	}
+	_, err := r.executor.ExecContext(
+		ctx,
+		`DELETE FROM promo_reward
+WHERE workspace_id = $1
+  AND promo_id = ANY($2::bigint[])`,
+		workspaceID,
+		promoIDs,
+	)
+	return err
 }
 
 func (r *Repository) importPromosBulk(
@@ -371,8 +429,8 @@ func compileImportBulkUpsert(
 }
 
 func validateExportPackage(workspaceID string, pkg ExportPackage) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return fmt.Errorf("promo import workspace is required")
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
 	}
 	if pkg.Format != ExportFormat || pkg.Service != "promo" {
 		return fmt.Errorf("unsupported export package: %s/%s", pkg.Service, pkg.Format)

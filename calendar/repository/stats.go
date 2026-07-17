@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -38,6 +37,10 @@ func (r *Repository) ListOperations(
 }
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID, calendarID string) (Stats, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Stats{}, err
+	}
+
 	row, err := r.q.AdminGetStats(ctx, calendarsqlc.AdminGetStatsParams{
 		WorkspaceID: workspaceID, CalendarID: calendarID,
 	})
@@ -72,7 +75,10 @@ func (r *Repository) ListDailyStats(
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
-	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
 		return fmt.Errorf("calendar stats workspace or date range is invalid")
 	}
 

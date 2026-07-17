@@ -42,6 +42,12 @@ func (r *Repository) withAuditTx(ctx context.Context, write func(*controlsqlc.Qu
 }
 
 func (r *Repository) AppendAudit(ctx context.Context, event AuditEvent) error {
+	if event.WorkspaceID != "" {
+		if err := requireWorkspaceID(event.WorkspaceID); err != nil {
+			return err
+		}
+	}
+
 	if err := required(event.MethodKey, event.Result); err != nil {
 		return err
 	}
@@ -70,6 +76,10 @@ func appendAudit(ctx context.Context, q *controlsqlc.Queries, event AuditEvent) 
 }
 
 func (r *Repository) ListAudit(ctx context.Context, workspaceID string, limit, offset int32) ([]AuditEvent, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	rows, err := r.q.ListAuditEvents(
 		ctx,
 		controlsqlc.ListAuditEventsParams{WorkspaceID: nullableString(workspaceID), Limit: limit, Offset: offset},

@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	sqlc "github.com/elum-utils/services/payment/sqlc"
@@ -88,6 +87,10 @@ func statUint64(value int64) uint64 {
 }
 
 func (r *PaymentRepository) GetPaymentStats(ctx context.Context, workspaceID string) (PaymentStats, error) {
+	if _, err := requireWorkspaceID(workspaceID); err != nil {
+		return PaymentStats{}, err
+	}
+
 	row, err := r.q.AdminGetPaymentStats(ctx, sqlc.AdminGetPaymentStatsParams{
 		WorkspaceID: workspaceID, WorkspaceID_2: workspaceID, WorkspaceID_3: workspaceID,
 	})
@@ -113,6 +116,10 @@ func (r *PaymentRepository) GetPaymentProductStats(
 	ctx context.Context,
 	workspaceID, productID string,
 ) (PaymentProductStats, error) {
+	if _, err := requireWorkspaceID(workspaceID); err != nil {
+		return PaymentProductStats{}, err
+	}
+
 	row, err := r.q.AdminGetPaymentProductStats(ctx, sqlc.AdminGetPaymentProductStatsParams{
 		WorkspaceID: workspaceID, ProductID: productID,
 		WorkspaceID_2: workspaceID, ProductID_2: productID,
@@ -214,8 +221,8 @@ func (r *PaymentRepository) RefreshPaymentDailyStats(
 	workspaceID string,
 	from, until time.Time,
 ) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return ErrWorkspaceRequired
+	if _, err := requireWorkspaceID(workspaceID); err != nil {
+		return err
 	}
 	if from.IsZero() || until.IsZero() || from.After(until) {
 		return ErrInvalidDateRange

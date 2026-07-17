@@ -3,6 +3,8 @@ package repository
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	services "github.com/elum-utils/services"
 )
 
 const (
@@ -32,6 +34,15 @@ type Identity struct {
 	AppID          int64
 	PlatformID     int64
 	PlatformUserID string
+}
+
+func (i Identity) Validate() error {
+	return (services.Identity{
+		WorkspaceID:    i.WorkspaceID,
+		AppID:          i.AppID,
+		PlatformID:     i.PlatformID,
+		PlatformUserID: i.PlatformUserID,
+	}).Validate()
 }
 
 type Calendar struct {

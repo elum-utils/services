@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/control/repository"
 	"github.com/google/uuid"
 )
@@ -23,12 +24,16 @@ func (a *Admin) CreateWorkspace(ctx context.Context, params CreateWorkspaceParam
 	if strings.TrimSpace(params.ID) == "" {
 		params.ID = uuid.NewString()
 	}
+	if err := services.ValidateWorkspaceID(params.ID); err != nil {
+		return WorkspaceModel{}, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.ID),
+		WorkspaceID: params.ID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.workspace.create",
 		TargetType:  "workspace",
-		TargetID:    strings.TrimSpace(params.ID),
+		TargetID:    params.ID,
 	})
 	defer cancel()
 	workspace, err := a.repository.CreateWorkspace(
@@ -42,25 +47,33 @@ func (a *Admin) CreateWorkspace(ctx context.Context, params CreateWorkspaceParam
 }
 
 func (a *Admin) GetWorkspace(ctx context.Context, workspaceID string) (WorkspaceModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return WorkspaceModel{}, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	workspace, err := a.repository.GetWorkspace(mergedCtx, strings.TrimSpace(workspaceID))
+	workspace, err := a.repository.GetWorkspace(mergedCtx, workspaceID)
 	return mapWorkspace(workspace), err
 }
 
 func (a *Admin) UpdateWorkspace(ctx context.Context, params UpdateWorkspaceParams) (int64, error) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.workspace.update",
 		TargetType:  "workspace",
-		TargetID:    strings.TrimSpace(params.WorkspaceID),
+		TargetID:    params.WorkspaceID,
 	})
 	defer cancel()
 	return a.repository.UpdateWorkspace(
 		mergedCtx,
 		strings.TrimSpace(params.ActorID),
-		strings.TrimSpace(params.WorkspaceID),
+		params.WorkspaceID,
 		strings.ToLower(strings.TrimSpace(params.Slug)),
 		strings.TrimSpace(params.Title),
 		strings.TrimSpace(params.Status),
@@ -83,11 +96,15 @@ func (a *Admin) ListWorkspaces(ctx context.Context, accountID string, page Page)
 }
 
 func (a *Admin) CreateRole(ctx context.Context, params CreateRoleParams) (RoleModel, error) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return RoleModel{}, err
+	}
+
 	if strings.TrimSpace(params.ID) == "" {
 		params.ID = uuid.NewString()
 	}
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.role.create",
 		TargetType:  "role",
@@ -96,7 +113,7 @@ func (a *Admin) CreateRole(ctx context.Context, params CreateRoleParams) (RoleMo
 	defer cancel()
 	role, err := a.repository.CreateRole(mergedCtx, strings.TrimSpace(params.ActorID), repository.Role{
 		ID:          params.ID,
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		Code:        strings.ToLower(strings.TrimSpace(params.Code)),
 		Title:       strings.TrimSpace(params.Title),
 		Description: strings.TrimSpace(params.Description),
@@ -106,9 +123,13 @@ func (a *Admin) CreateRole(ctx context.Context, params CreateRoleParams) (RoleMo
 }
 
 func (a *Admin) ListRoles(ctx context.Context, workspaceID string) ([]RoleModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	items, err := a.repository.ListRoles(mergedCtx, strings.TrimSpace(workspaceID))
+	items, err := a.repository.ListRoles(mergedCtx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +141,12 @@ func (a *Admin) ListRoles(ctx context.Context, workspaceID string) ([]RoleModel,
 }
 
 func (a *Admin) UpdateRole(ctx context.Context, params UpdateRoleParams) (int64, error) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.role.update",
 		TargetType:  "role",
@@ -130,7 +155,7 @@ func (a *Admin) UpdateRole(ctx context.Context, params UpdateRoleParams) (int64,
 	defer cancel()
 	return a.repository.UpdateRole(mergedCtx, strings.TrimSpace(params.ActorID), repository.Role{
 		ID:          strings.TrimSpace(params.ID),
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		Title:       strings.TrimSpace(params.Title),
 		Description: strings.TrimSpace(params.Description),
 		Position:    params.Position,
@@ -138,8 +163,12 @@ func (a *Admin) UpdateRole(ctx context.Context, params UpdateRoleParams) (int64,
 }
 
 func (a *Admin) DeleteRole(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(workspaceID),
+		WorkspaceID: workspaceID,
 		ActorID:     strings.TrimSpace(actorID),
 		MethodKey:   "control.role.delete",
 		TargetType:  "role",
@@ -149,14 +178,18 @@ func (a *Admin) DeleteRole(ctx context.Context, actorID, workspaceID, roleID str
 	return a.repository.DeleteRole(
 		mergedCtx,
 		strings.TrimSpace(actorID),
-		strings.TrimSpace(workspaceID),
+		workspaceID,
 		strings.TrimSpace(roleID),
 	)
 }
 
 func (a *Admin) SetRoleMember(ctx context.Context, params SetRoleMemberParams) error {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.role_member.set",
 		TargetType:  "account",
@@ -166,15 +199,19 @@ func (a *Admin) SetRoleMember(ctx context.Context, params SetRoleMemberParams) e
 	return a.repository.AssignRole(
 		mergedCtx,
 		strings.TrimSpace(params.ActorID),
-		strings.TrimSpace(params.WorkspaceID),
+		params.WorkspaceID,
 		strings.TrimSpace(params.AccountID),
 		strings.TrimSpace(params.RoleID),
 	)
 }
 
 func (a *Admin) RemoveRoleMember(ctx context.Context, params SetRoleMemberParams) (int64, error) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.role_member.remove",
 		TargetType:  "account",
@@ -184,17 +221,21 @@ func (a *Admin) RemoveRoleMember(ctx context.Context, params SetRoleMemberParams
 	return a.repository.RemoveRole(
 		mergedCtx,
 		strings.TrimSpace(params.ActorID),
-		strings.TrimSpace(params.WorkspaceID),
+		params.WorkspaceID,
 		strings.TrimSpace(params.AccountID),
 		strings.TrimSpace(params.RoleID),
 	)
 }
 
 func (a *Admin) ListMembers(ctx context.Context, workspaceID string, page Page) ([]MemberModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(page)
-	items, err := a.repository.ListMembers(mergedCtx, strings.TrimSpace(workspaceID), limit, offset)
+	items, err := a.repository.ListMembers(mergedCtx, workspaceID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +254,12 @@ func (a *Admin) ListMembers(ctx context.Context, workspaceID string, page Page) 
 }
 
 func (a *Admin) RemoveMember(ctx context.Context, actorID, workspaceID, accountID string) (int64, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(workspaceID),
+		WorkspaceID: workspaceID,
 		ActorID:     strings.TrimSpace(actorID),
 		MethodKey:   "control.member.remove",
 		TargetType:  "account",
@@ -224,14 +269,18 @@ func (a *Admin) RemoveMember(ctx context.Context, actorID, workspaceID, accountI
 	return a.repository.RemoveMember(
 		mergedCtx,
 		strings.TrimSpace(actorID),
-		strings.TrimSpace(workspaceID),
+		workspaceID,
 		strings.TrimSpace(accountID),
 	)
 }
 
 func (a *Admin) CreateInvite(ctx context.Context, params CreateInviteParams) (InviteModel, string, error) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return InviteModel{}, "", err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.invite.create",
 		TargetType:  "invite",
@@ -240,7 +289,7 @@ func (a *Admin) CreateInvite(ctx context.Context, params CreateInviteParams) (In
 	item, token, err := a.repository.CreateInvite(
 		mergedCtx,
 		strings.TrimSpace(params.ActorID),
-		strings.TrimSpace(params.WorkspaceID),
+		params.WorkspaceID,
 		params.RoleIDs,
 		params.ExpiresAt,
 		params.MaxUses,
@@ -260,10 +309,14 @@ func (a *Admin) AcceptInvite(ctx context.Context, accountID, token string) (Invi
 }
 
 func (a *Admin) ListInvites(ctx context.Context, workspaceID string, page Page) ([]InviteModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(page)
-	items, err := a.repository.ListInvites(mergedCtx, strings.TrimSpace(workspaceID), limit, offset)
+	items, err := a.repository.ListInvites(mergedCtx, workspaceID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +328,12 @@ func (a *Admin) ListInvites(ctx context.Context, workspaceID string, page Page) 
 }
 
 func (a *Admin) RevokeInvite(ctx context.Context, actorID, workspaceID, inviteID string) (int64, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(workspaceID),
+		WorkspaceID: workspaceID,
 		ActorID:     strings.TrimSpace(actorID),
 		MethodKey:   "control.invite.revoke",
 		TargetType:  "invite",
@@ -286,14 +343,18 @@ func (a *Admin) RevokeInvite(ctx context.Context, actorID, workspaceID, inviteID
 	return a.repository.RevokeInvite(
 		mergedCtx,
 		strings.TrimSpace(actorID),
-		strings.TrimSpace(workspaceID),
+		workspaceID,
 		strings.TrimSpace(inviteID),
 	)
 }
 
 func (a *Admin) SetRolePermission(ctx context.Context, params SetRolePermissionParams) error {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		WorkspaceID: params.WorkspaceID,
 		ActorID:     strings.TrimSpace(params.ActorID),
 		MethodKey:   "control.role_permission.set",
 		TargetType:  "role",
@@ -303,7 +364,7 @@ func (a *Admin) SetRolePermission(ctx context.Context, params SetRolePermissionP
 	return a.repository.SetPermission(
 		mergedCtx,
 		strings.TrimSpace(params.ActorID),
-		strings.TrimSpace(params.WorkspaceID),
+		params.WorkspaceID,
 		strings.TrimSpace(params.RoleID),
 		strings.TrimSpace(params.MethodKey),
 		params.Enabled,
@@ -311,14 +372,22 @@ func (a *Admin) SetRolePermission(ctx context.Context, params SetRolePermissionP
 }
 
 func (a *Admin) ListRolePermissions(ctx context.Context, workspaceID, roleID string) ([]string, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.ListPermissions(mergedCtx, strings.TrimSpace(workspaceID), strings.TrimSpace(roleID))
+	return a.repository.ListPermissions(mergedCtx, workspaceID, strings.TrimSpace(roleID))
 }
 
 func (a *Admin) ClearRolePermissions(ctx context.Context, actorID, workspaceID, roleID string) (int64, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withMutation(ctx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(workspaceID),
+		WorkspaceID: workspaceID,
 		ActorID:     strings.TrimSpace(actorID),
 		MethodKey:   "control.role_permission.clear",
 		TargetType:  "role",
@@ -328,7 +397,7 @@ func (a *Admin) ClearRolePermissions(ctx context.Context, actorID, workspaceID, 
 	return a.repository.ClearPermissions(
 		mergedCtx,
 		strings.TrimSpace(actorID),
-		strings.TrimSpace(workspaceID),
+		workspaceID,
 		strings.TrimSpace(roleID),
 	)
 }

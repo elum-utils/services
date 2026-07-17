@@ -101,6 +101,10 @@ func (r *PaymentRepository) Import(ctx context.Context, workspaceID string, req 
 }
 
 func (r *PaymentRepository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	if _, err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
 	_, err := r.executor.ExecContext(
 		ctx,
 		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -134,11 +138,21 @@ func (r *PaymentRepository) importBulk(
 	if err := r.importGroupsBulk(ctx, workspaceID, pkg.Groups, strategy, preview, result); err != nil {
 		return err
 	}
-	if err := r.importLocalizationsBulk(ctx, workspaceID, pkg, strategy, preview, result); err != nil {
-		return err
-	}
 	products := flattenProducts(pkg)
 	if err := r.importProductsBulk(ctx, workspaceID, products, strategy, preview, result); err != nil {
+		return err
+	}
+	if err := r.replaceImportedPaymentChildren(
+		ctx,
+		workspaceID,
+		pkg,
+		products,
+		strategy,
+		preview,
+	); err != nil {
+		return err
+	}
+	if err := r.importLocalizationsBulk(ctx, workspaceID, pkg, strategy, preview, result); err != nil {
 		return err
 	}
 	if err := r.importProductItemsBulk(ctx, workspaceID, products, strategy, preview, result); err != nil {
@@ -148,6 +162,70 @@ func (r *PaymentRepository) importBulk(
 		return err
 	}
 	return r.importTONWalletsBulk(ctx, workspaceID, pkg.TONWallets, strategy, preview, result)
+}
+
+func (r *PaymentRepository) replaceImportedPaymentChildren(
+	ctx context.Context,
+	workspaceID string,
+	pkg ExportPackage,
+	products []ExportProduct,
+	strategy string,
+	preview ImportPreview,
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	productIDs := make([]string, 0, len(products))
+	localizationKeys := make([]string, 0)
+	appendLocalizationKeys := func(titleKey string, descriptionKey *string) {
+		if titleKey != "" {
+			localizationKeys = append(localizationKeys, titleKey)
+		}
+		if descriptionKey != nil && *descriptionKey != "" {
+			localizationKeys = append(localizationKeys, *descriptionKey)
+		}
+	}
+	for _, group := range pkg.Groups {
+		if previewHasConflict(preview, "group", group.Code) {
+			titleKey := ""
+			if group.TitleKey != nil {
+				titleKey = *group.TitleKey
+			}
+			appendLocalizationKeys(titleKey, group.DescriptionKey)
+		}
+	}
+	for _, product := range products {
+		if previewHasConflict(preview, "product", product.ID) {
+			productIDs = append(productIDs, product.ID)
+			appendLocalizationKeys(product.TitleKey, product.DescriptionKey)
+		}
+	}
+
+	if len(productIDs) > 0 {
+		for _, table := range []string{"payment_product_item", "payment_price"} {
+			if _, err := r.executor.ExecContext(
+				ctx,
+				"DELETE FROM "+table+" WHERE workspace_id = $1 AND product_id = ANY($2::text[])",
+				workspaceID,
+				productIDs,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	if len(localizationKeys) == 0 {
+		return nil
+	}
+	_, err := r.executor.ExecContext(
+		ctx,
+		`DELETE FROM payment_localization
+WHERE workspace_id = $1
+  AND localization_key = ANY($2::text[])`,
+		workspaceID,
+		localizationKeys,
+	)
+	return err
 }
 
 func (r *PaymentRepository) importGroupsBulk(

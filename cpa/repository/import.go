@@ -105,23 +105,66 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 	return result, nil
 }
 
-func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
-	_, err := r.executor.ExecContext(
-		ctx,
-		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-		workspaceID,
-	)
-	return err
-}
-
 func (r *Repository) importBulk(ctx context.Context, workspaceID string, pkg ExportPackage, strategy string, preview ImportPreview, result *ImportResult) error {
 	if err := r.importOffersBulk(ctx, workspaceID, pkg.Offers, strategy, preview, result); err != nil {
 		return err
+	}
+	if strategy == ImportConflictUpdate {
+		if err := r.replaceImportedOfferChildren(ctx, workspaceID, preview); err != nil {
+			return err
+		}
 	}
 	if err := r.importLocalizationsBulk(ctx, workspaceID, pkg.Offers, strategy, preview, result); err != nil {
 		return err
 	}
 	return r.importRewardsBulk(ctx, workspaceID, pkg.Offers, strategy, preview, result)
+}
+
+func (r *Repository) replaceImportedOfferChildren(ctx context.Context, workspaceID string, preview ImportPreview) error {
+	offerIDs := make([]string, 0, len(preview.Conflicts))
+	for _, conflict := range preview.Conflicts {
+		if conflict.Type == "offer" {
+			offerIDs = append(offerIDs, conflict.Key)
+		}
+	}
+	if len(offerIDs) == 0 {
+		return nil
+	}
+
+	return importexport.ForEachBatch(
+		len(offerIDs),
+		1,
+		importexport.DefaultBatchLimits,
+		func(start, end int) error {
+			query, args := compileImportChildrenDelete("cpa_localization", workspaceID, offerIDs[start:end])
+			if _, err := r.executor.ExecContext(ctx, query, args...); err != nil {
+				return err
+			}
+
+			query, args = compileImportChildrenDelete("cpa_reward", workspaceID, offerIDs[start:end])
+			_, err := r.executor.ExecContext(ctx, query, args...)
+			return err
+		},
+	)
+}
+
+func compileImportChildrenDelete(table, workspaceID string, offerIDs []string) (string, []any) {
+	var builder strings.Builder
+	builder.WriteString("DELETE FROM ")
+	builder.WriteString(table)
+	builder.WriteString(" WHERE workspace_id = $1 AND cpa_id IN (")
+
+	args := make([]any, 0, len(offerIDs)+1)
+	args = append(args, workspaceID)
+	for index, offerID := range offerIDs {
+		if index > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(fmt.Sprintf("$%d", index+2))
+		args = append(args, offerID)
+	}
+	builder.WriteByte(')')
+	return builder.String(), args
 }
 
 func (r *Repository) importOffersBulk(ctx context.Context, workspaceID string, offers []ExportOffer, strategy string, preview ImportPreview, result *ImportResult) error {
@@ -272,8 +315,8 @@ func importConflictTarget(table string) string {
 }
 
 func validateExportPackage(workspaceID string, pkg ExportPackage) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return ErrWorkspaceRequired
+	if err := requireWorkspace(workspaceID); err != nil {
+		return err
 	}
 	if pkg.Format != ExportFormat {
 		return fmt.Errorf("unsupported export format: %s", pkg.Format)

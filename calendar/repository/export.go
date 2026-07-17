@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
@@ -11,8 +10,8 @@ import (
 )
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
-	if workspaceID == "" {
-		return ExportPackage{}, fmt.Errorf("calendar export workspace is required")
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return ExportPackage{}, err
 	}
 	now := req.Now
 	if now.IsZero() {

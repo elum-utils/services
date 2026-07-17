@@ -36,6 +36,7 @@ type Options struct {
 	Codec                    Codec
 	Mutex                    Mutex
 	OnCacheInvalidationError func(error)
+	SecretEncryptionKey      []byte
 }
 
 type DatabaseParams struct {

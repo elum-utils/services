@@ -5,7 +5,7 @@ import "testing"
 func TestValidateReward(t *testing.T) {
 	week := "week"
 	base := SaveRewardParams{
-		WorkspaceID: "workspace", CalendarID: "calendar", StepID: 1,
+		WorkspaceID: "00000000-0000-0000-0000-000000000001", CalendarID: "calendar", StepID: 1,
 		Key: "premium", Quantity: 2, Position: 1,
 	}
 	if err := validateReward(base); err != nil {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/elum-utils/services/internal/testsupport"
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/admin"
 	"github.com/elum-utils/services/promo/service/user"
@@ -13,11 +15,14 @@ import (
 	"time"
 )
 
+var (
+	promoBenchWorkspace      = testsupport.WorkspaceID("promo-benchmark-workspace")
+	promoBenchWriteWorkspace = testsupport.WorkspaceID("promo-benchmark-write-workspace")
+)
+
 const (
-	promoBenchWorkspace      = "promo-benchmark-workspace"
-	promoBenchWriteWorkspace = "promo-benchmark-write-workspace"
-	promoBenchPromos         = 100
-	promoBenchUsers          = 1_000
+	promoBenchPromos = 100
+	promoBenchUsers  = 1_000
 )
 
 type promoBenchmarkEnv struct {
@@ -203,7 +208,9 @@ func BenchmarkPromoServiceMethods(b *testing.B) {
 
 	b.Run("Admin.Import/update_existing", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, err := env.api.Admin.Import(env.ctx, promoBenchmarkRunValue("import_workspace", i), admin.ImportRequest{
+			_, err := env.api.Admin.Import(env.ctx, testsupport.WorkspaceID(
+				promoBenchmarkRunValue("import_workspace", i),
+			), admin.ImportRequest{
 				Package:          importPackage,
 				ConflictStrategy: repository.ImportConflictUpdate,
 			})

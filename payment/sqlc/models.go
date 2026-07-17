@@ -1388,6 +1388,7 @@ type PaymentAssetRate struct {
 
 type PaymentAttempt struct {
 	ID                     int64                `json:"id"`
+	WorkspaceID            string               `json:"workspace_id"`
 	OrderID                int64                `json:"order_id"`
 	ProviderCode           string               `json:"provider_code"`
 	AssetCode              string               `json:"asset_code"`
@@ -1398,6 +1399,7 @@ type PaymentAttempt struct {
 	ProviderChargeID       sql.NullString       `json:"provider_charge_id"`
 	ProviderSubscriptionID sql.NullString       `json:"provider_subscription_id"`
 	IdempotencyKey         sql.NullString       `json:"idempotency_key"`
+	RequestFingerprint     string               `json:"request_fingerprint"`
 	ConfirmationUrl        sql.NullString       `json:"confirmation_url"`
 	ReturnUrl              sql.NullString       `json:"return_url"`
 	ExpiresAt              sql.NullTime         `json:"expires_at"`
@@ -1407,6 +1409,7 @@ type PaymentAttempt struct {
 
 type PaymentEvent struct {
 	ID                int64                        `json:"id"`
+	WorkspaceID       string                       `json:"workspace_id"`
 	ProviderCode      string                       `json:"provider_code"`
 	AttemptID         sql.NullInt64                `json:"attempt_id"`
 	OrderID           sql.NullInt64                `json:"order_id"`
@@ -1458,33 +1461,43 @@ type PaymentLocalization struct {
 }
 
 type PaymentOrder struct {
-	ID                  int64              `json:"id"`
-	PublicID            string             `json:"public_id"`
-	WorkspaceID         string             `json:"workspace_id"`
-	AppID               int64              `json:"app_id"`
-	PlatformID          int64              `json:"platform_id"`
-	PlatformUserID      string             `json:"platform_user_id"`
-	InternalUserID      sql.NullInt64      `json:"internal_user_id"`
-	PayerPlatformID     sql.NullInt64      `json:"payer_platform_id"`
-	PayerPlatformUserID sql.NullString     `json:"payer_platform_user_id"`
-	PayerInternalUserID sql.NullInt64      `json:"payer_internal_user_id"`
-	PurchaseKeyID       sql.NullInt64      `json:"purchase_key_id"`
-	ProductID           string             `json:"product_id"`
-	Quantity            int64              `json:"quantity"`
-	PriceID             int64              `json:"price_id"`
-	AssetCode           string             `json:"asset_code"`
-	Locale              string             `json:"locale"`
-	ListAmountMinor     int64              `json:"list_amount_minor"`
-	DiscountAmountMinor int64              `json:"discount_amount_minor"`
-	PayableAmountMinor  int64              `json:"payable_amount_minor"`
-	Status              PaymentOrderStatus `json:"status"`
-	ReservedUntil       sql.NullTime       `json:"reserved_until"`
-	PaidAt              sql.NullTime       `json:"paid_at"`
-	FulfilledAt         sql.NullTime       `json:"fulfilled_at"`
-	CanceledAt          sql.NullTime       `json:"canceled_at"`
-	ExpiresAt           sql.NullTime       `json:"expires_at"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           time.Time          `json:"updated_at"`
+	ID                          int64              `json:"id"`
+	PublicID                    string             `json:"public_id"`
+	WorkspaceID                 string             `json:"workspace_id"`
+	AppID                       int64              `json:"app_id"`
+	PlatformID                  int64              `json:"platform_id"`
+	PlatformUserID              string             `json:"platform_user_id"`
+	InternalUserID              sql.NullInt64      `json:"internal_user_id"`
+	PayerPlatformID             sql.NullInt64      `json:"payer_platform_id"`
+	PayerPlatformUserID         sql.NullString     `json:"payer_platform_user_id"`
+	PayerInternalUserID         sql.NullInt64      `json:"payer_internal_user_id"`
+	PurchaseKeyID               sql.NullInt64      `json:"purchase_key_id"`
+	ProductID                   string             `json:"product_id"`
+	Quantity                    int64              `json:"quantity"`
+	PriceID                     int64              `json:"price_id"`
+	AssetCode                   string             `json:"asset_code"`
+	Locale                      string             `json:"locale"`
+	ListAmountMinor             int64              `json:"list_amount_minor"`
+	DiscountAmountMinor         int64              `json:"discount_amount_minor"`
+	PayableAmountMinor          int64              `json:"payable_amount_minor"`
+	Status                      PaymentOrderStatus `json:"status"`
+	ReservedUntil               sql.NullTime       `json:"reserved_until"`
+	GlobalLimitSnapshot         int32              `json:"global_limit_snapshot"`
+	GlobalIntervalSnapshot      string             `json:"global_interval_snapshot"`
+	GlobalIntervalCountSnapshot int32              `json:"global_interval_count_snapshot"`
+	GlobalWindowStartSnapshot   sql.NullTime       `json:"global_window_start_snapshot"`
+	GlobalWindowEndSnapshot     sql.NullTime       `json:"global_window_end_snapshot"`
+	UserLimitSnapshot           int32              `json:"user_limit_snapshot"`
+	UserIntervalSnapshot        string             `json:"user_interval_snapshot"`
+	UserIntervalCountSnapshot   int32              `json:"user_interval_count_snapshot"`
+	UserWindowStartSnapshot     sql.NullTime       `json:"user_window_start_snapshot"`
+	UserWindowEndSnapshot       sql.NullTime       `json:"user_window_end_snapshot"`
+	PaidAt                      sql.NullTime       `json:"paid_at"`
+	FulfilledAt                 sql.NullTime       `json:"fulfilled_at"`
+	CanceledAt                  sql.NullTime       `json:"canceled_at"`
+	ExpiresAt                   sql.NullTime       `json:"expires_at"`
+	CreatedAt                   time.Time          `json:"created_at"`
+	UpdatedAt                   time.Time          `json:"updated_at"`
 }
 
 type PaymentOrderItem struct {
@@ -1644,6 +1657,7 @@ type PaymentProductLimitCounter struct {
 	WindowStart    time.Time                              `json:"window_start"`
 	WindowEnd      time.Time                              `json:"window_end"`
 	PaidCount      int64                                  `json:"paid_count"`
+	ReservedCount  int64                                  `json:"reserved_count"`
 	UpdatedAt      time.Time                              `json:"updated_at"`
 }
 
@@ -1715,6 +1729,7 @@ type PaymentPurchaseKey struct {
 	Status         PaymentPurchaseKeyStatus `json:"status"`
 	MaxUses        int32                    `json:"max_uses"`
 	UsedCount      int32                    `json:"used_count"`
+	ReservedCount  int32                    `json:"reserved_count"`
 	ExpiresAt      sql.NullTime             `json:"expires_at"`
 	CreatedAt      time.Time                `json:"created_at"`
 	UpdatedAt      time.Time                `json:"updated_at"`
@@ -1722,9 +1737,11 @@ type PaymentPurchaseKey struct {
 
 type PaymentRefund struct {
 	ID               int64               `json:"id"`
+	WorkspaceID      string              `json:"workspace_id"`
 	OrderID          int64               `json:"order_id"`
 	AttemptID        int64               `json:"attempt_id"`
 	ProviderCode     string              `json:"provider_code"`
+	IdempotencyKey   sql.NullString      `json:"idempotency_key"`
 	ProviderRefundID sql.NullString      `json:"provider_refund_id"`
 	AmountMinor      int64               `json:"amount_minor"`
 	AssetCode        string              `json:"asset_code"`
@@ -1825,6 +1842,21 @@ type PaymentSubscription struct {
 	EndedAt                sql.NullTime              `json:"ended_at"`
 	CreatedAt              time.Time                 `json:"created_at"`
 	UpdatedAt              time.Time                 `json:"updated_at"`
+}
+
+type PaymentSubscriptionRenewal struct {
+	ID                     int64     `json:"id"`
+	WorkspaceID            string    `json:"workspace_id"`
+	SubscriptionID         int64     `json:"subscription_id"`
+	OrderID                int64     `json:"order_id"`
+	AttemptID              int64     `json:"attempt_id"`
+	ProviderCode           string    `json:"provider_code"`
+	ProviderSubscriptionID string    `json:"provider_subscription_id"`
+	ProviderChargeID       string    `json:"provider_charge_id"`
+	AmountMinor            int64     `json:"amount_minor"`
+	AssetCode              string    `json:"asset_code"`
+	PeriodEnd              time.Time `json:"period_end"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 type PaymentTonWallet struct {

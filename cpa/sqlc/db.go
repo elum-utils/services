@@ -75,9 +75,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminListOfferIDsStmt, err = db.PrepareContext(ctx, adminListOfferIDs); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminListOfferIDs: %w", err)
 	}
-	if q.adminListOffersStmt, err = db.PrepareContext(ctx, adminListOffers); err != nil {
-		return nil, fmt.Errorf("error preparing query AdminListOffers: %w", err)
-	}
 	if q.adminUpsertLocalizationStmt, err = db.PrepareContext(ctx, adminUpsertLocalization); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertLocalization: %w", err)
 	}
@@ -99,8 +96,8 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createGeneratedCodeStmt, err = db.PrepareContext(ctx, createGeneratedCode); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateGeneratedCode: %w", err)
 	}
-	if q.getActiveOfferForUpdateStmt, err = db.PrepareContext(ctx, getActiveOfferForUpdate); err != nil {
-		return nil, fmt.Errorf("error preparing query GetActiveOfferForUpdate: %w", err)
+	if q.getActiveOfferStmt, err = db.PrepareContext(ctx, getActiveOffer); err != nil {
+		return nil, fmt.Errorf("error preparing query GetActiveOffer: %w", err)
 	}
 	if q.getAssignmentStmt, err = db.PrepareContext(ctx, getAssignment); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAssignment: %w", err)
@@ -231,11 +228,6 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminListOfferIDsStmt: %w", cerr)
 		}
 	}
-	if q.adminListOffersStmt != nil {
-		if cerr := q.adminListOffersStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing adminListOffersStmt: %w", cerr)
-		}
-	}
 	if q.adminUpsertLocalizationStmt != nil {
 		if cerr := q.adminUpsertLocalizationStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing adminUpsertLocalizationStmt: %w", cerr)
@@ -271,9 +263,9 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createGeneratedCodeStmt: %w", cerr)
 		}
 	}
-	if q.getActiveOfferForUpdateStmt != nil {
-		if cerr := q.getActiveOfferForUpdateStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing getActiveOfferForUpdateStmt: %w", cerr)
+	if q.getActiveOfferStmt != nil {
+		if cerr := q.getActiveOfferStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getActiveOfferStmt: %w", cerr)
 		}
 	}
 	if q.getAssignmentStmt != nil {
@@ -397,7 +389,6 @@ type Queries struct {
 	adminListOfferBundleRewardsStmt *sql.Stmt
 	adminListOfferBundlesStmt       *sql.Stmt
 	adminListOfferIDsStmt           *sql.Stmt
-	adminListOffersStmt             *sql.Stmt
 	adminUpsertLocalizationStmt     *sql.Stmt
 	adminUpsertOfferStmt            *sql.Stmt
 	adminUpsertRewardStmt           *sql.Stmt
@@ -405,7 +396,7 @@ type Queries struct {
 	createAssignmentStmt            *sql.Stmt
 	createAssignmentEventStmt       *sql.Stmt
 	createGeneratedCodeStmt         *sql.Stmt
-	getActiveOfferForUpdateStmt     *sql.Stmt
+	getActiveOfferStmt              *sql.Stmt
 	getAssignmentStmt               *sql.Stmt
 	getAssignmentByIDStmt           *sql.Stmt
 	getAssignmentForUpdateStmt      *sql.Stmt
@@ -442,7 +433,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminListOfferBundleRewardsStmt: q.adminListOfferBundleRewardsStmt,
 		adminListOfferBundlesStmt:       q.adminListOfferBundlesStmt,
 		adminListOfferIDsStmt:           q.adminListOfferIDsStmt,
-		adminListOffersStmt:             q.adminListOffersStmt,
 		adminUpsertLocalizationStmt:     q.adminUpsertLocalizationStmt,
 		adminUpsertOfferStmt:            q.adminUpsertOfferStmt,
 		adminUpsertRewardStmt:           q.adminUpsertRewardStmt,
@@ -450,7 +440,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createAssignmentStmt:            q.createAssignmentStmt,
 		createAssignmentEventStmt:       q.createAssignmentEventStmt,
 		createGeneratedCodeStmt:         q.createGeneratedCodeStmt,
-		getActiveOfferForUpdateStmt:     q.getActiveOfferForUpdateStmt,
+		getActiveOfferStmt:              q.getActiveOfferStmt,
 		getAssignmentStmt:               q.getAssignmentStmt,
 		getAssignmentByIDStmt:           q.getAssignmentByIDStmt,
 		getAssignmentForUpdateStmt:      q.getAssignmentForUpdateStmt,

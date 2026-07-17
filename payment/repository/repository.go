@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
@@ -189,6 +190,12 @@ func isDuplicateTypeStatement(stmt string, err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "42710"
 }
 
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
 func (r *PaymentRepository) applySchemaUpgrades(ctx context.Context) error {
 	_ = ctx
 	return nil
@@ -217,7 +224,7 @@ func queryTimeout(value time.Duration) time.Duration {
 	return value
 }
 
-func (r *PaymentRepository) ListProviders(ctx context.Context) ([]paymentsqlc.PaymentProvider, error) {
+func (r *PaymentRepository) ListProviders(ctx context.Context) ([]AdminProviderModel, error) {
 	key := paymentCacheKey("providers")
 	providers, err := queryPaymentCache(
 		ctx,
@@ -231,10 +238,10 @@ func (r *PaymentRepository) ListProviders(ctx context.Context) ([]paymentsqlc.Pa
 	if err != nil {
 		return nil, err
 	}
-	return cloneSlice(providers), nil
+	return mapAdminSlice(cloneSlice(providers), mapAdminProvider), nil
 }
 
-func (r *PaymentRepository) ListAssets(ctx context.Context) ([]paymentsqlc.PaymentAsset, error) {
+func (r *PaymentRepository) ListAssets(ctx context.Context) ([]AdminAssetModel, error) {
 	key := paymentCacheKey("assets")
 	assets, err := queryPaymentCache(
 		ctx,
@@ -248,13 +255,13 @@ func (r *PaymentRepository) ListAssets(ctx context.Context) ([]paymentsqlc.Payme
 	if err != nil {
 		return nil, err
 	}
-	return cloneSlice(assets), nil
+	return mapAdminSlice(cloneSlice(assets), mapAdminAsset), nil
 }
 
 type AssetUpsertParams struct {
 	Code            string
 	Title           string
-	AssetKind       paymentsqlc.PaymentAssetAssetKind
+	AssetKind       string
 	Scale           uint16
 	Chain           *string
 	Network         *string
@@ -270,7 +277,7 @@ func (r *PaymentRepository) UpsertAsset(ctx context.Context, params AssetUpsertP
 	if err := r.q.UpsertAsset(ctx, paymentsqlc.UpsertAssetParams{
 		Code:      params.Code,
 		Title:     params.Title,
-		AssetKind: params.AssetKind,
+		AssetKind: paymentsqlc.PaymentAssetAssetKind(params.AssetKind),
 		Scale:     int16(params.Scale),
 		Chain: sqlwrap.NullFromPtr(params.Chain, func(v string) sql.NullString {
 			return sql.NullString{String: v, Valid: true}
@@ -300,9 +307,9 @@ func (r *PaymentRepository) GetProviderAsset(
 	ctx context.Context,
 	providerCode string,
 	assetCode string,
-) (paymentsqlc.PaymentProviderAsset, error) {
+) (AdminProviderAssetModel, error) {
 	key := paymentCacheKey("provider_asset", providerCode, assetCode)
-	return queryPaymentCache(
+	row, err := queryPaymentCache(
 		ctx,
 		r,
 		paymentGlobalCacheScope,
@@ -314,6 +321,7 @@ func (r *PaymentRepository) GetProviderAsset(
 			})
 		},
 	)
+	return mapAdminResult(row, err, mapAdminProviderAsset)
 }
 
 type ProviderAssetUpsertParams struct {
@@ -367,19 +375,19 @@ func (r *PaymentRepository) DeleteProviderAsset(
 }
 
 func requireWorkspaceID(workspaceID string) (string, error) {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return "", ErrWorkspaceRequired
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return "", err
 	}
+
 	return workspaceID, nil
 }
 
-func validAssetKind(value paymentsqlc.PaymentAssetAssetKind) bool {
+func validAssetKind(value string) bool {
 	switch value {
-	case paymentsqlc.PaymentAssetAssetKindFiat,
-		paymentsqlc.PaymentAssetAssetKindPlatformCurrency,
-		paymentsqlc.PaymentAssetAssetKindCryptoNative,
-		paymentsqlc.PaymentAssetAssetKindCryptoJetton:
+	case string(paymentsqlc.PaymentAssetAssetKindFiat),
+		string(paymentsqlc.PaymentAssetAssetKindPlatformCurrency),
+		string(paymentsqlc.PaymentAssetAssetKindCryptoNative),
+		string(paymentsqlc.PaymentAssetAssetKindCryptoJetton):
 		return true
 	default:
 		return false

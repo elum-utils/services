@@ -3,15 +3,36 @@ package services
 import (
 	"strings"
 
+	"github.com/google/uuid"
+
 	serviceerrors "github.com/elum-utils/services/errors"
 )
 
 var (
 	ErrIdentityWorkspaceRequired      = serviceerrors.New(serviceerrors.CodeInvalidFields, "identity workspace id is required")
+	ErrIdentityWorkspaceInvalid       = serviceerrors.New(serviceerrors.CodeInvalidFields, "identity workspace id must be a canonical UUID")
 	ErrIdentityAppIDInvalid           = serviceerrors.New(serviceerrors.CodeInvalidFields, "identity app id must be positive")
 	ErrIdentityPlatformIDInvalid      = serviceerrors.New(serviceerrors.CodeInvalidFields, "identity platform id must be positive")
 	ErrIdentityPlatformUserIDRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "identity platform user id is required")
 )
+
+// ValidateWorkspaceID verifies the shared canonical workspace identifier contract.
+func ValidateWorkspaceID(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ErrIdentityWorkspaceRequired
+	}
+	if trimmed != value {
+		return ErrIdentityWorkspaceInvalid
+	}
+
+	parsed, err := uuid.Parse(value)
+	if err != nil || parsed.String() != value {
+		return ErrIdentityWorkspaceInvalid
+	}
+
+	return nil
+}
 
 // Identity identifies one user across all public service user methods and callback payloads.
 type Identity struct {
@@ -27,8 +48,8 @@ type Identity struct {
 
 // Validate verifies the identity fields required by public user operations.
 func (i Identity) Validate() error {
-	if strings.TrimSpace(i.WorkspaceID) == "" {
-		return ErrIdentityWorkspaceRequired
+	if err := ValidateWorkspaceID(i.WorkspaceID); err != nil {
+		return err
 	}
 	if i.AppID <= 0 {
 		return ErrIdentityAppIDInvalid

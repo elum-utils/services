@@ -32,6 +32,7 @@ type CreatePaymentResponse struct {
 
 type PreCheckoutQuery struct {
 	Credentials    Credentials `json:"-"`
+	WorkspaceID    string      `json:"-"`
 	ID             string      `json:"id"`
 	FromID         int64       `json:"from_id"`
 	Currency       string      `json:"currency"`
@@ -46,6 +47,7 @@ type PreCheckoutResult struct {
 }
 
 type SuccessfulPayment struct {
+	WorkspaceID                string `json:"-"`
 	Currency                   string `json:"currency"`
 	TotalAmount                uint64 `json:"total_amount"`
 	InvoicePayload             string `json:"invoice_payload"`
@@ -59,6 +61,7 @@ type SuccessfulPaymentResult struct {
 	OrderID       uint64  `json:"order_id"`
 	AttemptID     uint64  `json:"attempt_id"`
 	EventID       uint64  `json:"event_id,omitempty"`
+	RenewalID     *uint64 `json:"renewal_id,omitempty"`
 	AlreadyDone   bool    `json:"already_done"`
 	FulfillmentID *uint64 `json:"fulfillment_id,omitempty"`
 }

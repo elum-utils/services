@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS control_session_account_idx ON control_session (accou
 CREATE INDEX IF NOT EXISTS control_session_account_created_idx ON control_session (account_id, created_at);
 
 CREATE TABLE IF NOT EXISTS control_workspace (
-    id VARCHAR(64) NOT NULL,
+    id VARCHAR(36) NOT NULL,
     slug VARCHAR(128) NOT NULL,
     title VARCHAR(255) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS control_workspace (
 );
 
 CREATE TABLE IF NOT EXISTS control_workspace_member (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     account_id VARCHAR(64) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'active',
     joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS control_member_account_idx ON control_workspace_membe
 
 CREATE TABLE IF NOT EXISTS control_workspace_invite (
     id VARCHAR(64) NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     created_by VARCHAR(64) NOT NULL,
     token_hash CHAR(64) NOT NULL,
     max_uses INTEGER NULL,
@@ -93,9 +93,41 @@ CREATE TABLE IF NOT EXISTS control_workspace_invite (
 CREATE INDEX IF NOT EXISTS control_invite_workspace_idx ON control_workspace_invite (workspace_id, revoked_at, expires_at);
 CREATE INDEX IF NOT EXISTS control_invite_workspace_created_idx ON control_workspace_invite (workspace_id, created_at);
 
+UPDATE control_workspace_invite
+SET revoked_at = COALESCE(revoked_at, now()),
+    max_uses = NULL
+WHERE max_uses IS NOT NULL AND max_uses <= 0;
+
+UPDATE control_workspace_invite
+SET max_uses = used_count
+WHERE max_uses IS NOT NULL AND used_count > max_uses;
+
+ALTER TABLE control_workspace_invite
+    DROP CONSTRAINT IF EXISTS control_invite_uses_chk;
+
+ALTER TABLE control_workspace_invite
+    ADD CONSTRAINT control_invite_uses_chk CHECK (
+        used_count >= 0
+        AND (max_uses IS NULL OR (max_uses > 0 AND used_count <= max_uses))
+    );
+
+CREATE TABLE IF NOT EXISTS control_workspace_invite_acceptance (
+    invite_id VARCHAR(64) NOT NULL,
+    account_id VARCHAR(64) NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (invite_id, account_id),
+    CONSTRAINT control_invite_acceptance_invite_fk FOREIGN KEY (invite_id)
+        REFERENCES control_workspace_invite (id) ON DELETE CASCADE,
+    CONSTRAINT control_invite_acceptance_account_fk FOREIGN KEY (account_id)
+        REFERENCES control_account (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS control_invite_acceptance_account_idx
+    ON control_workspace_invite_acceptance (account_id, accepted_at);
+
 CREATE TABLE IF NOT EXISTS control_role (
     id VARCHAR(64) NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     code VARCHAR(128) NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
@@ -206,6 +238,7 @@ CREATE TABLE IF NOT EXISTS control_two_factor_challenge (
     user_agent VARCHAR(255) NOT NULL DEFAULT '',
     bind_to_ip BOOLEAN NOT NULL DEFAULT FALSE,
     expires_at TIMESTAMPTZ NOT NULL,
+    session_expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
     CONSTRAINT control_two_factor_challenge_token_uq UNIQUE (token_hash),
@@ -213,11 +246,21 @@ CREATE TABLE IF NOT EXISTS control_two_factor_challenge (
         REFERENCES control_account (id) ON DELETE CASCADE
 );
 
+ALTER TABLE control_two_factor_challenge
+    ADD COLUMN IF NOT EXISTS session_expires_at TIMESTAMPTZ;
+
+UPDATE control_two_factor_challenge
+SET session_expires_at = created_at + INTERVAL '30 days'
+WHERE session_expires_at IS NULL;
+
+ALTER TABLE control_two_factor_challenge
+    ALTER COLUMN session_expires_at SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS control_two_factor_challenge_account_idx ON control_two_factor_challenge (account_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS control_audit_event (
     id VARCHAR(64) NOT NULL,
-    workspace_id VARCHAR(64) NULL,
+    workspace_id VARCHAR(36) NULL,
     actor_id VARCHAR(64) NULL,
     method_key VARCHAR(255) NOT NULL,
     target_type VARCHAR(64) NOT NULL DEFAULT '',

@@ -11,9 +11,10 @@ type recordProgressUpsert struct {
 	taskID        uint64
 	periodStartAt time.Time
 	periodEndAt   time.Time
-	progress      uint64
+	delta         uint64
 	status        string
 	readyAt       *time.Time
+	rewards       []Reward
 }
 
 type recordAutoClaim struct {
@@ -43,12 +44,12 @@ func (r *Repository) batchUpsertProgress(
 }
 
 func compileProgressBulkUpsert(identity Identity, items []recordProgressUpsert) (string, []any) {
-	const columns = 10
+	const columns = 11
 	var builder strings.Builder
 	builder.Grow(len(items)*columns*4 + 320)
 	builder.WriteString("INSERT INTO task_progress (")
 	builder.WriteString("workspace_id, task_id, app_id, platform_id, platform_user_id, ")
-	builder.WriteString("period_start_at, period_end_at, progress, status, ready_at")
+	builder.WriteString("period_start_at, period_end_at, progress, status, ready_at, rewards_snapshot")
 	builder.WriteString(") VALUES ")
 	args := make([]any, 0, len(items)*columns)
 	for index, item := range items {
@@ -72,9 +73,10 @@ func compileProgressBulkUpsert(identity Identity, items []recordProgressUpsert) 
 			identity.PlatformUserID,
 			item.periodStartAt,
 			item.periodEndAt,
-			int64(item.progress),
+			int64(item.delta),
 			item.status,
 			nullTime(item.readyAt),
+			rawMessageParam(rewardsSnapshot(item.rewards)),
 		)
 	}
 	builder.WriteString(

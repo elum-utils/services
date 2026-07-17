@@ -2,9 +2,9 @@ package user
 
 import (
 	"context"
-	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/calendar/repository"
 )
 
@@ -12,8 +12,8 @@ func (u *User) ListActive(ctx context.Context, params ListActiveParams) ([]Activ
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
 
-	if strings.TrimSpace(params.WorkspaceID) == "" {
-		return nil, ErrWorkspaceRequired
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return nil, err
 	}
 
 	now := params.Now

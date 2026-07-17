@@ -35,11 +35,11 @@ func (a *VKMA) HandleRequest(ctx context.Context, request Request) (any, error) 
 		case vkmashop.Chargeable:
 			return a.ChargeableForWorkspace(ctx, workspaceID, params)
 		case vkmashop.Active:
-			return a.Active(ctx, params)
+			return a.Active(ctx, workspaceID, params)
 		case vkmashop.Canceled:
-			return a.Canceled(ctx, params)
+			return a.Canceled(ctx, workspaceID, params)
 		case vkmashop.Refunded:
-			return a.Refunded(ctx, params)
+			return a.Refunded(ctx, workspaceID, params)
 		}
 	}
 

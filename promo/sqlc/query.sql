@@ -91,6 +91,7 @@ SELECT
     a.platform_id AS redemption_platform_id,
     a.platform_user_id AS redemption_platform_user_id,
     a.redeemed_at AS redemption_redeemed_at,
+    a.reward_snapshot AS redemption_reward_snapshot,
     r.id AS reward_id,
     r.reward_key,
     r.reward_type,
@@ -185,7 +186,15 @@ WITH inserted AS (
         workspace_id, promo_id, app_id, platform_id, platform_user_id,
         reward_snapshot
     ) VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id, workspace_id, promo_id, app_id, platform_id, platform_user_id, reward_snapshot
+    RETURNING
+        id,
+        workspace_id,
+        promo_id,
+        app_id,
+        platform_id,
+        platform_user_id,
+        reward_snapshot,
+        redeemed_at
 ),
 updated_offer AS (
     UPDATE promo_offer o
@@ -237,7 +246,7 @@ created_callback AS (
     CROSS JOIN updated_offer u
     RETURNING id
 )
-SELECT id
+SELECT id, redeemed_at
 FROM inserted;
 
 -- name: AdminListRedemptions :many

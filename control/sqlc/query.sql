@@ -1,6 +1,9 @@
 -- name: CreateAccount :exec
 INSERT INTO control_account (id, display_name) VALUES ($1, $2);
 
+-- name: LockWorkspaceAuthorization :exec
+SELECT pg_advisory_xact_lock(hashtextextended('control:authorization:' || $1::text, 0));
+
 -- name: GetAccount :one
 SELECT id, display_name, status, created_at, updated_at
 FROM control_account WHERE id = $1 LIMIT 1;
@@ -21,7 +24,7 @@ ON CONFLICT (account_id, provider) DO UPDATE SET
     updated_at = now();
 
 -- name: ListIdentities :many
-SELECT account_id, provider, provider_subject, COALESCE(payload, '{}'::jsonb) AS payload, created_at, updated_at
+SELECT account_id, provider, provider_subject, created_at, updated_at
 FROM control_identity WHERE account_id = $1 ORDER BY provider;
 
 -- name: CountIdentities :one
@@ -119,19 +122,26 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- name: AddInviteRole :exec
 INSERT INTO control_workspace_invite_role (invite_id, role_id) VALUES ($1, $2);
 
--- name: GetActiveInviteByHashForUpdate :one
+-- name: GetInviteByHashForUpdate :one
 SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
 FROM control_workspace_invite
-WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
-  AND (max_uses IS NULL OR used_count < max_uses)
+WHERE token_hash = $1
 LIMIT 1 FOR UPDATE;
 
 -- name: ListInviteRoles :many
 SELECT role_id FROM control_workspace_invite_role WHERE invite_id = $1 ORDER BY role_id;
 
+-- name: CreateInviteAcceptance :execrows
+INSERT INTO control_workspace_invite_acceptance (invite_id, account_id)
+VALUES ($1, $2)
+ON CONFLICT (invite_id, account_id) DO NOTHING;
+
 -- name: IncrementInviteUse :execrows
 UPDATE control_workspace_invite SET used_count = used_count + 1
-WHERE id = $1 AND revoked_at IS NULL AND (max_uses IS NULL OR used_count < max_uses);
+WHERE id = $1
+  AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > now())
+  AND (max_uses IS NULL OR used_count < max_uses);
 
 -- name: ListInvites :many
 SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
@@ -342,17 +352,28 @@ SELECT EXISTS(
 ) AS active;
 
 -- name: CreateTwoFactorChallenge :exec
-INSERT INTO control_two_factor_challenge (id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+INSERT INTO control_two_factor_challenge (
+    id,
+    account_id,
+    token_hash,
+    ip,
+    user_agent,
+    bind_to_ip,
+    expires_at,
+    session_expires_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: GetTwoFactorChallengeForUpdate :one
-SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, created_at
+SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at,
+       session_expires_at, created_at
 FROM control_two_factor_challenge
 WHERE token_hash = $1 AND expires_at > now()
 LIMIT 1 FOR UPDATE;
 
 -- name: GetTwoFactorChallengeWithFactorForUpdate :one
-SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip, c.expires_at,
+SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip,
+       c.expires_at, c.session_expires_at,
        f.secret, f.backup_hashes, f.activated_at
 FROM control_two_factor_challenge c
 JOIN control_two_factor f ON f.account_id = c.account_id

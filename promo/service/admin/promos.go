@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/internal/utils/target"
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
@@ -51,7 +52,10 @@ func (a *Admin) UpdatePromo(ctx context.Context, params SavePromoParams) (int64,
 func (a *Admin) GetPromo(ctx context.Context, workspaceID string, id uint64) (PromoModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || id == 0 {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return PromoModel{}, err
+	}
+	if id == 0 {
 		return PromoModel{}, ErrPromoScopeRequired
 	}
 	if id > math.MaxInt64 {
@@ -91,7 +95,10 @@ func (a *Admin) ListPromos(ctx context.Context, workspaceID string, page Page) (
 func (a *Admin) DeletePromo(ctx context.Context, workspaceID string, id uint64) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || id == 0 {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if id == 0 {
 		return 0, ErrPromoScopeRequired
 	}
 	if id > math.MaxInt64 {
@@ -102,7 +109,10 @@ func (a *Admin) DeletePromo(ctx context.Context, workspaceID string, id uint64) 
 }
 
 func validatePromo(params SavePromoParams) error {
-	if params.WorkspaceID == "" || strings.TrimSpace(params.Code) == "" {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(params.Code) == "" {
 		return ErrPromoScopeRequired
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	services "github.com/elum-utils/services"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
@@ -69,9 +70,13 @@ func cloneSlice[T any](items []T) []T {
 }
 
 func InvalidateWorkspaceCache(db *sqlwrap.Client, workspaceID string) error {
-	if db == nil || workspaceID == "" {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if db == nil {
 		return nil
 	}
+
 	return errors.Join(
 		db.BumpCacheVersion(paymentCacheVersionScope(workspaceID)...),
 		db.BumpCacheVersion(paymentProductLimitConfigVersionScope(workspaceID)...),

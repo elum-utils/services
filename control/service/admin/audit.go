@@ -2,30 +2,19 @@ package admin
 
 import (
 	"context"
-	"strings"
 
-	"github.com/elum-utils/services/control/repository"
+	services "github.com/elum-utils/services"
 )
 
-func (a *Admin) AppendAudit(ctx context.Context, params AuditEventParams) error {
-	mergedCtx, cancel := a.withContext(ctx)
-	defer cancel()
-	return a.repository.AppendAudit(mergedCtx, repository.AuditEvent{
-		WorkspaceID: strings.TrimSpace(
-			params.WorkspaceID,
-		), ActorID: strings.TrimSpace(params.ActorID), MethodKey: strings.TrimSpace(params.MethodKey),
-		TargetType: strings.TrimSpace(
-			params.TargetType,
-		), TargetID: strings.TrimSpace(params.TargetID), Result: strings.TrimSpace(params.Result), RequestID: strings.TrimSpace(params.RequestID),
-		BeforeData: params.BeforeData, AfterData: params.AfterData,
-	})
-}
-
 func (a *Admin) ListAudit(ctx context.Context, workspaceID string, page Page) ([]AuditEventModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	limit, offset := normalizePage(page)
-	items, err := a.repository.ListAudit(mergedCtx, strings.TrimSpace(workspaceID), limit, offset)
+	items, err := a.repository.ListAudit(mergedCtx, workspaceID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

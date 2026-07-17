@@ -3,6 +3,8 @@ package repository
 import (
 	json "github.com/goccy/go-json"
 	"time"
+
+	services "github.com/elum-utils/services"
 )
 
 const (
@@ -56,6 +58,19 @@ type Identity struct {
 	IsPremium      bool
 	Sex            string
 	Country        string
+}
+
+func (i Identity) Validate() error {
+	return (services.Identity{
+		WorkspaceID:    i.WorkspaceID,
+		AppID:          i.AppID,
+		PlatformID:     i.PlatformID,
+		Platform:       i.Platform,
+		PlatformUserID: i.PlatformUserID,
+		IsPremium:      i.IsPremium,
+		Sex:            i.Sex,
+		Country:        i.Country,
+	}).Validate()
 }
 
 type Redemption struct {

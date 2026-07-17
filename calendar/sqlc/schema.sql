@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS calendar_definition (
     id CHAR(36) NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     type VARCHAR(64) NOT NULL,
     mode VARCHAR(32) NOT NULL,
     interval_type VARCHAR(32) NOT NULL,
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS calendar_definition_active_idx
     ON calendar_definition (workspace_id, is_active, deleted_at, start_at, end_at, created_at);
 
 CREATE TABLE IF NOT EXISTS calendar_localization (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     locale VARCHAR(16) NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS calendar_localization (
 
 CREATE TABLE IF NOT EXISTS calendar_step (
     id BIGSERIAL NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     position INTEGER NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS calendar_step (
 
 CREATE TABLE IF NOT EXISTS calendar_reward (
     id BIGSERIAL NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     step_id BIGINT NOT NULL,
     item_key VARCHAR(128) NOT NULL,
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS calendar_reward_list_idx
     ON calendar_reward (workspace_id, calendar_id, step_id, position, id);
 
 CREATE TABLE IF NOT EXISTS calendar_progress (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     app_id BIGINT NOT NULL,
     platform_id BIGINT NOT NULL,
@@ -120,7 +120,7 @@ CREATE INDEX IF NOT EXISTS calendar_progress_user_idx
 
 CREATE TABLE IF NOT EXISTS calendar_operation (
     id BIGSERIAL NOT NULL,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     app_id BIGINT NOT NULL,
     platform_id BIGINT NOT NULL,
@@ -156,7 +156,7 @@ CREATE INDEX IF NOT EXISTS calendar_operation_user_idx
     ON calendar_operation (workspace_id, app_id, platform_id, platform_user_id, occurred_at);
 
 CREATE TABLE IF NOT EXISTS calendar_stats_daily (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     calendar_id CHAR(36) NOT NULL,
     stats_date DATE NOT NULL,
     operation_count BIGINT NOT NULL DEFAULT 0,

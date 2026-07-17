@@ -201,6 +201,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.adminUpsertProviderStmt, err = db.PrepareContext(ctx, adminUpsertProvider); err != nil {
 		return nil, fmt.Errorf("error preparing query AdminUpsertProvider: %w", err)
 	}
+	if q.bindPaymentAttemptProviderResultStmt, err = db.PrepareContext(ctx, bindPaymentAttemptProviderResult); err != nil {
+		return nil, fmt.Errorf("error preparing query BindPaymentAttemptProviderResult: %w", err)
+	}
 	if q.claimAssetRateUpdateStmt, err = db.PrepareContext(ctx, claimAssetRateUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query ClaimAssetRateUpdate: %w", err)
 	}
@@ -212,6 +215,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.configureAssetRateAutoUpdateStmt, err = db.PrepareContext(ctx, configureAssetRateAutoUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query ConfigureAssetRateAutoUpdate: %w", err)
+	}
+	if q.consumeProductLimitReservationStmt, err = db.PrepareContext(ctx, consumeProductLimitReservation); err != nil {
+		return nil, fmt.Errorf("error preparing query ConsumeProductLimitReservation: %w", err)
+	}
+	if q.consumePurchaseKeyReservationStmt, err = db.PrepareContext(ctx, consumePurchaseKeyReservation); err != nil {
+		return nil, fmt.Errorf("error preparing query ConsumePurchaseKeyReservation: %w", err)
 	}
 	if q.countActivePaymentSubscriptionsAllStmt, err = db.PrepareContext(ctx, countActivePaymentSubscriptionsAll); err != nil {
 		return nil, fmt.Errorf("error preparing query CountActivePaymentSubscriptionsAll: %w", err)
@@ -234,17 +243,26 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createFulfillmentItemStmt, err = db.PrepareContext(ctx, createFulfillmentItem); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateFulfillmentItem: %w", err)
 	}
+	if q.createIdempotentRefundStmt, err = db.PrepareContext(ctx, createIdempotentRefund); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateIdempotentRefund: %w", err)
+	}
 	if q.createPaymentAttemptStmt, err = db.PrepareContext(ctx, createPaymentAttempt); err != nil {
 		return nil, fmt.Errorf("error preparing query CreatePaymentAttempt: %w", err)
 	}
 	if q.createPaymentAttemptFromOrderStmt, err = db.PrepareContext(ctx, createPaymentAttemptFromOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query CreatePaymentAttemptFromOrder: %w", err)
 	}
+	if q.createPaymentAttemptFromOwnedOrderStmt, err = db.PrepareContext(ctx, createPaymentAttemptFromOwnedOrder); err != nil {
+		return nil, fmt.Errorf("error preparing query CreatePaymentAttemptFromOwnedOrder: %w", err)
+	}
 	if q.createPaymentEventStmt, err = db.PrepareContext(ctx, createPaymentEvent); err != nil {
 		return nil, fmt.Errorf("error preparing query CreatePaymentEvent: %w", err)
 	}
 	if q.createPaymentOrderStmt, err = db.PrepareContext(ctx, createPaymentOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query CreatePaymentOrder: %w", err)
+	}
+	if q.createPaymentSubscriptionRenewalStmt, err = db.PrepareContext(ctx, createPaymentSubscriptionRenewal); err != nil {
+		return nil, fmt.Errorf("error preparing query CreatePaymentSubscriptionRenewal: %w", err)
 	}
 	if q.createProductPriceStmt, err = db.PrepareContext(ctx, createProductPrice); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateProductPrice: %w", err)
@@ -297,6 +315,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.ensureProductLimitCounterStmt, err = db.PrepareContext(ctx, ensureProductLimitCounter); err != nil {
 		return nil, fmt.Errorf("error preparing query EnsureProductLimitCounter: %w", err)
 	}
+	if q.expireActivePaymentAttemptsForOrderStmt, err = db.PrepareContext(ctx, expireActivePaymentAttemptsForOrder); err != nil {
+		return nil, fmt.Errorf("error preparing query ExpireActivePaymentAttemptsForOrder: %w", err)
+	}
 	if q.exportListLocalizationsStmt, err = db.PrepareContext(ctx, exportListLocalizations); err != nil {
 		return nil, fmt.Errorf("error preparing query ExportListLocalizations: %w", err)
 	}
@@ -317,6 +338,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.failAssetRateUpdateStmt, err = db.PrepareContext(ctx, failAssetRateUpdate); err != nil {
 		return nil, fmt.Errorf("error preparing query FailAssetRateUpdate: %w", err)
+	}
+	if q.failCreatedPaymentAttemptStmt, err = db.PrepareContext(ctx, failCreatedPaymentAttempt); err != nil {
+		return nil, fmt.Errorf("error preparing query FailCreatedPaymentAttempt: %w", err)
 	}
 	if q.getAssetStmt, err = db.PrepareContext(ctx, getAsset); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAsset: %w", err)
@@ -351,8 +375,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getFulfillmentItemsForProductStmt, err = db.PrepareContext(ctx, getFulfillmentItemsForProduct); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFulfillmentItemsForProduct: %w", err)
 	}
+	if q.getPaymentAttemptByIdempotencyKeyStmt, err = db.PrepareContext(ctx, getPaymentAttemptByIdempotencyKey); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPaymentAttemptByIdempotencyKey: %w", err)
+	}
 	if q.getPaymentAttemptByProviderPaymentIDStmt, err = db.PrepareContext(ctx, getPaymentAttemptByProviderPaymentID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPaymentAttemptByProviderPaymentID: %w", err)
+	}
+	if q.getPaymentEventIdentityStmt, err = db.PrepareContext(ctx, getPaymentEventIdentity); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPaymentEventIdentity: %w", err)
 	}
 	if q.getPaymentOrderStmt, err = db.PrepareContext(ctx, getPaymentOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPaymentOrder: %w", err)
@@ -362,6 +392,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getPaymentSubscriptionByProviderIDStmt, err = db.PrepareContext(ctx, getPaymentSubscriptionByProviderID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPaymentSubscriptionByProviderID: %w", err)
+	}
+	if q.getPaymentSubscriptionRenewalStmt, err = db.PrepareContext(ctx, getPaymentSubscriptionRenewal); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPaymentSubscriptionRenewal: %w", err)
+	}
+	if q.getPaymentSubscriptionRenewalByChargeIDStmt, err = db.PrepareContext(ctx, getPaymentSubscriptionRenewalByChargeID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetPaymentSubscriptionRenewalByChargeID: %w", err)
 	}
 	if q.getProductLimitConfigStmt, err = db.PrepareContext(ctx, getProductLimitConfig); err != nil {
 		return nil, fmt.Errorf("error preparing query GetProductLimitConfig: %w", err)
@@ -396,6 +432,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getPurchaseKeyByHashStmt, err = db.PrepareContext(ctx, getPurchaseKeyByHash); err != nil {
 		return nil, fmt.Errorf("error preparing query GetPurchaseKeyByHash: %w", err)
 	}
+	if q.getRefundByIdempotencyKeyStmt, err = db.PrepareContext(ctx, getRefundByIdempotencyKey); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRefundByIdempotencyKey: %w", err)
+	}
+	if q.getRefundByProviderRefundIDStmt, err = db.PrepareContext(ctx, getRefundByProviderRefundID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRefundByProviderRefundID: %w", err)
+	}
+	if q.getSucceededRefundForOrderStmt, err = db.PrepareContext(ctx, getSucceededRefundForOrder); err != nil {
+		return nil, fmt.Errorf("error preparing query GetSucceededRefundForOrder: %w", err)
+	}
 	if q.importHasTONWalletStmt, err = db.PrepareContext(ctx, importHasTONWallet); err != nil {
 		return nil, fmt.Errorf("error preparing query ImportHasTONWallet: %w", err)
 	}
@@ -407,9 +452,6 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.incrementProductLimitCounterStmt, err = db.PrepareContext(ctx, incrementProductLimitCounter); err != nil {
 		return nil, fmt.Errorf("error preparing query IncrementProductLimitCounter: %w", err)
-	}
-	if q.incrementPurchaseKeyUsageStmt, err = db.PrepareContext(ctx, incrementPurchaseKeyUsage); err != nil {
-		return nil, fmt.Errorf("error preparing query IncrementPurchaseKeyUsage: %w", err)
 	}
 	if q.insertPaidOrderIndexFromOrderStmt, err = db.PrepareContext(ctx, insertPaidOrderIndexFromOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query InsertPaidOrderIndexFromOrder: %w", err)
@@ -450,6 +492,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listProductsCatalogCacheRowsStmt, err = db.PrepareContext(ctx, listProductsCatalogCacheRows); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProductsCatalogCacheRows: %w", err)
 	}
+	if q.listProviderAttemptsForReconciliationStmt, err = db.PrepareContext(ctx, listProviderAttemptsForReconciliation); err != nil {
+		return nil, fmt.Errorf("error preparing query ListProviderAttemptsForReconciliation: %w", err)
+	}
 	if q.listProvidersStmt, err = db.PrepareContext(ctx, listProviders); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProviders: %w", err)
 	}
@@ -462,11 +507,23 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.lockPaymentOrderStmt, err = db.PrepareContext(ctx, lockPaymentOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query LockPaymentOrder: %w", err)
 	}
+	if q.lockPaymentProviderIdempotencyStmt, err = db.PrepareContext(ctx, lockPaymentProviderIdempotency); err != nil {
+		return nil, fmt.Errorf("error preparing query LockPaymentProviderIdempotency: %w", err)
+	}
+	if q.lockPaymentRefundStmt, err = db.PrepareContext(ctx, lockPaymentRefund); err != nil {
+		return nil, fmt.Errorf("error preparing query LockPaymentRefund: %w", err)
+	}
 	if q.lockPurchaseKeyByHashStmt, err = db.PrepareContext(ctx, lockPurchaseKeyByHash); err != nil {
 		return nil, fmt.Errorf("error preparing query LockPurchaseKeyByHash: %w", err)
 	}
+	if q.lockStalePaymentOrdersStmt, err = db.PrepareContext(ctx, lockStalePaymentOrders); err != nil {
+		return nil, fmt.Errorf("error preparing query LockStalePaymentOrders: %w", err)
+	}
 	if q.markFulfillmentRevokedForOrderStmt, err = db.PrepareContext(ctx, markFulfillmentRevokedForOrder); err != nil {
 		return nil, fmt.Errorf("error preparing query MarkFulfillmentRevokedForOrder: %w", err)
+	}
+	if q.markOrderChargebackedStmt, err = db.PrepareContext(ctx, markOrderChargebacked); err != nil {
+		return nil, fmt.Errorf("error preparing query MarkOrderChargebacked: %w", err)
 	}
 	if q.markOrderFulfilledStmt, err = db.PrepareContext(ctx, markOrderFulfilled); err != nil {
 		return nil, fmt.Errorf("error preparing query MarkOrderFulfilled: %w", err)
@@ -495,11 +552,29 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.rebuildWorkspaceProductCacheStmt, err = db.PrepareContext(ctx, rebuildWorkspaceProductCache); err != nil {
 		return nil, fmt.Errorf("error preparing query RebuildWorkspaceProductCache: %w", err)
 	}
+	if q.recoverCreatedPaymentAttemptStmt, err = db.PrepareContext(ctx, recoverCreatedPaymentAttempt); err != nil {
+		return nil, fmt.Errorf("error preparing query RecoverCreatedPaymentAttempt: %w", err)
+	}
+	if q.recoverProviderTransactionStmt, err = db.PrepareContext(ctx, recoverProviderTransaction); err != nil {
+		return nil, fmt.Errorf("error preparing query RecoverProviderTransaction: %w", err)
+	}
 	if q.refreshPaymentDailyOverviewStmt, err = db.PrepareContext(ctx, refreshPaymentDailyOverview); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshPaymentDailyOverview: %w", err)
 	}
 	if q.refreshPaymentDailyStatsStmt, err = db.PrepareContext(ctx, refreshPaymentDailyStats); err != nil {
 		return nil, fmt.Errorf("error preparing query RefreshPaymentDailyStats: %w", err)
+	}
+	if q.releaseProductLimitReservationStmt, err = db.PrepareContext(ctx, releaseProductLimitReservation); err != nil {
+		return nil, fmt.Errorf("error preparing query ReleaseProductLimitReservation: %w", err)
+	}
+	if q.releasePurchaseKeyReservationStmt, err = db.PrepareContext(ctx, releasePurchaseKeyReservation); err != nil {
+		return nil, fmt.Errorf("error preparing query ReleasePurchaseKeyReservation: %w", err)
+	}
+	if q.reserveProductLimitCounterStmt, err = db.PrepareContext(ctx, reserveProductLimitCounter); err != nil {
+		return nil, fmt.Errorf("error preparing query ReserveProductLimitCounter: %w", err)
+	}
+	if q.reservePurchaseKeyUsageStmt, err = db.PrepareContext(ctx, reservePurchaseKeyUsage); err != nil {
+		return nil, fmt.Errorf("error preparing query ReservePurchaseKeyUsage: %w", err)
 	}
 	if q.setPaymentAttemptProviderChargeIDStmt, err = db.PrepareContext(ctx, setPaymentAttemptProviderChargeID); err != nil {
 		return nil, fmt.Errorf("error preparing query SetPaymentAttemptProviderChargeID: %w", err)
@@ -507,8 +582,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.snapshotPaymentOrderItemsStmt, err = db.PrepareContext(ctx, snapshotPaymentOrderItems); err != nil {
 		return nil, fmt.Errorf("error preparing query SnapshotPaymentOrderItems: %w", err)
 	}
+	if q.sumReservedRefundAmountForAttemptStmt, err = db.PrepareContext(ctx, sumReservedRefundAmountForAttempt); err != nil {
+		return nil, fmt.Errorf("error preparing query SumReservedRefundAmountForAttempt: %w", err)
+	}
+	if q.sumSucceededRefundAmountForAttemptStmt, err = db.PrepareContext(ctx, sumSucceededRefundAmountForAttempt); err != nil {
+		return nil, fmt.Errorf("error preparing query SumSucceededRefundAmountForAttempt: %w", err)
+	}
 	if q.syncAutomaticAssetRatesStmt, err = db.PrepareContext(ctx, syncAutomaticAssetRates); err != nil {
 		return nil, fmt.Errorf("error preparing query SyncAutomaticAssetRates: %w", err)
+	}
+	if q.touchPendingProviderAttemptStmt, err = db.PrepareContext(ctx, touchPendingProviderAttempt); err != nil {
+		return nil, fmt.Errorf("error preparing query TouchPendingProviderAttempt: %w", err)
 	}
 	if q.updateDynamicPriceAmountsStmt, err = db.PrepareContext(ctx, updateDynamicPriceAmounts); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateDynamicPriceAmounts: %w", err)
@@ -519,8 +603,11 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updatePaymentAttemptStatusStmt, err = db.PrepareContext(ctx, updatePaymentAttemptStatus); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdatePaymentAttemptStatus: %w", err)
 	}
-	if q.updatePaymentSubscriptionStatusStmt, err = db.PrepareContext(ctx, updatePaymentSubscriptionStatus); err != nil {
-		return nil, fmt.Errorf("error preparing query UpdatePaymentSubscriptionStatus: %w", err)
+	if q.updatePaymentSubscriptionStatusByProviderStmt, err = db.PrepareContext(ctx, updatePaymentSubscriptionStatusByProvider); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdatePaymentSubscriptionStatusByProvider: %w", err)
+	}
+	if q.updatePaymentSubscriptionStatusForWorkspaceStmt, err = db.PrepareContext(ctx, updatePaymentSubscriptionStatusForWorkspace); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdatePaymentSubscriptionStatusForWorkspace: %w", err)
 	}
 	if q.updateProductPriceStmt, err = db.PrepareContext(ctx, updateProductPrice); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateProductPrice: %w", err)
@@ -855,6 +942,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing adminUpsertProviderStmt: %w", cerr)
 		}
 	}
+	if q.bindPaymentAttemptProviderResultStmt != nil {
+		if cerr := q.bindPaymentAttemptProviderResultStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing bindPaymentAttemptProviderResultStmt: %w", cerr)
+		}
+	}
 	if q.claimAssetRateUpdateStmt != nil {
 		if cerr := q.claimAssetRateUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing claimAssetRateUpdateStmt: %w", cerr)
@@ -873,6 +965,16 @@ func (q *Queries) Close() error {
 	if q.configureAssetRateAutoUpdateStmt != nil {
 		if cerr := q.configureAssetRateAutoUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing configureAssetRateAutoUpdateStmt: %w", cerr)
+		}
+	}
+	if q.consumeProductLimitReservationStmt != nil {
+		if cerr := q.consumeProductLimitReservationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing consumeProductLimitReservationStmt: %w", cerr)
+		}
+	}
+	if q.consumePurchaseKeyReservationStmt != nil {
+		if cerr := q.consumePurchaseKeyReservationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing consumePurchaseKeyReservationStmt: %w", cerr)
 		}
 	}
 	if q.countActivePaymentSubscriptionsAllStmt != nil {
@@ -910,6 +1012,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createFulfillmentItemStmt: %w", cerr)
 		}
 	}
+	if q.createIdempotentRefundStmt != nil {
+		if cerr := q.createIdempotentRefundStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createIdempotentRefundStmt: %w", cerr)
+		}
+	}
 	if q.createPaymentAttemptStmt != nil {
 		if cerr := q.createPaymentAttemptStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createPaymentAttemptStmt: %w", cerr)
@@ -920,6 +1027,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createPaymentAttemptFromOrderStmt: %w", cerr)
 		}
 	}
+	if q.createPaymentAttemptFromOwnedOrderStmt != nil {
+		if cerr := q.createPaymentAttemptFromOwnedOrderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createPaymentAttemptFromOwnedOrderStmt: %w", cerr)
+		}
+	}
 	if q.createPaymentEventStmt != nil {
 		if cerr := q.createPaymentEventStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createPaymentEventStmt: %w", cerr)
@@ -928,6 +1040,11 @@ func (q *Queries) Close() error {
 	if q.createPaymentOrderStmt != nil {
 		if cerr := q.createPaymentOrderStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createPaymentOrderStmt: %w", cerr)
+		}
+	}
+	if q.createPaymentSubscriptionRenewalStmt != nil {
+		if cerr := q.createPaymentSubscriptionRenewalStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createPaymentSubscriptionRenewalStmt: %w", cerr)
 		}
 	}
 	if q.createProductPriceStmt != nil {
@@ -1015,6 +1132,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing ensureProductLimitCounterStmt: %w", cerr)
 		}
 	}
+	if q.expireActivePaymentAttemptsForOrderStmt != nil {
+		if cerr := q.expireActivePaymentAttemptsForOrderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing expireActivePaymentAttemptsForOrderStmt: %w", cerr)
+		}
+	}
 	if q.exportListLocalizationsStmt != nil {
 		if cerr := q.exportListLocalizationsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing exportListLocalizationsStmt: %w", cerr)
@@ -1048,6 +1170,11 @@ func (q *Queries) Close() error {
 	if q.failAssetRateUpdateStmt != nil {
 		if cerr := q.failAssetRateUpdateStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing failAssetRateUpdateStmt: %w", cerr)
+		}
+	}
+	if q.failCreatedPaymentAttemptStmt != nil {
+		if cerr := q.failCreatedPaymentAttemptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing failCreatedPaymentAttemptStmt: %w", cerr)
 		}
 	}
 	if q.getAssetStmt != nil {
@@ -1105,9 +1232,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getFulfillmentItemsForProductStmt: %w", cerr)
 		}
 	}
+	if q.getPaymentAttemptByIdempotencyKeyStmt != nil {
+		if cerr := q.getPaymentAttemptByIdempotencyKeyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPaymentAttemptByIdempotencyKeyStmt: %w", cerr)
+		}
+	}
 	if q.getPaymentAttemptByProviderPaymentIDStmt != nil {
 		if cerr := q.getPaymentAttemptByProviderPaymentIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getPaymentAttemptByProviderPaymentIDStmt: %w", cerr)
+		}
+	}
+	if q.getPaymentEventIdentityStmt != nil {
+		if cerr := q.getPaymentEventIdentityStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPaymentEventIdentityStmt: %w", cerr)
 		}
 	}
 	if q.getPaymentOrderStmt != nil {
@@ -1123,6 +1260,16 @@ func (q *Queries) Close() error {
 	if q.getPaymentSubscriptionByProviderIDStmt != nil {
 		if cerr := q.getPaymentSubscriptionByProviderIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getPaymentSubscriptionByProviderIDStmt: %w", cerr)
+		}
+	}
+	if q.getPaymentSubscriptionRenewalStmt != nil {
+		if cerr := q.getPaymentSubscriptionRenewalStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPaymentSubscriptionRenewalStmt: %w", cerr)
+		}
+	}
+	if q.getPaymentSubscriptionRenewalByChargeIDStmt != nil {
+		if cerr := q.getPaymentSubscriptionRenewalByChargeIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getPaymentSubscriptionRenewalByChargeIDStmt: %w", cerr)
 		}
 	}
 	if q.getProductLimitConfigStmt != nil {
@@ -1180,6 +1327,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getPurchaseKeyByHashStmt: %w", cerr)
 		}
 	}
+	if q.getRefundByIdempotencyKeyStmt != nil {
+		if cerr := q.getRefundByIdempotencyKeyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRefundByIdempotencyKeyStmt: %w", cerr)
+		}
+	}
+	if q.getRefundByProviderRefundIDStmt != nil {
+		if cerr := q.getRefundByProviderRefundIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRefundByProviderRefundIDStmt: %w", cerr)
+		}
+	}
+	if q.getSucceededRefundForOrderStmt != nil {
+		if cerr := q.getSucceededRefundForOrderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getSucceededRefundForOrderStmt: %w", cerr)
+		}
+	}
 	if q.importHasTONWalletStmt != nil {
 		if cerr := q.importHasTONWalletStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing importHasTONWalletStmt: %w", cerr)
@@ -1198,11 +1360,6 @@ func (q *Queries) Close() error {
 	if q.incrementProductLimitCounterStmt != nil {
 		if cerr := q.incrementProductLimitCounterStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing incrementProductLimitCounterStmt: %w", cerr)
-		}
-	}
-	if q.incrementPurchaseKeyUsageStmt != nil {
-		if cerr := q.incrementPurchaseKeyUsageStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing incrementPurchaseKeyUsageStmt: %w", cerr)
 		}
 	}
 	if q.insertPaidOrderIndexFromOrderStmt != nil {
@@ -1270,6 +1427,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listProductsCatalogCacheRowsStmt: %w", cerr)
 		}
 	}
+	if q.listProviderAttemptsForReconciliationStmt != nil {
+		if cerr := q.listProviderAttemptsForReconciliationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listProviderAttemptsForReconciliationStmt: %w", cerr)
+		}
+	}
 	if q.listProvidersStmt != nil {
 		if cerr := q.listProvidersStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listProvidersStmt: %w", cerr)
@@ -1290,14 +1452,34 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing lockPaymentOrderStmt: %w", cerr)
 		}
 	}
+	if q.lockPaymentProviderIdempotencyStmt != nil {
+		if cerr := q.lockPaymentProviderIdempotencyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockPaymentProviderIdempotencyStmt: %w", cerr)
+		}
+	}
+	if q.lockPaymentRefundStmt != nil {
+		if cerr := q.lockPaymentRefundStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockPaymentRefundStmt: %w", cerr)
+		}
+	}
 	if q.lockPurchaseKeyByHashStmt != nil {
 		if cerr := q.lockPurchaseKeyByHashStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing lockPurchaseKeyByHashStmt: %w", cerr)
 		}
 	}
+	if q.lockStalePaymentOrdersStmt != nil {
+		if cerr := q.lockStalePaymentOrdersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing lockStalePaymentOrdersStmt: %w", cerr)
+		}
+	}
 	if q.markFulfillmentRevokedForOrderStmt != nil {
 		if cerr := q.markFulfillmentRevokedForOrderStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing markFulfillmentRevokedForOrderStmt: %w", cerr)
+		}
+	}
+	if q.markOrderChargebackedStmt != nil {
+		if cerr := q.markOrderChargebackedStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing markOrderChargebackedStmt: %w", cerr)
 		}
 	}
 	if q.markOrderFulfilledStmt != nil {
@@ -1345,6 +1527,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing rebuildWorkspaceProductCacheStmt: %w", cerr)
 		}
 	}
+	if q.recoverCreatedPaymentAttemptStmt != nil {
+		if cerr := q.recoverCreatedPaymentAttemptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing recoverCreatedPaymentAttemptStmt: %w", cerr)
+		}
+	}
+	if q.recoverProviderTransactionStmt != nil {
+		if cerr := q.recoverProviderTransactionStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing recoverProviderTransactionStmt: %w", cerr)
+		}
+	}
 	if q.refreshPaymentDailyOverviewStmt != nil {
 		if cerr := q.refreshPaymentDailyOverviewStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing refreshPaymentDailyOverviewStmt: %w", cerr)
@@ -1353,6 +1545,26 @@ func (q *Queries) Close() error {
 	if q.refreshPaymentDailyStatsStmt != nil {
 		if cerr := q.refreshPaymentDailyStatsStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing refreshPaymentDailyStatsStmt: %w", cerr)
+		}
+	}
+	if q.releaseProductLimitReservationStmt != nil {
+		if cerr := q.releaseProductLimitReservationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing releaseProductLimitReservationStmt: %w", cerr)
+		}
+	}
+	if q.releasePurchaseKeyReservationStmt != nil {
+		if cerr := q.releasePurchaseKeyReservationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing releasePurchaseKeyReservationStmt: %w", cerr)
+		}
+	}
+	if q.reserveProductLimitCounterStmt != nil {
+		if cerr := q.reserveProductLimitCounterStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing reserveProductLimitCounterStmt: %w", cerr)
+		}
+	}
+	if q.reservePurchaseKeyUsageStmt != nil {
+		if cerr := q.reservePurchaseKeyUsageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing reservePurchaseKeyUsageStmt: %w", cerr)
 		}
 	}
 	if q.setPaymentAttemptProviderChargeIDStmt != nil {
@@ -1365,9 +1577,24 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing snapshotPaymentOrderItemsStmt: %w", cerr)
 		}
 	}
+	if q.sumReservedRefundAmountForAttemptStmt != nil {
+		if cerr := q.sumReservedRefundAmountForAttemptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing sumReservedRefundAmountForAttemptStmt: %w", cerr)
+		}
+	}
+	if q.sumSucceededRefundAmountForAttemptStmt != nil {
+		if cerr := q.sumSucceededRefundAmountForAttemptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing sumSucceededRefundAmountForAttemptStmt: %w", cerr)
+		}
+	}
 	if q.syncAutomaticAssetRatesStmt != nil {
 		if cerr := q.syncAutomaticAssetRatesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing syncAutomaticAssetRatesStmt: %w", cerr)
+		}
+	}
+	if q.touchPendingProviderAttemptStmt != nil {
+		if cerr := q.touchPendingProviderAttemptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing touchPendingProviderAttemptStmt: %w", cerr)
 		}
 	}
 	if q.updateDynamicPriceAmountsStmt != nil {
@@ -1385,9 +1612,14 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updatePaymentAttemptStatusStmt: %w", cerr)
 		}
 	}
-	if q.updatePaymentSubscriptionStatusStmt != nil {
-		if cerr := q.updatePaymentSubscriptionStatusStmt.Close(); cerr != nil {
-			err = fmt.Errorf("error closing updatePaymentSubscriptionStatusStmt: %w", cerr)
+	if q.updatePaymentSubscriptionStatusByProviderStmt != nil {
+		if cerr := q.updatePaymentSubscriptionStatusByProviderStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updatePaymentSubscriptionStatusByProviderStmt: %w", cerr)
+		}
+	}
+	if q.updatePaymentSubscriptionStatusForWorkspaceStmt != nil {
+		if cerr := q.updatePaymentSubscriptionStatusForWorkspaceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updatePaymentSubscriptionStatusForWorkspaceStmt: %w", cerr)
 		}
 	}
 	if q.updateProductPriceStmt != nil {
@@ -1543,10 +1775,13 @@ type Queries struct {
 	adminUpdateRefundStatusStmt                           *sql.Stmt
 	adminUpdateRefundStatusForWorkspaceStmt               *sql.Stmt
 	adminUpsertProviderStmt                               *sql.Stmt
+	bindPaymentAttemptProviderResultStmt                  *sql.Stmt
 	claimAssetRateUpdateStmt                              *sql.Stmt
 	completeAssetRateUpdateStmt                           *sql.Stmt
 	completeFulfillmentFromOrderStmt                      *sql.Stmt
 	configureAssetRateAutoUpdateStmt                      *sql.Stmt
+	consumeProductLimitReservationStmt                    *sql.Stmt
+	consumePurchaseKeyReservationStmt                     *sql.Stmt
 	countActivePaymentSubscriptionsAllStmt                *sql.Stmt
 	countActivePaymentSubscriptionsForProductStmt         *sql.Stmt
 	countActivePaymentSubscriptionsForProductProviderStmt *sql.Stmt
@@ -1554,10 +1789,13 @@ type Queries struct {
 	createDynamicProductPriceStmt                         *sql.Stmt
 	createFulfillmentStmt                                 *sql.Stmt
 	createFulfillmentItemStmt                             *sql.Stmt
+	createIdempotentRefundStmt                            *sql.Stmt
 	createPaymentAttemptStmt                              *sql.Stmt
 	createPaymentAttemptFromOrderStmt                     *sql.Stmt
+	createPaymentAttemptFromOwnedOrderStmt                *sql.Stmt
 	createPaymentEventStmt                                *sql.Stmt
 	createPaymentOrderStmt                                *sql.Stmt
+	createPaymentSubscriptionRenewalStmt                  *sql.Stmt
 	createProductPriceStmt                                *sql.Stmt
 	createProviderTransactionStmt                         *sql.Stmt
 	createPurchaseKeyStmt                                 *sql.Stmt
@@ -1575,6 +1813,7 @@ type Queries struct {
 	deleteTONWalletStmt                                   *sql.Stmt
 	deleteWorkspaceProductCacheStmt                       *sql.Stmt
 	ensureProductLimitCounterStmt                         *sql.Stmt
+	expireActivePaymentAttemptsForOrderStmt               *sql.Stmt
 	exportListLocalizationsStmt                           *sql.Stmt
 	exportListPricesStmt                                  *sql.Stmt
 	exportListProductGroupsStmt                           *sql.Stmt
@@ -1582,6 +1821,7 @@ type Queries struct {
 	exportListProductsStmt                                *sql.Stmt
 	exportListTONWalletsStmt                              *sql.Stmt
 	failAssetRateUpdateStmt                               *sql.Stmt
+	failCreatedPaymentAttemptStmt                         *sql.Stmt
 	getAssetStmt                                          *sql.Stmt
 	getAssetByChainContractStmt                           *sql.Stmt
 	getAssetRateForPricingStmt                            *sql.Stmt
@@ -1593,10 +1833,14 @@ type Queries struct {
 	getFulfillmentForOrderStmt                            *sql.Stmt
 	getFulfillmentItemsForOrderStmt                       *sql.Stmt
 	getFulfillmentItemsForProductStmt                     *sql.Stmt
+	getPaymentAttemptByIdempotencyKeyStmt                 *sql.Stmt
 	getPaymentAttemptByProviderPaymentIDStmt              *sql.Stmt
+	getPaymentEventIdentityStmt                           *sql.Stmt
 	getPaymentOrderStmt                                   *sql.Stmt
 	getPaymentOrderByPublicIDStmt                         *sql.Stmt
 	getPaymentSubscriptionByProviderIDStmt                *sql.Stmt
+	getPaymentSubscriptionRenewalStmt                     *sql.Stmt
+	getPaymentSubscriptionRenewalByChargeIDStmt           *sql.Stmt
 	getProductLimitConfigStmt                             *sql.Stmt
 	getProductLimitCounterCountStmt                       *sql.Stmt
 	getProductPreviewRowsStmt                             *sql.Stmt
@@ -1608,11 +1852,13 @@ type Queries struct {
 	getProviderCursorStmt                                 *sql.Stmt
 	getProviderTransactionByExternalIDStmt                *sql.Stmt
 	getPurchaseKeyByHashStmt                              *sql.Stmt
+	getRefundByIdempotencyKeyStmt                         *sql.Stmt
+	getRefundByProviderRefundIDStmt                       *sql.Stmt
+	getSucceededRefundForOrderStmt                        *sql.Stmt
 	importHasTONWalletStmt                                *sql.Stmt
 	importListProductGroupCodesStmt                       *sql.Stmt
 	importListProductIDsStmt                              *sql.Stmt
 	incrementProductLimitCounterStmt                      *sql.Stmt
-	incrementPurchaseKeyUsageStmt                         *sql.Stmt
 	insertPaidOrderIndexFromOrderStmt                     *sql.Stmt
 	listActiveProductLimitCountersStmt                    *sql.Stmt
 	listAssetUSDTPricesStmt                               *sql.Stmt
@@ -1626,12 +1872,17 @@ type Queries struct {
 	listProductPriceOptionCatalogRowsStmt                 *sql.Stmt
 	listProductPriceOptionsStmt                           *sql.Stmt
 	listProductsCatalogCacheRowsStmt                      *sql.Stmt
+	listProviderAttemptsForReconciliationStmt             *sql.Stmt
 	listProvidersStmt                                     *sql.Stmt
 	lockPaymentAttemptStmt                                *sql.Stmt
 	lockPaymentAttemptByProviderPaymentIDStmt             *sql.Stmt
 	lockPaymentOrderStmt                                  *sql.Stmt
+	lockPaymentProviderIdempotencyStmt                    *sql.Stmt
+	lockPaymentRefundStmt                                 *sql.Stmt
 	lockPurchaseKeyByHashStmt                             *sql.Stmt
+	lockStalePaymentOrdersStmt                            *sql.Stmt
 	markFulfillmentRevokedForOrderStmt                    *sql.Stmt
+	markOrderChargebackedStmt                             *sql.Stmt
 	markOrderFulfilledStmt                                *sql.Stmt
 	markOrderPaidStmt                                     *sql.Stmt
 	markOrderPaidAndIndexStmt                             *sql.Stmt
@@ -1641,15 +1892,25 @@ type Queries struct {
 	markPaymentEventProcessedStmt                         *sql.Stmt
 	rebuildProductCacheStmt                               *sql.Stmt
 	rebuildWorkspaceProductCacheStmt                      *sql.Stmt
+	recoverCreatedPaymentAttemptStmt                      *sql.Stmt
+	recoverProviderTransactionStmt                        *sql.Stmt
 	refreshPaymentDailyOverviewStmt                       *sql.Stmt
 	refreshPaymentDailyStatsStmt                          *sql.Stmt
+	releaseProductLimitReservationStmt                    *sql.Stmt
+	releasePurchaseKeyReservationStmt                     *sql.Stmt
+	reserveProductLimitCounterStmt                        *sql.Stmt
+	reservePurchaseKeyUsageStmt                           *sql.Stmt
 	setPaymentAttemptProviderChargeIDStmt                 *sql.Stmt
 	snapshotPaymentOrderItemsStmt                         *sql.Stmt
+	sumReservedRefundAmountForAttemptStmt                 *sql.Stmt
+	sumSucceededRefundAmountForAttemptStmt                *sql.Stmt
 	syncAutomaticAssetRatesStmt                           *sql.Stmt
+	touchPendingProviderAttemptStmt                       *sql.Stmt
 	updateDynamicPriceAmountsStmt                         *sql.Stmt
 	updateDynamicProductPriceStmt                         *sql.Stmt
 	updatePaymentAttemptStatusStmt                        *sql.Stmt
-	updatePaymentSubscriptionStatusStmt                   *sql.Stmt
+	updatePaymentSubscriptionStatusByProviderStmt         *sql.Stmt
+	updatePaymentSubscriptionStatusForWorkspaceStmt       *sql.Stmt
 	updateProductPriceStmt                                *sql.Stmt
 	upsertAssetStmt                                       *sql.Stmt
 	upsertAssetRateStmt                                   *sql.Stmt
@@ -1726,10 +1987,13 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpdateRefundStatusStmt:                           q.adminUpdateRefundStatusStmt,
 		adminUpdateRefundStatusForWorkspaceStmt:               q.adminUpdateRefundStatusForWorkspaceStmt,
 		adminUpsertProviderStmt:                               q.adminUpsertProviderStmt,
+		bindPaymentAttemptProviderResultStmt:                  q.bindPaymentAttemptProviderResultStmt,
 		claimAssetRateUpdateStmt:                              q.claimAssetRateUpdateStmt,
 		completeAssetRateUpdateStmt:                           q.completeAssetRateUpdateStmt,
 		completeFulfillmentFromOrderStmt:                      q.completeFulfillmentFromOrderStmt,
 		configureAssetRateAutoUpdateStmt:                      q.configureAssetRateAutoUpdateStmt,
+		consumeProductLimitReservationStmt:                    q.consumeProductLimitReservationStmt,
+		consumePurchaseKeyReservationStmt:                     q.consumePurchaseKeyReservationStmt,
 		countActivePaymentSubscriptionsAllStmt:                q.countActivePaymentSubscriptionsAllStmt,
 		countActivePaymentSubscriptionsForProductStmt:         q.countActivePaymentSubscriptionsForProductStmt,
 		countActivePaymentSubscriptionsForProductProviderStmt: q.countActivePaymentSubscriptionsForProductProviderStmt,
@@ -1737,10 +2001,13 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createDynamicProductPriceStmt:                         q.createDynamicProductPriceStmt,
 		createFulfillmentStmt:                                 q.createFulfillmentStmt,
 		createFulfillmentItemStmt:                             q.createFulfillmentItemStmt,
+		createIdempotentRefundStmt:                            q.createIdempotentRefundStmt,
 		createPaymentAttemptStmt:                              q.createPaymentAttemptStmt,
 		createPaymentAttemptFromOrderStmt:                     q.createPaymentAttemptFromOrderStmt,
+		createPaymentAttemptFromOwnedOrderStmt:                q.createPaymentAttemptFromOwnedOrderStmt,
 		createPaymentEventStmt:                                q.createPaymentEventStmt,
 		createPaymentOrderStmt:                                q.createPaymentOrderStmt,
+		createPaymentSubscriptionRenewalStmt:                  q.createPaymentSubscriptionRenewalStmt,
 		createProductPriceStmt:                                q.createProductPriceStmt,
 		createProviderTransactionStmt:                         q.createProviderTransactionStmt,
 		createPurchaseKeyStmt:                                 q.createPurchaseKeyStmt,
@@ -1758,6 +2025,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteTONWalletStmt:                                   q.deleteTONWalletStmt,
 		deleteWorkspaceProductCacheStmt:                       q.deleteWorkspaceProductCacheStmt,
 		ensureProductLimitCounterStmt:                         q.ensureProductLimitCounterStmt,
+		expireActivePaymentAttemptsForOrderStmt:               q.expireActivePaymentAttemptsForOrderStmt,
 		exportListLocalizationsStmt:                           q.exportListLocalizationsStmt,
 		exportListPricesStmt:                                  q.exportListPricesStmt,
 		exportListProductGroupsStmt:                           q.exportListProductGroupsStmt,
@@ -1765,6 +2033,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		exportListProductsStmt:                                q.exportListProductsStmt,
 		exportListTONWalletsStmt:                              q.exportListTONWalletsStmt,
 		failAssetRateUpdateStmt:                               q.failAssetRateUpdateStmt,
+		failCreatedPaymentAttemptStmt:                         q.failCreatedPaymentAttemptStmt,
 		getAssetStmt:                                          q.getAssetStmt,
 		getAssetByChainContractStmt:                           q.getAssetByChainContractStmt,
 		getAssetRateForPricingStmt:                            q.getAssetRateForPricingStmt,
@@ -1776,10 +2045,14 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getFulfillmentForOrderStmt:                            q.getFulfillmentForOrderStmt,
 		getFulfillmentItemsForOrderStmt:                       q.getFulfillmentItemsForOrderStmt,
 		getFulfillmentItemsForProductStmt:                     q.getFulfillmentItemsForProductStmt,
+		getPaymentAttemptByIdempotencyKeyStmt:                 q.getPaymentAttemptByIdempotencyKeyStmt,
 		getPaymentAttemptByProviderPaymentIDStmt:              q.getPaymentAttemptByProviderPaymentIDStmt,
+		getPaymentEventIdentityStmt:                           q.getPaymentEventIdentityStmt,
 		getPaymentOrderStmt:                                   q.getPaymentOrderStmt,
 		getPaymentOrderByPublicIDStmt:                         q.getPaymentOrderByPublicIDStmt,
 		getPaymentSubscriptionByProviderIDStmt:                q.getPaymentSubscriptionByProviderIDStmt,
+		getPaymentSubscriptionRenewalStmt:                     q.getPaymentSubscriptionRenewalStmt,
+		getPaymentSubscriptionRenewalByChargeIDStmt:           q.getPaymentSubscriptionRenewalByChargeIDStmt,
 		getProductLimitConfigStmt:                             q.getProductLimitConfigStmt,
 		getProductLimitCounterCountStmt:                       q.getProductLimitCounterCountStmt,
 		getProductPreviewRowsStmt:                             q.getProductPreviewRowsStmt,
@@ -1791,11 +2064,13 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getProviderCursorStmt:                                 q.getProviderCursorStmt,
 		getProviderTransactionByExternalIDStmt:                q.getProviderTransactionByExternalIDStmt,
 		getPurchaseKeyByHashStmt:                              q.getPurchaseKeyByHashStmt,
+		getRefundByIdempotencyKeyStmt:                         q.getRefundByIdempotencyKeyStmt,
+		getRefundByProviderRefundIDStmt:                       q.getRefundByProviderRefundIDStmt,
+		getSucceededRefundForOrderStmt:                        q.getSucceededRefundForOrderStmt,
 		importHasTONWalletStmt:                                q.importHasTONWalletStmt,
 		importListProductGroupCodesStmt:                       q.importListProductGroupCodesStmt,
 		importListProductIDsStmt:                              q.importListProductIDsStmt,
 		incrementProductLimitCounterStmt:                      q.incrementProductLimitCounterStmt,
-		incrementPurchaseKeyUsageStmt:                         q.incrementPurchaseKeyUsageStmt,
 		insertPaidOrderIndexFromOrderStmt:                     q.insertPaidOrderIndexFromOrderStmt,
 		listActiveProductLimitCountersStmt:                    q.listActiveProductLimitCountersStmt,
 		listAssetUSDTPricesStmt:                               q.listAssetUSDTPricesStmt,
@@ -1809,12 +2084,17 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listProductPriceOptionCatalogRowsStmt:                 q.listProductPriceOptionCatalogRowsStmt,
 		listProductPriceOptionsStmt:                           q.listProductPriceOptionsStmt,
 		listProductsCatalogCacheRowsStmt:                      q.listProductsCatalogCacheRowsStmt,
+		listProviderAttemptsForReconciliationStmt:             q.listProviderAttemptsForReconciliationStmt,
 		listProvidersStmt:                                     q.listProvidersStmt,
 		lockPaymentAttemptStmt:                                q.lockPaymentAttemptStmt,
 		lockPaymentAttemptByProviderPaymentIDStmt:             q.lockPaymentAttemptByProviderPaymentIDStmt,
 		lockPaymentOrderStmt:                                  q.lockPaymentOrderStmt,
+		lockPaymentProviderIdempotencyStmt:                    q.lockPaymentProviderIdempotencyStmt,
+		lockPaymentRefundStmt:                                 q.lockPaymentRefundStmt,
 		lockPurchaseKeyByHashStmt:                             q.lockPurchaseKeyByHashStmt,
+		lockStalePaymentOrdersStmt:                            q.lockStalePaymentOrdersStmt,
 		markFulfillmentRevokedForOrderStmt:                    q.markFulfillmentRevokedForOrderStmt,
+		markOrderChargebackedStmt:                             q.markOrderChargebackedStmt,
 		markOrderFulfilledStmt:                                q.markOrderFulfilledStmt,
 		markOrderPaidStmt:                                     q.markOrderPaidStmt,
 		markOrderPaidAndIndexStmt:                             q.markOrderPaidAndIndexStmt,
@@ -1824,15 +2104,25 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		markPaymentEventProcessedStmt:                         q.markPaymentEventProcessedStmt,
 		rebuildProductCacheStmt:                               q.rebuildProductCacheStmt,
 		rebuildWorkspaceProductCacheStmt:                      q.rebuildWorkspaceProductCacheStmt,
+		recoverCreatedPaymentAttemptStmt:                      q.recoverCreatedPaymentAttemptStmt,
+		recoverProviderTransactionStmt:                        q.recoverProviderTransactionStmt,
 		refreshPaymentDailyOverviewStmt:                       q.refreshPaymentDailyOverviewStmt,
 		refreshPaymentDailyStatsStmt:                          q.refreshPaymentDailyStatsStmt,
+		releaseProductLimitReservationStmt:                    q.releaseProductLimitReservationStmt,
+		releasePurchaseKeyReservationStmt:                     q.releasePurchaseKeyReservationStmt,
+		reserveProductLimitCounterStmt:                        q.reserveProductLimitCounterStmt,
+		reservePurchaseKeyUsageStmt:                           q.reservePurchaseKeyUsageStmt,
 		setPaymentAttemptProviderChargeIDStmt:                 q.setPaymentAttemptProviderChargeIDStmt,
 		snapshotPaymentOrderItemsStmt:                         q.snapshotPaymentOrderItemsStmt,
+		sumReservedRefundAmountForAttemptStmt:                 q.sumReservedRefundAmountForAttemptStmt,
+		sumSucceededRefundAmountForAttemptStmt:                q.sumSucceededRefundAmountForAttemptStmt,
 		syncAutomaticAssetRatesStmt:                           q.syncAutomaticAssetRatesStmt,
+		touchPendingProviderAttemptStmt:                       q.touchPendingProviderAttemptStmt,
 		updateDynamicPriceAmountsStmt:                         q.updateDynamicPriceAmountsStmt,
 		updateDynamicProductPriceStmt:                         q.updateDynamicProductPriceStmt,
 		updatePaymentAttemptStatusStmt:                        q.updatePaymentAttemptStatusStmt,
-		updatePaymentSubscriptionStatusStmt:                   q.updatePaymentSubscriptionStatusStmt,
+		updatePaymentSubscriptionStatusByProviderStmt:         q.updatePaymentSubscriptionStatusByProviderStmt,
+		updatePaymentSubscriptionStatusForWorkspaceStmt:       q.updatePaymentSubscriptionStatusForWorkspaceStmt,
 		updateProductPriceStmt:                                q.updateProductPriceStmt,
 		upsertAssetStmt:                                       q.upsertAssetStmt,
 		upsertAssetRateStmt:                                   q.upsertAssetRateStmt,

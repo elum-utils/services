@@ -3,25 +3,20 @@ package repository
 import (
 	"context"
 	"time"
+
+	services "github.com/elum-utils/services"
 )
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
-	if workspaceID == "" {
-		return ExportPackage{}, ErrWorkspaceRequired
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return ExportPackage{}, err
 	}
 	now := req.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	var bundles []OfferBundle
-	if err := r.WithTx(ctx, func(txRepo *Repository) error {
-		if _, err := txRepo.executor.ExecContext(
-			ctx,
-			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-		); err != nil {
-			return err
-		}
-
+	if err := r.WithReadOnlySnapshot(ctx, func(txRepo *Repository) error {
 		var err error
 		bundles, err = txRepo.ListAllOfferBundles(ctx, workspaceID)
 		return err

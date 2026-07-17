@@ -1222,7 +1222,7 @@ WHERE pc.product_id = $1
 ORDER BY pc.locale;
 
 -- name: GetProductLimitCounterCount :one
-SELECT paid_count
+SELECT paid_count + reserved_count
 FROM payment_product_limit_counter
 WHERE workspace_id = $1
   AND platform_id = $2
@@ -1240,10 +1240,10 @@ SELECT
     platform_user_id,
     window_start,
     window_end,
-    paid_count
+    paid_count + reserved_count AS paid_count
 FROM payment_product_limit_counter
 WHERE workspace_id = $1
-  AND platform_id = $2
+  AND platform_id IN (0, $2)
   AND platform_user_id IN ('', $3)
   AND window_start <= $4
   AND window_end > $5
@@ -1258,10 +1258,51 @@ INSERT INTO payment_product_limit_counter (
     platform_user_id,
     window_start,
     window_end,
-    paid_count
+    paid_count,
+    reserved_count
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0)
 ON CONFLICT (workspace_id, platform_id, product_id, counter_scope, platform_user_id, window_start, window_end) DO NOTHING;
+
+-- name: ReserveProductLimitCounter :execrows
+UPDATE payment_product_limit_counter
+SET reserved_count = reserved_count + $1,
+    updated_at = now()
+WHERE workspace_id = $2
+  AND platform_id = $3
+  AND product_id = $4
+  AND counter_scope = $5
+  AND platform_user_id = $6
+  AND window_start = $7
+  AND window_end = $8
+  AND paid_count + reserved_count + $9 <= $10;
+
+-- name: ConsumeProductLimitReservation :execrows
+UPDATE payment_product_limit_counter
+SET reserved_count = reserved_count - $1,
+    paid_count = paid_count + $2,
+    updated_at = now()
+WHERE workspace_id = $3
+  AND platform_id = $4
+  AND product_id = $5
+  AND counter_scope = $6
+  AND platform_user_id = $7
+  AND window_start = $8
+  AND window_end = $9
+  AND reserved_count >= $10;
+
+-- name: ReleaseProductLimitReservation :execrows
+UPDATE payment_product_limit_counter
+SET reserved_count = reserved_count - $1,
+    updated_at = now()
+WHERE workspace_id = $2
+  AND platform_id = $3
+  AND product_id = $4
+  AND counter_scope = $5
+  AND platform_user_id = $6
+  AND window_start = $7
+  AND window_end = $8
+  AND reserved_count >= $9;
 
 -- name: IncrementProductLimitCounter :execrows
 UPDATE payment_product_limit_counter
@@ -1302,6 +1343,7 @@ SELECT
     status,
     max_uses,
     used_count,
+    reserved_count,
     expires_at,
     created_at,
     updated_at
@@ -1322,6 +1364,7 @@ SELECT
     status,
     max_uses,
     used_count,
+    reserved_count,
     expires_at,
     created_at,
     updated_at
@@ -1344,14 +1387,32 @@ INSERT INTO payment_purchase_key (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id;
--- name: IncrementPurchaseKeyUsage :execrows
+-- name: ReservePurchaseKeyUsage :execrows
 UPDATE payment_purchase_key
-SET used_count = used_count + 1,
-    status = CASE WHEN used_count + 1 >= max_uses THEN 'used' ELSE status END,
+SET reserved_count = reserved_count + 1,
     updated_at = now()
 WHERE id = $1
   AND status = 'active'
-  AND used_count < max_uses;
+  AND used_count + reserved_count < max_uses;
+
+-- name: ConsumePurchaseKeyReservation :execrows
+UPDATE payment_purchase_key
+SET reserved_count = reserved_count - 1,
+    used_count = used_count + 1,
+    status = CASE
+        WHEN status = 'active' AND used_count + 1 >= max_uses THEN 'used'
+        ELSE status
+    END,
+    updated_at = now()
+WHERE id = $1
+  AND reserved_count > 0;
+
+-- name: ReleasePurchaseKeyReservation :execrows
+UPDATE payment_purchase_key
+SET reserved_count = reserved_count - 1,
+    updated_at = now()
+WHERE id = $1
+  AND reserved_count > 0;
 
 -- name: CreatePaymentOrder :one
 WITH created_order AS (
@@ -1376,6 +1437,16 @@ WITH created_order AS (
         payable_amount_minor,
         status,
         reserved_until,
+        global_limit_snapshot,
+        global_interval_snapshot,
+        global_interval_count_snapshot,
+        global_window_start_snapshot,
+        global_window_end_snapshot,
+        user_limit_snapshot,
+        user_interval_snapshot,
+        user_interval_count_snapshot,
+        user_window_start_snapshot,
+        user_window_end_snapshot,
         expires_at
     )
     VALUES (
@@ -1399,7 +1470,17 @@ WITH created_order AS (
         $18,
         $19,
         $20,
-        $21
+        $21,
+        $22,
+        $23,
+        $24,
+        $25,
+        $26,
+        $27,
+        $28,
+        $29,
+        $30,
+        $31
     )
     RETURNING id, workspace_id, product_id, quantity
 ),
@@ -1473,8 +1554,18 @@ SELECT
     discount_amount_minor,
     payable_amount_minor,
     status,
-    reserved_until,
-    paid_at,
+	reserved_until,
+	global_limit_snapshot,
+	global_interval_snapshot,
+	global_interval_count_snapshot,
+	global_window_start_snapshot,
+	global_window_end_snapshot,
+	user_limit_snapshot,
+	user_interval_snapshot,
+	user_interval_count_snapshot,
+	user_window_start_snapshot,
+	user_window_end_snapshot,
+	paid_at,
     fulfilled_at,
     canceled_at,
     expires_at,
@@ -1506,8 +1597,18 @@ SELECT
     discount_amount_minor,
     payable_amount_minor,
     status,
-    reserved_until,
-    paid_at,
+	reserved_until,
+	global_limit_snapshot,
+	global_interval_snapshot,
+	global_interval_count_snapshot,
+	global_window_start_snapshot,
+	global_window_end_snapshot,
+	user_limit_snapshot,
+	user_interval_snapshot,
+	user_interval_count_snapshot,
+	user_window_start_snapshot,
+	user_window_end_snapshot,
+	paid_at,
     fulfilled_at,
     canceled_at,
     expires_at,
@@ -1539,8 +1640,18 @@ SELECT
     discount_amount_minor,
     payable_amount_minor,
     status,
-    reserved_until,
-    paid_at,
+	reserved_until,
+	global_limit_snapshot,
+	global_interval_snapshot,
+	global_interval_count_snapshot,
+	global_window_start_snapshot,
+	global_window_end_snapshot,
+	user_limit_snapshot,
+	user_interval_snapshot,
+	user_interval_count_snapshot,
+	user_window_start_snapshot,
+	user_window_end_snapshot,
+	paid_at,
     fulfilled_at,
     canceled_at,
     expires_at,
@@ -1551,8 +1662,62 @@ WHERE id = $1
 LIMIT 1
 FOR UPDATE;
 
+-- name: LockStalePaymentOrders :many
+SELECT *
+FROM payment_order
+WHERE payment_order.status IN ('draft', 'pending_payment')
+  AND (
+      NOT sqlc.arg(protect_unbound_platega)::boolean
+      OR NOT EXISTS (
+          SELECT 1
+          FROM payment_attempt pa
+          WHERE pa.order_id = payment_order.id
+            AND pa.provider_code = 'platega'
+            AND (
+                (pa.status = 'created' AND pa.provider_payment_id IS NULL)
+                OR (
+                    pa.status = 'pending'
+                    AND pa.updated_at >= sqlc.arg(now_at)::timestamptz - INTERVAL '5 minutes'
+                )
+            )
+      )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM payment_attempt pa
+      WHERE pa.order_id = payment_order.id
+        AND pa.provider_code = 'telegram_stars'
+        AND pa.status = 'pending'
+        AND pa.updated_at >= sqlc.arg(now_at)::timestamptz - INTERVAL '10 minutes'
+  )
+  AND (
+      (payment_order.reserved_until IS NOT NULL AND payment_order.reserved_until <= sqlc.arg(now_at)::timestamptz)
+      OR (
+          payment_order.reserved_until IS NULL
+          AND payment_order.expires_at IS NOT NULL
+          AND payment_order.expires_at <= sqlc.arg(now_at)::timestamptz
+      )
+      OR (
+          payment_order.reserved_until IS NULL
+          AND payment_order.expires_at IS NULL
+          AND payment_order.created_at <= sqlc.arg(created_before)
+      )
+  )
+ORDER BY payment_order.id
+LIMIT sqlc.arg(batch_size)
+FOR UPDATE SKIP LOCKED;
+
+-- name: ExpireActivePaymentAttemptsForOrder :execrows
+UPDATE payment_attempt
+SET status = 'expired',
+    updated_at = now()
+WHERE workspace_id = $1
+  AND order_id = $2
+  AND status IN ('created', 'pending', 'requires_action', 'waiting_capture');
+
 -- name: CreatePaymentAttempt :one
 INSERT INTO payment_attempt (
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -1567,7 +1732,8 @@ INSERT INTO payment_attempt (
     return_url,
     expires_at
 )
-VALUES (
+SELECT
+    po.workspace_id,
     $1,
     $2,
     $3,
@@ -1581,10 +1747,12 @@ VALUES (
     $11,
     $12,
     $13
-)
+FROM payment_order po
+WHERE po.id = $1
 RETURNING id;
 -- name: CreatePaymentAttemptFromOrder :one
 INSERT INTO payment_attempt (
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -1595,36 +1763,40 @@ INSERT INTO payment_attempt (
     provider_charge_id,
     provider_subscription_id,
     idempotency_key,
+    request_fingerprint,
     confirmation_url,
     return_url,
     expires_at
 )
 SELECT
+    po.workspace_id,
     po.id,
-    $1,
+    sqlc.arg(provider_code),
     po.asset_code,
     po.payable_amount_minor,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9,
-    $10
+    sqlc.arg(status),
+    sqlc.narg(provider_payment_id),
+    sqlc.narg(provider_invoice_id),
+    sqlc.narg(provider_charge_id),
+    sqlc.narg(provider_subscription_id),
+    sqlc.narg(idempotency_key),
+    sqlc.arg(request_fingerprint),
+    sqlc.narg(confirmation_url),
+    sqlc.narg(return_url),
+    sqlc.narg(expires_at)
 FROM payment_order po
 JOIN payment_provider_asset ppa
-  ON ppa.provider_code = $11
+  ON ppa.provider_code = sqlc.arg(provider_code)
  AND ppa.asset_code = po.asset_code
  AND ppa.is_active = true
-WHERE po.id = $12
+WHERE po.id = sqlc.arg(order_id)
   AND po.status IN ('draft', 'pending_payment')
   AND (po.expires_at IS NULL OR po.expires_at > now())
 RETURNING id, asset_code, amount_minor;
--- name: GetPaymentAttemptByProviderPaymentID :one
-SELECT
-    id,
+
+-- name: CreatePaymentAttemptFromOwnedOrder :one
+INSERT INTO payment_attempt (
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -1635,15 +1807,218 @@ SELECT
     provider_charge_id,
     provider_subscription_id,
     idempotency_key,
+    request_fingerprint,
+    confirmation_url,
+    return_url,
+    expires_at
+)
+SELECT
+    po.workspace_id,
+    po.id,
+    sqlc.arg(provider_code),
+    po.asset_code,
+    po.payable_amount_minor,
+    sqlc.arg(status),
+    sqlc.narg(provider_payment_id),
+    sqlc.narg(provider_invoice_id),
+    sqlc.narg(provider_charge_id),
+    sqlc.narg(provider_subscription_id),
+    sqlc.narg(idempotency_key),
+    sqlc.arg(request_fingerprint),
+    sqlc.narg(confirmation_url),
+    sqlc.narg(return_url),
+    sqlc.narg(expires_at)
+FROM payment_order po
+JOIN payment_provider_asset ppa
+  ON ppa.provider_code = sqlc.arg(provider_code)
+ AND ppa.asset_code = po.asset_code
+ AND ppa.is_active = true
+WHERE po.id = sqlc.arg(order_id)
+  AND po.workspace_id = sqlc.arg(workspace_id)
+  AND po.app_id = sqlc.arg(app_id)
+  AND (
+      (
+          po.platform_id = sqlc.arg(platform_id)
+          AND po.platform_user_id = sqlc.arg(platform_user_id)
+      )
+      OR (
+          po.payer_platform_id = sqlc.arg(platform_id)
+          AND po.payer_platform_user_id = sqlc.arg(platform_user_id)
+      )
+  )
+  AND po.status IN ('draft', 'pending_payment')
+  AND (po.expires_at IS NULL OR po.expires_at > now())
+RETURNING id, asset_code, amount_minor;
+
+-- name: LockPaymentProviderIdempotency :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        sqlc.arg(workspace_id)::text || ':' ||
+        sqlc.arg(provider_code)::text || ':' ||
+        sqlc.arg(idempotency_key)::text,
+        0
+    )
+);
+
+-- name: GetPaymentAttemptByIdempotencyKey :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    provider_code,
+    asset_code,
+    amount_minor,
+    status,
+    provider_payment_id,
+    provider_invoice_id,
+    provider_charge_id,
+    provider_subscription_id,
+    idempotency_key,
+    request_fingerprint,
     confirmation_url,
     return_url,
     expires_at,
     created_at,
     updated_at
 FROM payment_attempt
-WHERE provider_code = $1
-  AND provider_payment_id = $2
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND idempotency_key = $3
 LIMIT 1;
+
+-- name: GetPaymentAttemptByProviderPaymentID :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    provider_code,
+    asset_code,
+    amount_minor,
+    status,
+    provider_payment_id,
+    provider_invoice_id,
+    provider_charge_id,
+    provider_subscription_id,
+    idempotency_key,
+    request_fingerprint,
+    confirmation_url,
+    return_url,
+    expires_at,
+    created_at,
+    updated_at
+FROM payment_attempt
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_payment_id = $3
+LIMIT 1;
+
+-- name: BindPaymentAttemptProviderResult :execrows
+UPDATE payment_attempt
+SET provider_payment_id = $1,
+    provider_invoice_id = $2,
+    confirmation_url = $3,
+    return_url = $4,
+    expires_at = $5,
+    status = 'pending',
+    updated_at = now()
+WHERE workspace_id = $6
+  AND id = $7
+  AND provider_code = $8
+  AND request_fingerprint = $9
+  AND status = 'created';
+
+-- name: RecoverCreatedPaymentAttempt :one
+WITH candidate AS (
+    SELECT MIN(pa.id) AS id
+    FROM payment_attempt pa
+    JOIN payment_order po ON po.id = pa.order_id
+    WHERE pa.workspace_id = sqlc.arg(workspace_id)::varchar
+      AND po.workspace_id = sqlc.arg(workspace_id)::varchar
+      AND po.public_id = sqlc.arg(order_public_id)::varchar
+      AND pa.provider_code = sqlc.arg(provider_code)::varchar
+      AND pa.status = 'created'
+      AND pa.amount_minor = sqlc.arg(amount_minor)::bigint
+      AND pa.asset_code = sqlc.arg(asset_code)::varchar
+    GROUP BY po.id
+    HAVING COUNT(*) = 1
+)
+UPDATE payment_attempt pa
+SET provider_payment_id = sqlc.arg(provider_payment_id)::varchar,
+    provider_invoice_id = sqlc.arg(order_public_id)::varchar,
+    status = 'pending',
+    updated_at = now()
+FROM candidate
+WHERE pa.id = candidate.id
+RETURNING
+    pa.id,
+    pa.workspace_id,
+    pa.order_id,
+    pa.provider_code,
+    pa.asset_code,
+    pa.amount_minor,
+    pa.status,
+    pa.provider_payment_id,
+    pa.provider_invoice_id,
+    pa.provider_charge_id,
+    pa.provider_subscription_id,
+    pa.idempotency_key,
+    pa.request_fingerprint,
+    pa.confirmation_url,
+    pa.return_url,
+    pa.expires_at,
+    pa.created_at,
+    pa.updated_at;
+
+-- name: ListProviderAttemptsForReconciliation :many
+SELECT
+    pa.id,
+    pa.workspace_id,
+    po.public_id AS order_public_id,
+    pa.provider_code,
+    pa.asset_code,
+    pa.amount_minor,
+    pa.status,
+    pa.provider_payment_id,
+    pa.created_at,
+    pa.updated_at
+FROM payment_attempt pa
+JOIN payment_order po ON po.id = pa.order_id
+WHERE pa.provider_code = sqlc.arg(provider_code)::varchar
+  AND (
+      (
+          pa.status = 'created'
+          AND pa.provider_payment_id IS NULL
+          AND pa.created_at <= sqlc.arg(eligible_to)::timestamptz
+      )
+      OR
+      (
+          pa.status IN ('pending', 'requires_action', 'waiting_capture')
+          AND pa.provider_payment_id IS NOT NULL
+          AND pa.updated_at <= sqlc.arg(eligible_to)::timestamptz
+      )
+  )
+ORDER BY
+    CASE WHEN pa.provider_payment_id IS NULL THEN pa.created_at ELSE pa.updated_at END,
+    pa.id
+LIMIT sqlc.arg(row_limit);
+
+-- name: TouchPendingProviderAttempt :execrows
+UPDATE payment_attempt
+SET updated_at = now()
+WHERE workspace_id = $1
+  AND id = $2
+  AND provider_code = $3
+  AND provider_payment_id = $4
+  AND status IN ('pending', 'requires_action', 'waiting_capture');
+
+-- name: FailCreatedPaymentAttempt :execrows
+UPDATE payment_attempt
+SET status = 'failed',
+    updated_at = now()
+WHERE workspace_id = $1
+  AND id = $2
+  AND provider_code = $3
+  AND status = 'created';
 
 -- name: GetProviderCursor :one
 SELECT
@@ -1787,6 +2162,16 @@ WHERE workspace_id = $1
   AND external_transaction_id = $5
 LIMIT 1;
 
+-- name: RecoverProviderTransaction :execrows
+UPDATE payment_provider_transaction
+SET order_id = $1,
+    attempt_id = $2,
+    status = 'matched',
+    error = NULL
+WHERE id = $3
+  AND workspace_id = $4
+  AND status = 'failed';
+
 -- name: UpsertPaymentSubscription :one
 INSERT INTO payment_subscription (
     workspace_id,
@@ -1804,9 +2189,48 @@ INSERT INTO payment_subscription (
     started_at,
     ended_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-ON CONFLICT (provider_code, provider_subscription_id) DO UPDATE SET
-    workspace_id = EXCLUDED.workspace_id,
+SELECT
+    sqlc.arg(workspace_id)::varchar,
+    sqlc.arg(provider_code)::varchar,
+    sqlc.arg(provider_subscription_id)::varchar,
+    sqlc.arg(app_id)::bigint,
+    sqlc.arg(platform_id)::bigint,
+    sqlc.arg(platform_user_id)::varchar,
+    sqlc.narg(internal_user_id)::bigint,
+    sqlc.arg(product_id)::varchar,
+    sqlc.narg(order_id)::bigint,
+    sqlc.narg(attempt_id)::bigint,
+    sqlc.arg(status)::payment_subscription_status,
+    sqlc.narg(cancel_reason)::varchar,
+    sqlc.arg(started_at)::timestamptz,
+    sqlc.narg(ended_at)::timestamptz
+WHERE (
+    sqlc.narg(order_id)::bigint IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM payment_order AS subscription_order
+        WHERE subscription_order.id = sqlc.narg(order_id)::bigint
+          AND subscription_order.workspace_id = sqlc.arg(workspace_id)::varchar
+          AND subscription_order.product_id = sqlc.arg(product_id)::varchar
+    )
+)
+AND (
+    sqlc.narg(attempt_id)::bigint IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM payment_attempt AS subscription_attempt
+        JOIN payment_order AS attempt_order
+          ON attempt_order.id = subscription_attempt.order_id
+        WHERE subscription_attempt.id = sqlc.narg(attempt_id)::bigint
+          AND attempt_order.workspace_id = sqlc.arg(workspace_id)::varchar
+          AND attempt_order.product_id = sqlc.arg(product_id)::varchar
+          AND (
+              sqlc.narg(order_id)::bigint IS NULL
+              OR subscription_attempt.order_id = sqlc.narg(order_id)::bigint
+          )
+    )
+)
+ON CONFLICT (workspace_id, provider_code, provider_subscription_id) DO UPDATE SET
     app_id = EXCLUDED.app_id,
     platform_id = EXCLUDED.platform_id,
     platform_user_id = EXCLUDED.platform_user_id,
@@ -1816,18 +2240,92 @@ ON CONFLICT (provider_code, provider_subscription_id) DO UPDATE SET
     attempt_id = EXCLUDED.attempt_id,
     status = EXCLUDED.status,
     cancel_reason = EXCLUDED.cancel_reason,
-    started_at = EXCLUDED.started_at,
-    ended_at = EXCLUDED.ended_at,
+    started_at = LEAST(payment_subscription.started_at, EXCLUDED.started_at),
+    ended_at = CASE
+        WHEN payment_subscription.ended_at IS NULL THEN EXCLUDED.ended_at
+        WHEN EXCLUDED.ended_at IS NULL THEN payment_subscription.ended_at
+        ELSE GREATEST(payment_subscription.ended_at, EXCLUDED.ended_at)
+    END,
     updated_at = now()
 RETURNING id;
--- name: UpdatePaymentSubscriptionStatus :execrows
+
+-- name: CreatePaymentSubscriptionRenewal :one
+INSERT INTO payment_subscription_renewal (
+    workspace_id,
+    subscription_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    provider_subscription_id,
+    provider_charge_id,
+    amount_minor,
+    asset_code,
+    period_end
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT DO NOTHING
+RETURNING id;
+
+-- name: GetPaymentSubscriptionRenewal :one
+SELECT
+    id,
+    workspace_id,
+    subscription_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    provider_subscription_id,
+    provider_charge_id,
+    amount_minor,
+    asset_code,
+    period_end,
+    created_at
+FROM payment_subscription_renewal
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_subscription_id = $3
+  AND period_end = $4
+LIMIT 1;
+
+-- name: GetPaymentSubscriptionRenewalByChargeID :one
+SELECT
+    id,
+    workspace_id,
+    subscription_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    provider_subscription_id,
+    provider_charge_id,
+    amount_minor,
+    asset_code,
+    period_end,
+    created_at
+FROM payment_subscription_renewal
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_charge_id = $3
+LIMIT 1;
+
+-- name: UpdatePaymentSubscriptionStatusByProvider :execrows
 UPDATE payment_subscription
 SET status = $1,
     cancel_reason = $2,
     ended_at = $3,
     updated_at = now()
-WHERE provider_code = $4
-  AND provider_subscription_id = $5;
+WHERE workspace_id = $4
+  AND provider_code = $5
+  AND provider_subscription_id = $6;
+
+-- name: UpdatePaymentSubscriptionStatusForWorkspace :execrows
+UPDATE payment_subscription
+SET status = $1,
+    cancel_reason = $2,
+    ended_at = $3,
+    updated_at = now()
+WHERE workspace_id = $4
+  AND provider_code = $5
+  AND provider_subscription_id = $6;
 
 -- name: GetPaymentSubscriptionByProviderID :one
 SELECT
@@ -1896,6 +2394,7 @@ WHERE platform_id = $1
 -- name: LockPaymentAttempt :one
 SELECT
     id,
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -1906,6 +2405,7 @@ SELECT
     provider_charge_id,
     provider_subscription_id,
     idempotency_key,
+    request_fingerprint,
     confirmation_url,
     return_url,
     expires_at,
@@ -1919,12 +2419,116 @@ FOR UPDATE;
 -- name: GetFulfilledAttemptResult :one
 SELECT
     pa.order_id,
-    pa.id AS attempt_id
+    pa.id AS attempt_id,
+    pf.id AS fulfillment_id,
+    pa.provider_code,
+    pa.provider_payment_id,
+    pa.asset_code,
+    pa.amount_minor
 FROM payment_attempt pa
 JOIN payment_order po
   ON po.id = pa.order_id
+JOIN payment_fulfillment pf
+  ON pf.order_id = po.id
 WHERE pa.id = $1
+  AND pa.workspace_id = $2
+  AND po.workspace_id = $2
   AND po.status = 'fulfilled'
+LIMIT 1;
+
+-- name: SumReservedRefundAmountForAttempt :one
+SELECT COALESCE(SUM(amount_minor), 0)::BIGINT AS amount_minor
+FROM payment_refund
+WHERE attempt_id = $1
+  AND status IN ('created', 'pending', 'succeeded');
+
+-- name: SumSucceededRefundAmountForAttempt :one
+SELECT COALESCE(SUM(amount_minor), 0)::BIGINT AS amount_minor
+FROM payment_refund
+WHERE attempt_id = $1
+  AND status = 'succeeded';
+
+-- name: GetRefundByIdempotencyKey :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    idempotency_key,
+    provider_refund_id,
+    amount_minor,
+    asset_code,
+    status,
+    reason,
+    created_at,
+    updated_at
+FROM payment_refund
+WHERE workspace_id = $1
+  AND idempotency_key = $2
+LIMIT 1;
+
+-- name: LockPaymentRefund :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    idempotency_key,
+    provider_refund_id,
+    amount_minor,
+    asset_code,
+    status,
+    reason,
+    created_at,
+    updated_at
+FROM payment_refund
+WHERE id = $1
+LIMIT 1
+FOR UPDATE;
+
+-- name: GetRefundByProviderRefundID :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    idempotency_key,
+    provider_refund_id,
+    amount_minor,
+    asset_code,
+    status,
+    reason,
+    created_at,
+    updated_at
+FROM payment_refund
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_refund_id = $3
+LIMIT 1;
+
+-- name: GetSucceededRefundForOrder :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    idempotency_key,
+    provider_refund_id,
+    amount_minor,
+    asset_code,
+    status,
+    reason,
+    created_at,
+    updated_at
+FROM payment_refund
+WHERE workspace_id = $1
+  AND order_id = $2
+  AND status = 'succeeded'
+ORDER BY id
 LIMIT 1;
 
 -- name: UpdatePaymentAttemptStatus :exec
@@ -2140,6 +2744,7 @@ WHERE order_id = $1;
 
 -- name: CreatePaymentEvent :one
 INSERT INTO payment_event (
+    workspace_id,
     provider_code,
     attempt_id,
     order_id,
@@ -2150,18 +2755,52 @@ INSERT INTO payment_event (
     payload_hash,
     signature_valid
 )
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9
+SELECT
+    sqlc.arg(workspace_id)::varchar,
+    sqlc.arg(provider_code)::varchar,
+    sqlc.narg(attempt_id)::bigint,
+    sqlc.narg(order_id)::bigint,
+    sqlc.narg(provider_event_id)::varchar,
+    sqlc.narg(provider_payment_id)::varchar,
+    sqlc.arg(event_type)::varchar,
+    sqlc.narg(event_status)::varchar,
+    sqlc.arg(payload_hash)::char(64),
+    sqlc.narg(signature_valid)::boolean
+WHERE (
+    sqlc.narg(order_id)::bigint IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM payment_order po
+        WHERE po.id = sqlc.narg(order_id)::bigint
+          AND po.workspace_id = sqlc.arg(workspace_id)::varchar
+    )
+)
+AND (
+    sqlc.narg(attempt_id)::bigint IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM payment_attempt pa
+        WHERE pa.id = sqlc.narg(attempt_id)::bigint
+          AND pa.workspace_id = sqlc.arg(workspace_id)::varchar
+          AND pa.provider_code = sqlc.arg(provider_code)::varchar
+          AND (
+              sqlc.narg(order_id)::bigint IS NULL
+              OR pa.order_id = sqlc.narg(order_id)::bigint
+          )
+    )
 )
 RETURNING id;
+
+-- name: GetPaymentEventIdentity :one
+SELECT
+    id,
+    payload_hash
+FROM payment_event
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_event_id = $3
+LIMIT 1;
+
 -- name: MarkPaymentEventProcessed :exec
 UPDATE payment_event
 SET processing_status = $1,
@@ -2568,6 +3207,7 @@ SELECT
     window_start,
     window_end,
     paid_count,
+    reserved_count,
     updated_at
 FROM payment_product_limit_counter
 WHERE workspace_id = $1
@@ -2600,6 +3240,7 @@ SELECT
     status,
     max_uses,
     used_count,
+    reserved_count,
     expires_at,
     created_at,
     updated_at
@@ -2621,6 +3262,7 @@ SELECT
     status,
     max_uses,
     used_count,
+    reserved_count,
     expires_at,
     created_at,
     updated_at
@@ -2662,8 +3304,18 @@ SELECT
     discount_amount_minor,
     payable_amount_minor,
     status,
-    reserved_until,
-    paid_at,
+	reserved_until,
+	global_limit_snapshot,
+	global_interval_snapshot,
+	global_interval_count_snapshot,
+	global_window_start_snapshot,
+	global_window_end_snapshot,
+	user_limit_snapshot,
+	user_interval_snapshot,
+	user_interval_count_snapshot,
+	user_window_start_snapshot,
+	user_window_end_snapshot,
+	paid_at,
     fulfilled_at,
     canceled_at,
     expires_at,
@@ -2691,6 +3343,7 @@ WHERE workspace_id = $5
 -- name: AdminGetPaymentAttempt :one
 SELECT
     id,
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -2701,6 +3354,7 @@ SELECT
     provider_charge_id,
     provider_subscription_id,
     idempotency_key,
+    request_fingerprint,
     confirmation_url,
     return_url,
     expires_at,
@@ -2713,6 +3367,7 @@ LIMIT 1;
 -- name: AdminListPaymentAttempts :many
 SELECT
     pa.id,
+    pa.workspace_id,
     pa.order_id,
     pa.provider_code,
     pa.asset_code,
@@ -2723,6 +3378,7 @@ SELECT
     pa.provider_charge_id,
     pa.provider_subscription_id,
     pa.idempotency_key,
+    pa.request_fingerprint,
     pa.confirmation_url,
     pa.return_url,
     pa.expires_at,
@@ -2740,6 +3396,7 @@ LIMIT $8 OFFSET $9;
 -- name: AdminListPaymentEvents :many
 SELECT
     pe.id,
+    pe.workspace_id,
     pe.provider_code,
     pe.attempt_id,
     pe.order_id,
@@ -2766,6 +3423,7 @@ LIMIT $7 OFFSET $8;
 -- name: AdminGetPaymentEvent :one
 SELECT
     id,
+    workspace_id,
     provider_code,
     attempt_id,
     order_id,
@@ -2900,6 +3558,7 @@ LIMIT $4 OFFSET $5;
 
 -- name: AdminCreateRefund :one
 INSERT INTO payment_refund (
+    workspace_id,
     order_id,
     attempt_id,
     provider_code,
@@ -2909,18 +3568,48 @@ INSERT INTO payment_refund (
     status,
     reason
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (provider_code, provider_refund_id) DO UPDATE SET
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (workspace_id, provider_code, provider_refund_id) DO UPDATE SET
     status = EXCLUDED.status,
     reason = EXCLUDED.reason,
     updated_at = now()
+WHERE payment_refund.order_id = EXCLUDED.order_id
+  AND payment_refund.attempt_id = EXCLUDED.attempt_id
+  AND payment_refund.amount_minor = EXCLUDED.amount_minor
+  AND payment_refund.asset_code = EXCLUDED.asset_code
 RETURNING id;
--- name: AdminGetRefund :one
-SELECT
-    id,
+
+-- name: CreateIdempotentRefund :one
+INSERT INTO payment_refund (
+    workspace_id,
     order_id,
     attempt_id,
     provider_code,
+    idempotency_key,
+    amount_minor,
+    asset_code,
+    status,
+    reason
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (workspace_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL
+DO UPDATE SET updated_at = payment_refund.updated_at
+WHERE payment_refund.order_id = EXCLUDED.order_id
+  AND payment_refund.attempt_id = EXCLUDED.attempt_id
+  AND payment_refund.provider_code = EXCLUDED.provider_code
+  AND payment_refund.amount_minor = EXCLUDED.amount_minor
+  AND payment_refund.asset_code = EXCLUDED.asset_code
+RETURNING id, status, provider_refund_id;
+
+-- name: AdminGetRefund :one
+SELECT
+    id,
+    workspace_id,
+    order_id,
+    attempt_id,
+    provider_code,
+    idempotency_key,
     provider_refund_id,
     amount_minor,
     asset_code,
@@ -2935,9 +3624,11 @@ LIMIT 1;
 -- name: AdminListRefunds :many
 SELECT
     pr.id,
+    pr.workspace_id,
     pr.order_id,
     pr.attempt_id,
     pr.provider_code,
+    pr.idempotency_key,
     pr.provider_refund_id,
     pr.amount_minor,
     pr.asset_code,
@@ -3398,6 +4089,7 @@ WHERE workspace_id = $3
 -- name: LockPaymentAttemptByProviderPaymentID :one
 SELECT
     id,
+    workspace_id,
     order_id,
     provider_code,
     asset_code,
@@ -3408,14 +4100,16 @@ SELECT
     provider_charge_id,
     provider_subscription_id,
     idempotency_key,
+    request_fingerprint,
     confirmation_url,
     return_url,
     expires_at,
     created_at,
     updated_at
 FROM payment_attempt
-WHERE provider_code = $1
-  AND provider_payment_id = $2
+WHERE workspace_id = $1
+  AND provider_code = $2
+  AND provider_payment_id = $3
 LIMIT 1
 FOR UPDATE;
 
@@ -3425,6 +4119,13 @@ SET status = 'refunded',
     updated_at = now()
 WHERE id = $1
   AND status IN ('paid', 'fulfilled', 'refunded');
+
+-- name: MarkOrderChargebacked :execrows
+UPDATE payment_order
+SET status = 'chargebacked',
+    updated_at = now()
+WHERE id = $1
+  AND status IN ('paid', 'fulfilled', 'chargebacked');
 
 -- name: MarkFulfillmentRevokedForOrder :execrows
 UPDATE payment_fulfillment
@@ -3456,7 +4157,11 @@ SET paid_count = GREATEST(plc.paid_count - po.quantity, 0),
     updated_at = now()
 FROM payment_order po
 WHERE po.workspace_id = plc.workspace_id
-  AND po.platform_id = plc.platform_id
+  AND (
+      (plc.counter_scope = 'global' AND plc.platform_id = 0)
+      OR
+      (plc.counter_scope = 'user' AND po.platform_id = plc.platform_id)
+  )
   AND po.product_id = plc.product_id
   AND po.id = $1
   AND po.paid_at IS NOT NULL
@@ -3550,7 +4255,22 @@ SET status = $1,
 FROM payment_order po
 WHERE po.id = pa.order_id
   AND po.workspace_id = $2
-  AND pa.id = $3;
+  AND pa.id = $3
+  AND (
+      pa.status = $1
+      OR (
+          pa.status IN ('created', 'pending', 'requires_action', 'waiting_capture')
+          AND $1 IN (
+              'created',
+              'pending',
+              'requires_action',
+              'waiting_capture',
+              'canceled',
+              'expired',
+              'failed'
+          )
+      )
+  );
 
 -- name: AdminGetPaymentEventForWorkspace :one
 SELECT pe.*
@@ -3563,17 +4283,19 @@ LIMIT 1;
 
 -- name: AdminUpdatePaymentEventStatusForWorkspace :execrows
 UPDATE payment_event pe
-SET processing_status = $1,
-    processing_error = $2,
-    processed_at = CASE WHEN $1 = 'processed' THEN COALESCE(processed_at, now()) ELSE processed_at END,
-    updated_at = now()
+SET processing_status = sqlc.arg(processing_status)::payment_event_processing_status,
+    processing_error = sqlc.narg(processing_error)::text,
+    processed_at = CASE
+        WHEN sqlc.arg(processing_status)::text = 'processed' THEN COALESCE(processed_at, now())
+        ELSE processed_at
+    END
 FROM payment_order po
 WHERE po.id = COALESCE(
         pe.order_id,
         (SELECT pa.order_id FROM payment_attempt pa WHERE pa.id = pe.attempt_id)
     )
-  AND po.workspace_id = $3
-  AND pe.id = $4;
+  AND po.workspace_id = sqlc.arg(workspace_id)::varchar
+  AND pe.id = sqlc.arg(id)::bigint;
 
 -- name: AdminGetSubscriptionByProviderIDForWorkspace :one
 SELECT *
@@ -3593,15 +4315,32 @@ LIMIT 1;
 
 -- name: AdminUpdateFulfillmentStatusForWorkspace :execrows
 UPDATE payment_fulfillment pf
-SET status = $1,
-    error = $2,
-    fulfilled_at = CASE WHEN $1 = 'succeeded' AND fulfilled_at IS NULL THEN now() ELSE fulfilled_at END,
-    revoked_at = CASE WHEN $1 = 'revoked' AND revoked_at IS NULL THEN now() ELSE revoked_at END,
+SET status = sqlc.arg(status)::payment_fulfillment_status,
+    error = sqlc.narg(error)::text,
+    fulfilled_at = CASE
+        WHEN sqlc.arg(status)::text = 'succeeded' AND pf.fulfilled_at IS NULL THEN now()
+        ELSE pf.fulfilled_at
+    END,
+    revoked_at = CASE
+        WHEN sqlc.arg(status)::text = 'revoked' AND pf.revoked_at IS NULL THEN now()
+        ELSE pf.revoked_at
+    END,
     updated_at = now()
 FROM payment_order po
 WHERE po.id = pf.order_id
-  AND po.workspace_id = $3
-  AND pf.id = $4;
+  AND po.workspace_id = sqlc.arg(workspace_id)::varchar
+  AND pf.id = sqlc.arg(id)::bigint
+  AND (
+      pf.status = sqlc.arg(status)::payment_fulfillment_status
+      OR (
+          pf.status = 'pending'
+          AND sqlc.arg(status)::payment_fulfillment_status = 'failed'
+      )
+      OR (
+          pf.status = 'failed'
+          AND sqlc.arg(status)::payment_fulfillment_status = 'pending'
+      )
+  );
 
 -- name: AdminGetRefundForWorkspace :one
 SELECT pr.*

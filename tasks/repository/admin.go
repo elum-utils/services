@@ -12,7 +12,10 @@ import (
 )
 
 func (r *Repository) UpsertGroup(ctx context.Context, workspaceID, key string, position int32, active bool) error {
-	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(key) == "" {
 		return fmt.Errorf("tasks group workspace_id and key are required")
 	}
 
@@ -34,7 +37,10 @@ func (r *Repository) UpsertGroupLocalization(
 	ctx context.Context,
 	workspaceID, key, locale, title, description string,
 ) error {
-	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" ||
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(key) == "" ||
 		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
 		return fmt.Errorf("tasks group localization scope, locale, and title are required")
 	}
@@ -55,7 +61,10 @@ func (r *Repository) UpsertGroupLocalization(
 }
 
 func (r *Repository) UpsertSequence(ctx context.Context, workspaceID, key string, position int32, active bool) error {
-	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(key) == "" {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(key) == "" {
 		return fmt.Errorf("tasks sequence workspace_id and key are required")
 	}
 
@@ -136,7 +145,10 @@ func (r *Repository) SaveTask(ctx context.Context, params SaveTaskParams) (uint6
 }
 
 func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint64) (int64, error) {
-	if strings.TrimSpace(workspaceID) == "" || id == 0 || id > math.MaxInt64 {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if id == 0 || id > math.MaxInt64 {
 		return 0, fmt.Errorf("tasks delete task scope or id is invalid")
 	}
 
@@ -160,7 +172,10 @@ func (r *Repository) DeleteTask(ctx context.Context, workspaceID string, id uint
 }
 
 func (r *Repository) GetTask(ctx context.Context, workspaceID string, id uint64) (Task, error) {
-	if strings.TrimSpace(workspaceID) == "" || id == 0 || id > math.MaxInt64 {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Task{}, err
+	}
+	if id == 0 || id > math.MaxInt64 {
 		return Task{}, fmt.Errorf("tasks get task scope or id is invalid")
 	}
 
@@ -187,8 +202,8 @@ func (r *Repository) GetTask(ctx context.Context, workspaceID string, id uint64)
 }
 
 func (r *Repository) ListTasks(ctx context.Context, workspaceID, groupKey string, limit, offset int32) ([]Task, error) {
-	if strings.TrimSpace(workspaceID) == "" {
-		return nil, fmt.Errorf("tasks list workspace_id is required")
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
 	}
 
 	limit, offset = normalizePage(limit, offset)
@@ -237,7 +252,10 @@ func (r *Repository) UpsertTaskLocalization(
 	taskID uint64,
 	locale, title, description string,
 ) error {
-	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 ||
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if taskID == 0 || taskID > math.MaxInt64 ||
 		strings.TrimSpace(locale) == "" || strings.TrimSpace(title) == "" {
 		return fmt.Errorf("tasks localization scope, locale, or title is invalid")
 	}
@@ -264,7 +282,10 @@ func (r *Repository) UpsertReward(
 	reward Reward,
 	position int32,
 ) error {
-	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if taskID == 0 || taskID > math.MaxInt64 {
 		return fmt.Errorf("tasks reward scope is invalid")
 	}
 	if err := validateRewardDefinition(ExportReward{
@@ -300,7 +321,10 @@ func (r *Repository) UpsertReward(
 }
 
 func (r *Repository) DeleteReward(ctx context.Context, workspaceID string, taskID uint64, key string) (int64, error) {
-	if strings.TrimSpace(workspaceID) == "" || taskID == 0 || taskID > math.MaxInt64 ||
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if taskID == 0 || taskID > math.MaxInt64 ||
 		strings.TrimSpace(key) == "" {
 		return 0, fmt.Errorf("tasks delete reward scope is invalid")
 	}
@@ -334,6 +358,28 @@ func (r *Repository) UpsertComplexCondition(ctx context.Context, params SaveComp
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
 		if err := txRepo.lockWorkspaceMutation(ctx, params.WorkspaceID); err != nil {
 			return err
+		}
+
+		parent, err := txRepo.q.AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{
+			WorkspaceID: params.WorkspaceID,
+			ID:          int64(params.ParentTaskID),
+		})
+		if err != nil {
+			return err
+		}
+		if parent.DeletedAt.Valid || parent.TaskKind != TaskKindComplex {
+			return fmt.Errorf("tasks complex condition parent must be a complex task")
+		}
+
+		condition, err := txRepo.q.AdminGetTask(ctx, tasksqlc.AdminGetTaskParams{
+			WorkspaceID: params.WorkspaceID,
+			ID:          int64(params.ConditionTaskID),
+		})
+		if err != nil {
+			return err
+		}
+		if condition.DeletedAt.Valid {
+			return fmt.Errorf("tasks complex condition task is deleted")
 		}
 
 		rows, err := txRepo.q.AdminListComplexConditions(ctx, params.WorkspaceID)
@@ -410,6 +456,10 @@ func (r *Repository) DeleteComplexCondition(
 }
 
 func (r *Repository) ListComplexConditions(ctx context.Context, workspaceID string) ([]ComplexCondition, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	rows, err := repositoryValue(ctx, r, func(ctx context.Context) ([]tasksqlc.TaskComplexCondition, error) {
 		return r.q.AdminListComplexConditions(ctx, workspaceID)
 	})

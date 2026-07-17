@@ -3,7 +3,7 @@ CREATE TYPE promo_duration_unit AS ENUM ('second', 'minute', 'hour', 'day', 'wee
 
 CREATE TABLE IF NOT EXISTS promo_offer (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     code VARCHAR(255) NOT NULL,
     code_normalized VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS promo_offer_list_idx
     ON promo_offer (workspace_id, created_at DESC, id);
 
 CREATE TABLE IF NOT EXISTS promo_localization (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     promo_id BIGINT NOT NULL,
     locale VARCHAR(16) NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS promo_localization (
 
 CREATE TABLE IF NOT EXISTS promo_reward (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     promo_id BIGINT NOT NULL,
     reward_key VARCHAR(128) NOT NULL,
     reward_type promo_reward_type NOT NULL DEFAULT 'quantity',
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS promo_reward_list_idx
 
 CREATE TABLE IF NOT EXISTS promo_redemption (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     promo_id BIGINT NOT NULL,
     app_id BIGINT NOT NULL,
     platform_id BIGINT NOT NULL,
@@ -93,7 +93,7 @@ CREATE INDEX IF NOT EXISTS promo_redemption_user_idx
 
 CREATE TABLE IF NOT EXISTS promo_redemption_event (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     promo_id BIGINT NOT NULL,
     redemption_id BIGINT NOT NULL,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -110,7 +110,7 @@ CREATE INDEX IF NOT EXISTS promo_redemption_event_occurred_idx
     ON promo_redemption_event (occurred_at, workspace_id, promo_id);
 
 CREATE TABLE IF NOT EXISTS promo_stats_daily (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     promo_id BIGINT NOT NULL,
     stats_date DATE NOT NULL,
     redemption_count BIGINT NOT NULL DEFAULT 0,

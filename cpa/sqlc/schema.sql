@@ -7,7 +7,7 @@ CREATE TYPE cpa_assignment_status AS ENUM ('issued', 'completed');
 CREATE TYPE cpa_assignment_event_type AS ENUM ('issued', 'completed');
 
 CREATE TABLE IF NOT EXISTS cpa_offer (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     id VARCHAR(128) NOT NULL,
     payload JSONB NOT NULL,
     target JSONB NULL,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS cpa_offer (
                 OR
                 (
                     code_source = 'generated'
-                    AND generated_length > 0
+                    AND generated_length BETWEEN 1 AND 512
                     AND char_length(generated_alphabet) >= 2
                 )
             )
@@ -63,7 +63,7 @@ CREATE INDEX IF NOT EXISTS cpa_offer_active_list_idx
     ON cpa_offer (workspace_id, is_active, created_at DESC, id);
 
 CREATE TABLE IF NOT EXISTS cpa_localization (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     locale VARCHAR(16) NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -79,12 +79,12 @@ CREATE TABLE IF NOT EXISTS cpa_localization (
 
 CREATE TABLE IF NOT EXISTS cpa_reward (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     reward_key VARCHAR(128) NOT NULL,
     reward_type cpa_reward_type NOT NULL DEFAULT 'quantity',
     quantity BIGINT NOT NULL DEFAULT 1,
-    scale SMALLINT NOT NULL DEFAULT 0,
+    scale INTEGER NOT NULL DEFAULT 0,
     duration_unit cpa_duration_unit NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS cpa_reward (
         REFERENCES cpa_offer (workspace_id, id)
         ON DELETE CASCADE,
     CONSTRAINT cpa_reward_quantity_chk CHECK (quantity > 0),
-    CONSTRAINT cpa_reward_scale_chk CHECK (scale >= 0),
+    CONSTRAINT cpa_reward_scale_chk CHECK (scale BETWEEN 0 AND 65535),
     CONSTRAINT cpa_reward_type_chk CHECK (
         (reward_type = 'quantity' AND duration_unit IS NULL)
         OR (reward_type = 'duration' AND duration_unit IS NOT NULL)
@@ -106,7 +106,7 @@ CREATE INDEX IF NOT EXISTS cpa_reward_list_idx
 
 CREATE TABLE IF NOT EXISTS cpa_code (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     code VARCHAR(512) NOT NULL,
     source cpa_code_source NOT NULL,
@@ -126,7 +126,7 @@ CREATE INDEX IF NOT EXISTS cpa_code_available_idx
 
 CREATE TABLE IF NOT EXISTS cpa_assignment (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     app_id BIGINT NOT NULL,
     platform_id BIGINT NOT NULL,
@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS cpa_assignment (
     code_id BIGINT NULL UNIQUE,
     code VARCHAR(512) NOT NULL,
     code_mode cpa_code_mode NOT NULL,
+    rewards_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb,
     status cpa_assignment_status NOT NULL DEFAULT 'issued',
     issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ NULL,
@@ -157,7 +158,7 @@ CREATE INDEX IF NOT EXISTS cpa_assignment_user_idx
 
 CREATE TABLE IF NOT EXISTS cpa_assignment_event (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     assignment_id BIGINT NOT NULL,
     event_type cpa_assignment_event_type NOT NULL,
@@ -174,7 +175,7 @@ CREATE INDEX IF NOT EXISTS cpa_assignment_event_stats_idx
     ON cpa_assignment_event (workspace_id, cpa_id, occurred_at, event_type);
 
 CREATE TABLE IF NOT EXISTS cpa_stats_daily (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     cpa_id VARCHAR(128) NOT NULL,
     stats_date DATE NOT NULL,
     issued_count BIGINT NOT NULL DEFAULT 0,

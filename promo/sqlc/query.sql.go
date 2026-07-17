@@ -550,7 +550,15 @@ WITH inserted AS (
         workspace_id, promo_id, app_id, platform_id, platform_user_id,
         reward_snapshot
     ) VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id, workspace_id, promo_id, app_id, platform_id, platform_user_id, reward_snapshot
+    RETURNING
+        id,
+        workspace_id,
+        promo_id,
+        app_id,
+        platform_id,
+        platform_user_id,
+        reward_snapshot,
+        redeemed_at
 ),
 updated_offer AS (
     UPDATE promo_offer o
@@ -602,7 +610,7 @@ created_callback AS (
     CROSS JOIN updated_offer u
     RETURNING id
 )
-SELECT id
+SELECT id, redeemed_at
 FROM inserted
 `
 
@@ -615,7 +623,12 @@ type CreateRedemptionParams struct {
 	RewardSnapshot json.RawMessage `json:"reward_snapshot"`
 }
 
-func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionParams) (int64, error) {
+type CreateRedemptionRow struct {
+	ID         int64     `json:"id"`
+	RedeemedAt time.Time `json:"redeemed_at"`
+}
+
+func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionParams) (CreateRedemptionRow, error) {
 	row := q.queryRow(ctx, q.createRedemptionStmt, createRedemption,
 		arg.WorkspaceID,
 		arg.PromoID,
@@ -624,9 +637,9 @@ func (q *Queries) CreateRedemption(ctx context.Context, arg CreateRedemptionPara
 		arg.PlatformUserID,
 		arg.RewardSnapshot,
 	)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+	var i CreateRedemptionRow
+	err := row.Scan(&i.ID, &i.RedeemedAt)
+	return i, err
 }
 
 const getApplyBundleForUpdate = `-- name: GetApplyBundleForUpdate :many
@@ -652,6 +665,7 @@ SELECT
     a.platform_id AS redemption_platform_id,
     a.platform_user_id AS redemption_platform_user_id,
     a.redeemed_at AS redemption_redeemed_at,
+    a.reward_snapshot AS redemption_reward_snapshot,
     r.id AS reward_id,
     r.reward_key,
     r.reward_type,
@@ -709,6 +723,7 @@ type GetApplyBundleForUpdateRow struct {
 	RedemptionPlatformID     sql.NullInt64         `json:"redemption_platform_id"`
 	RedemptionPlatformUserID sql.NullString        `json:"redemption_platform_user_id"`
 	RedemptionRedeemedAt     sql.NullTime          `json:"redemption_redeemed_at"`
+	RedemptionRewardSnapshot pqtype.NullRawMessage `json:"redemption_reward_snapshot"`
 	RewardID                 sql.NullInt64         `json:"reward_id"`
 	RewardKey                sql.NullString        `json:"reward_key"`
 	RewardType               NullPromoRewardType   `json:"reward_type"`
@@ -755,6 +770,7 @@ func (q *Queries) GetApplyBundleForUpdate(ctx context.Context, arg GetApplyBundl
 			&i.RedemptionPlatformID,
 			&i.RedemptionPlatformUserID,
 			&i.RedemptionRedeemedAt,
+			&i.RedemptionRewardSnapshot,
 			&i.RewardID,
 			&i.RewardKey,
 			&i.RewardType,

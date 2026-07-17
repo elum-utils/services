@@ -52,6 +52,7 @@ const (
 	ClaimStatusNotReady    = "not_ready"
 	ClaimStatusNotFound    = "not_found"
 	ClaimStatusNotStarted  = "not_started"
+	ClaimStatusExpired     = "expired"
 
 	CallbackEventClaimed = "task.claimed"
 	CallbackEventRevoked = "task.partner.revoked"
@@ -61,6 +62,7 @@ const (
 	PartnerIssueStatusIssued            = "issued"
 	PartnerIssueStatusCompleted         = "completed"
 	PartnerIssueStatusClaimed           = "claimed"
+	PartnerIssueStatusExpired           = "expired"
 	PartnerIssueStatusRevoked           = "revoked"
 	PartnerIssueStatusRevokedAfterClaim = "revoked_after_claim"
 
@@ -563,6 +565,7 @@ type PartnerIssue struct {
 	PlatformUserID  string
 	PublicPayload   json.RawMessage
 	PrivatePayload  json.RawMessage
+	Rewards         []Reward
 	Status          string
 	IssuedAt        time.Time
 	StartedAt       *time.Time
@@ -571,6 +574,20 @@ type PartnerIssue struct {
 	ExpiresAt       *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type PartnerIssueScope struct {
+	WorkspaceID string
+	Provider    string
+	GroupKey    string
+	Platform    string
+}
+
+func (s PartnerIssueScope) matches(issue PartnerIssue) bool {
+	return s.WorkspaceID == issue.WorkspaceID &&
+		s.Provider == issue.Provider &&
+		s.GroupKey == issue.GroupKey &&
+		s.Platform == issue.Platform
 }
 
 type CreatePartnerIssueParams struct {
@@ -585,6 +602,7 @@ type CreatePartnerIssueParams struct {
 	IssueKey        string
 	PublicPayload   json.RawMessage
 	PrivatePayload  json.RawMessage
+	Rewards         []Reward
 	ExpiresAt       *time.Time
 	Now             time.Time
 }

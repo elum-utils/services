@@ -3,7 +3,9 @@ package refund
 import (
 	"context"
 	"database/sql"
+	"strings"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/payment/repository"
 )
 
@@ -12,11 +14,19 @@ func (a *Refund) Execute(ctx context.Context, params Params) (*Result, error) {
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return nil, err
+	}
+	if params.IdempotencyKey == "" || params.IdempotencyKey != strings.TrimSpace(params.IdempotencyKey) ||
+		len(params.IdempotencyKey) > 128 {
+		return nil, ErrIdempotencyKeyRequired
+	}
+
 	order, err := a.repository.GetOrder(ctx, params.OrderID)
 	if err != nil {
 		return nil, err
 	}
-	if params.WorkspaceID != "" && params.WorkspaceID != order.WorkspaceID {
+	if params.WorkspaceID != order.WorkspaceID {
 		return nil, sql.ErrNoRows
 	}
 
@@ -37,28 +47,46 @@ func (a *Refund) Execute(ctx context.Context, params Params) (*Result, error) {
 		return nil, ErrProviderUnsupported
 	}
 
-	id, err := a.repository.CreateRefund(ctx, repository.RefundCreateParams{
-		WorkspaceID:  order.WorkspaceID,
-		OrderID:      order.ID,
-		AttemptID:    attempt.ID,
-		ProviderCode: attempt.ProviderCode,
-		AmountMinor:  amount,
-		AssetCode:    attempt.AssetCode,
-		Status:       "pending",
-		Reason:       refIfNotEmpty(params.Reason),
+	refundState, err := a.repository.CreateIdempotentRefund(ctx, repository.IdempotentRefundCreateParams{
+		WorkspaceID:    order.WorkspaceID,
+		OrderID:        order.ID,
+		AttemptID:      attempt.ID,
+		ProviderCode:   attempt.ProviderCode,
+		IdempotencyKey: params.IdempotencyKey,
+		AmountMinor:    amount,
+		AssetCode:      attempt.AssetCode,
+		Reason:         refIfNotEmpty(params.Reason),
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	if refundState.Status == "succeeded" {
+		return &Result{
+			RefundID:         refundState.ID,
+			OrderID:          order.ID,
+			AttemptID:        attempt.ID,
+			ProviderCode:     attempt.ProviderCode,
+			ProviderRefundID: refundState.ProviderRefundID,
+			AmountMinor:      amount,
+			AssetCode:        attempt.AssetCode,
+			Status:           refundState.Status,
+		}, nil
+	}
+	if refundState.Status != "created" && refundState.Status != "pending" {
+		return nil, repository.ErrOrderStateInvalid
+	}
+
 	providerResult, providerErr := providerRefund(ctx, ProviderRefundParams{
 		Order: ProviderRefundOrder{
-			ID:             order.ID,
-			WorkspaceID:    order.WorkspaceID,
-			AppID:          order.AppID,
-			PlatformID:     order.PlatformID,
-			PlatformUserID: order.PlatformUserID,
-			ProductID:      order.ProductID,
+			ID:                  order.ID,
+			WorkspaceID:         order.WorkspaceID,
+			AppID:               order.AppID,
+			PlatformID:          order.PlatformID,
+			PlatformUserID:      order.PlatformUserID,
+			PayerPlatformID:     order.PayerPlatformID,
+			PayerPlatformUserID: order.PayerPlatformUserID,
+			ProductID:           order.ProductID,
 		},
 		Attempt: ProviderRefundAttempt{
 			ID:                attempt.ID,
@@ -68,39 +96,31 @@ func (a *Refund) Execute(ctx context.Context, params Params) (*Result, error) {
 			ProviderPaymentID: attempt.ProviderPaymentID,
 			ProviderChargeID:  attempt.ProviderChargeID,
 		},
-		RefundID:       id,
+		RefundID:       refundState.ID,
 		AmountMinor:    amount,
 		Reason:         params.Reason,
 		ProviderParams: params.ProviderParams,
 	})
 	if providerErr != nil {
-		_, _ = a.repository.UpdateRefundStatus(ctx, id, "failed", providerErr.Error())
 		return nil, providerErr
 	}
 
-	if providerResult.ProviderRefundID != "" {
-		if _, err := a.repository.SetRefundProviderID(ctx, id, providerResult.ProviderRefundID); err != nil {
-			return nil, err
-		}
-	}
 	status := providerResult.Status
 	if status == "" {
 		status = "succeeded"
 	}
-	if _, err := a.repository.UpdateRefundStatus(ctx, id, status, params.Reason); err != nil {
+	if err := a.repository.FinalizeRefund(ctx, repository.RefundFinalizeParams{
+		WorkspaceID:      order.WorkspaceID,
+		RefundID:         refundState.ID,
+		ProviderRefundID: providerResult.ProviderRefundID,
+		Status:           status,
+		Reason:           params.Reason,
+	}); err != nil {
 		return nil, err
-	}
-	if status == "succeeded" && amount == attempt.AmountMinor {
-		if err := a.repository.UpdateAttemptStatus(ctx, attempt.ID, "refunded"); err != nil {
-			return nil, err
-		}
-		if _, err := a.repository.UpdateOrderStatus(ctx, order.WorkspaceID, order.ID, "refunded"); err != nil {
-			return nil, err
-		}
 	}
 
 	return &Result{
-		RefundID:         id,
+		RefundID:         refundState.ID,
 		OrderID:          order.ID,
 		AttemptID:        attempt.ID,
 		ProviderCode:     attempt.ProviderCode,

@@ -55,6 +55,13 @@ func (r *Repository) MarkIntegrationTaskReady(
 				}
 			}
 			periodStart, periodEnd := periodFor(task, now)
+			if !exists {
+				task.Rewards, err = txRepo.rewards(ctx, task.WorkspaceID, task.ID)
+				if err != nil {
+					return err
+				}
+			}
+
 			if exists {
 				progress.Progress = task.TargetCount
 				progress.Status = StatusReady
@@ -63,8 +70,13 @@ func (r *Repository) MarkIntegrationTaskReady(
 					return err
 				}
 			} else if _, err := txRepo.batchUpsertProgress(ctx, params.Identity, []recordProgressUpsert{{
-				taskID: task.ID, periodStartAt: periodStart, periodEndAt: periodEnd,
-				progress: task.TargetCount, status: StatusReady, readyAt: &now,
+				taskID:        task.ID,
+				periodStartAt: periodStart,
+				periodEndAt:   periodEnd,
+				delta:         task.TargetCount,
+				status:        StatusReady,
+				readyAt:       &now,
+				rewards:       task.Rewards,
 			}}); err != nil {
 				return err
 			}

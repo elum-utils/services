@@ -63,6 +63,10 @@ func (r *Repository) ExportManifest() ExportManifest {
 }
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return ExportPackage{}, err
+	}
+
 	var result ExportPackage
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
 		if _, err := txRepo.executor.ExecContext(

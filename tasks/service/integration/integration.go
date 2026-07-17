@@ -177,8 +177,8 @@ func (i *Integration) checkLoadedAndRecord(
 	if task.ClaimMode != repository.ClaimModeManual {
 		return Result{Status: StatusInvalidTask, Task: &publicTask}, nil
 	}
-	provider := params.provider
-	if provider == "" && task.IntegrationProvider != nil {
+	provider := ""
+	if task.IntegrationProvider != nil {
 		provider = *task.IntegrationProvider
 	}
 	checker := params.checker(provider)

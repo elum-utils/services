@@ -1,9 +1,14 @@
 package platega
 
 import (
+	"context"
 	"net/http"
 	"time"
+
+	json "github.com/goccy/go-json"
 )
+
+type CredentialsResolver func(context.Context, string) (Credentials, error)
 
 type PaymentMethod int
 
@@ -22,6 +27,7 @@ const (
 	StatusExpired      Status = "EXPIRED"
 	StatusCanceled     Status = "CANCELED"
 	StatusFailed       Status = "FAILED"
+	StatusRefunded     Status = "REFUNDED"
 	StatusChargebacked Status = "CHARGEBACKED"
 )
 
@@ -51,11 +57,13 @@ type GetH2HParams struct {
 
 type SyncPaymentParams struct {
 	Credentials   Credentials
+	WorkspaceID   string
 	TransactionID string
 }
 
 type WebhookRequest struct {
 	Credentials Credentials
+	WorkspaceID string
 	Raw         []byte
 	Headers     http.Header
 }
@@ -85,14 +93,28 @@ type WebhookResult struct {
 	FulfilledID *uint64 `json:"fulfillment_id,omitempty"`
 }
 
+type ReconcileParams struct {
+	ResolveCredentials CredentialsResolver
+	CreatedTo          time.Time
+	Limit              int32
+	MissingAfter       time.Duration
+}
+
+type ReconcileResult struct {
+	Scanned   int
+	Recovered int
+	Completed int
+	Released  int
+}
+
 type H2HResponse struct {
-	Amount float64 `json:"amount"`
-	QR     string  `json:"qr"`
+	Amount json.Number `json:"amount"`
+	QR     string      `json:"qr"`
 }
 
 type paymentDetails struct {
-	Amount   float64 `json:"amount"`
-	Currency string  `json:"currency"`
+	Amount   json.Number `json:"amount"`
+	Currency string      `json:"currency"`
 }
 
 type createTransactionRequest struct {
@@ -137,8 +159,23 @@ type transactionStatusResponse struct {
 
 type callbackPayload struct {
 	ID            string        `json:"id"`
-	Amount        float64       `json:"amount"`
+	Amount        json.Number   `json:"amount"`
 	Currency      string        `json:"currency"`
 	Status        Status        `json:"status"`
 	PaymentMethod PaymentMethod `json:"paymentMethod"`
+}
+
+type exportTransactionsRequest struct {
+	From       time.Time `json:"from"`
+	To         time.Time `json:"to"`
+	TimeZoneID string    `json:"timeZoneId"`
+}
+
+type exportedTransaction struct {
+	RecordID      string      `json:"recordId"`
+	Amount        json.Number `json:"amount"`
+	CurrencyCode  string      `json:"currencyCode"`
+	Status        Status      `json:"status"`
+	PaymentMethod string      `json:"paymentMethod"`
+	Payload       string      `json:"payload"`
 }

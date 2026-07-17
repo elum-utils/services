@@ -20,10 +20,16 @@ func (a *VKMA) ChargeableForWorkspace(ctx context.Context, workspaceID string, p
 	providerPaymentID := strconv.Itoa(params.OrderID)
 	providerSubscriptionID := nullStringFromPositiveInt(params.SubscriptionID)
 
-	attempt, err := a.repository.GetAttemptByProviderPaymentID(ctx, ProviderCode, providerPaymentID)
+	attempt, err := a.repository.GetAttemptByProviderPaymentID(
+		ctx,
+		workspaceID,
+		ProviderCode,
+		providerPaymentID,
+	)
 	if err == nil {
 		if attempt.Status != "succeeded" {
 			if _, completeErr := a.repository.CompleteAttempt(ctx, repository.CompleteAttemptParams{
+				WorkspaceID:       workspaceID,
 				AttemptID:         attempt.ID,
 				ProviderCode:      ProviderCode,
 				ProviderPaymentID: utils.Ref(providerPaymentID),
@@ -68,6 +74,7 @@ func (a *VKMA) ChargeableForWorkspace(ctx context.Context, workspaceID string, p
 	}
 
 	if _, err := a.repository.CreateEvent(ctx, repository.EventCreateParams{
+		WorkspaceID:       workspaceID,
 		ProviderCode:      ProviderCode,
 		AttemptID:         utils.Ref(int64(attempt.ID)),
 		OrderID:           utils.Ref(int64(order.ID)),
@@ -82,6 +89,7 @@ func (a *VKMA) ChargeableForWorkspace(ctx context.Context, workspaceID string, p
 	}
 
 	if _, err := a.repository.CompleteAttempt(ctx, repository.CompleteAttemptParams{
+		WorkspaceID:       workspaceID,
 		AttemptID:         attempt.ID,
 		ProviderCode:      ProviderCode,
 		ProviderPaymentID: utils.Ref(providerPaymentID),
@@ -100,8 +108,8 @@ func (a *VKMA) ChargeableForWorkspace(ctx context.Context, workspaceID string, p
 			PlatformID:             PlatformID,
 			PlatformUserID:         strconv.Itoa(params.UserID),
 			ProductID:              order.ProductID,
-			OrderID:                int64Null(int64(order.ID)),
-			AttemptID:              int64Null(int64(attempt.ID)),
+			OrderID:                utils.Ref(int64(order.ID)),
+			AttemptID:              utils.Ref(int64(attempt.ID)),
 			Status:                 "active",
 			StartedAt:              time.Now(),
 		}); err != nil {

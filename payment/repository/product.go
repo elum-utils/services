@@ -329,7 +329,6 @@ func (r *PaymentRepository) getCheckoutProduct(ctx context.Context, params Produ
 	) {
 		return Product{}, sql.ErrNoRows
 	}
-	product.Items = nil
 	if err := r.attachProductLimitLocks(ctx, &product, params.PlatformID, params.PlatformUserID); err != nil {
 		return Product{}, err
 	}
@@ -935,7 +934,7 @@ func isPurchaseKeyUsable(key sqlc.PaymentPurchaseKey, now time.Time) bool {
 	if key.ExpiresAt.Valid && !key.ExpiresAt.Time.After(now) {
 		return false
 	}
-	return key.UsedCount < key.MaxUses
+	return key.UsedCount+key.ReservedCount < key.MaxUses
 }
 
 func splitProviderCodes(value []byte) []string {
@@ -982,7 +981,7 @@ func (r *PaymentRepository) getProductLimitLock(ctx context.Context, query produ
 
 	total, err := r.q.GetProductLimitCounterCount(ctx, sqlc.GetProductLimitCounterCountParams{
 		WorkspaceID:    query.workspaceID,
-		PlatformID:     query.platformID,
+		PlatformID:     limitCounterPlatformID(scope, query.platformID),
 		ProductID:      query.productID,
 		CounterScope:   scope,
 		PlatformUserID: platformUserID,
@@ -1009,6 +1008,17 @@ func normalizeLimitAmount(amount uint64) uint64 {
 		return 1
 	}
 	return amount
+}
+
+func limitCounterPlatformID(
+	scope sqlc.PaymentProductLimitCounterCounterScope,
+	platformID int64,
+) int64 {
+	if scope == sqlc.PaymentProductLimitCounterCounterScopeGlobal {
+		return 0
+	}
+
+	return platformID
 }
 
 func (r *PaymentRepository) databaseNow(ctx context.Context) (time.Time, error) {

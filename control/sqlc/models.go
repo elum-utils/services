@@ -123,14 +123,15 @@ type ControlTwoFactor struct {
 }
 
 type ControlTwoFactorChallenge struct {
-	ID        string    `json:"id"`
-	AccountID string    `json:"account_id"`
-	TokenHash string    `json:"token_hash"`
-	Ip        string    `json:"ip"`
-	UserAgent string    `json:"user_agent"`
-	BindToIp  bool      `json:"bind_to_ip"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	TokenHash        string    `json:"token_hash"`
+	Ip               string    `json:"ip"`
+	UserAgent        string    `json:"user_agent"`
+	BindToIp         bool      `json:"bind_to_ip"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	SessionExpiresAt time.Time `json:"session_expires_at"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type ControlWorkspace struct {
@@ -153,6 +154,12 @@ type ControlWorkspaceInvite struct {
 	ExpiresAt   sql.NullTime  `json:"expires_at"`
 	RevokedAt   sql.NullTime  `json:"revoked_at"`
 	CreatedAt   time.Time     `json:"created_at"`
+}
+
+type ControlWorkspaceInviteAcceptance struct {
+	InviteID   string    `json:"invite_id"`
+	AccountID  string    `json:"account_id"`
+	AcceptedAt time.Time `json:"accepted_at"`
 }
 
 type ControlWorkspaceInviteRole struct {

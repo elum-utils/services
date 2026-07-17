@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/promo/repository"
 )
 
@@ -15,6 +16,10 @@ type SaveLocalizationParams struct {
 }
 
 func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationParams) error {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	if params.Locale == "" || params.Title == "" {
@@ -29,6 +34,10 @@ func (a *Admin) GetLocalization(
 	promoID uint64,
 	locale string,
 ) (LocalizationModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return LocalizationModel{}, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetLocalization(mergedCtx, workspaceID, promoID, locale)
@@ -43,6 +52,10 @@ func (a *Admin) ListLocalizations(
 	workspaceID string,
 	promoID uint64,
 ) ([]LocalizationModel, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	values, err := a.repository.ListLocalizations(mergedCtx, workspaceID, promoID)
@@ -65,6 +78,10 @@ func (a *Admin) DeleteLocalization(
 	promoID uint64,
 	locale string,
 ) (int64, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.DeleteLocalization(mergedCtx, workspaceID, promoID, locale)

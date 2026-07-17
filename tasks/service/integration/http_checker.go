@@ -3,15 +3,16 @@ package integration
 import (
 	"bytes"
 	"context"
-	"fmt"
-	json "github.com/goccy/go-json"
 	"io"
 	"maps"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	json "github.com/goccy/go-json"
 )
 
 const maxHTTPCheckResponse = 1 << 20
@@ -249,5 +250,5 @@ func lookupJSONPath(value any, path string) (any, bool) {
 }
 
 func jsonValuesEqual(left any, right any) bool {
-	return fmt.Sprint(left) == fmt.Sprint(right)
+	return reflect.DeepEqual(left, right)
 }

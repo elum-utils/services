@@ -41,3 +41,9 @@ type Event struct {
 }
 
 type Result map[string]any
+
+type Stats struct {
+	Providers       int
+	CompiledScripts int
+	StatePools      int
+}

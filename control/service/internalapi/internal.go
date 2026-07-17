@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/control/repository"
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	json "github.com/goccy/go-json"
 )
 
 type Internal struct {
@@ -24,6 +26,18 @@ type AccessRequest struct {
 
 type AuthorizedMethod struct {
 	Key, Service, GroupKey string
+}
+
+type AuditEventParams struct {
+	WorkspaceID string
+	ActorID     string
+	MethodKey   string
+	TargetType  string
+	TargetID    string
+	Result      string
+	RequestID   string
+	BeforeData  json.RawMessage
+	AfterData   json.RawMessage
 }
 
 func NewWithOptions(ctx context.Context, db *sqlwrap.Client, options repository.Options) *Internal {
@@ -57,12 +71,16 @@ func (i *Internal) RegisterManifest(ctx context.Context, values []MethodManifest
 }
 
 func (i *Internal) CheckAccess(ctx context.Context, value AccessRequest) (bool, error) {
+	if err := services.ValidateWorkspaceID(value.WorkspaceID); err != nil {
+		return false, err
+	}
+
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
 	return i.repository.CheckAccess(
 		mergedCtx,
 		strings.TrimSpace(value.AccountID),
-		strings.TrimSpace(value.WorkspaceID),
+		value.WorkspaceID,
 		strings.TrimSpace(value.MethodKey),
 	)
 }
@@ -71,12 +89,16 @@ func (i *Internal) GetAuthorizedMethods(
 	ctx context.Context,
 	accountID, workspaceID string,
 ) ([]AuthorizedMethod, error) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
 	methods, err := i.repository.ListAuthorizedMethods(
 		mergedCtx,
 		strings.TrimSpace(accountID),
-		strings.TrimSpace(workspaceID),
+		workspaceID,
 	)
 	if err != nil {
 		return nil, err
@@ -86,4 +108,29 @@ func (i *Internal) GetAuthorizedMethods(
 		result = append(result, AuthorizedMethod{Key: method.Key, Service: method.Service, GroupKey: method.GroupKey})
 	}
 	return result, nil
+}
+
+// AppendAudit records an action performed by a trusted API orchestrator in
+// another service. Control's own mutations write audit events transactionally.
+func (i *Internal) AppendAudit(ctx context.Context, params AuditEventParams) error {
+	if params.WorkspaceID != "" {
+		if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+			return err
+		}
+	}
+
+	mergedCtx, cancel := i.withContext(ctx)
+	defer cancel()
+
+	return i.repository.AppendAudit(mergedCtx, repository.AuditEvent{
+		WorkspaceID: strings.TrimSpace(params.WorkspaceID),
+		ActorID:     strings.TrimSpace(params.ActorID),
+		MethodKey:   strings.TrimSpace(params.MethodKey),
+		TargetType:  strings.TrimSpace(params.TargetType),
+		TargetID:    strings.TrimSpace(params.TargetID),
+		Result:      strings.TrimSpace(params.Result),
+		RequestID:   strings.TrimSpace(params.RequestID),
+		BeforeData:  params.BeforeData,
+		AfterData:   params.AfterData,
+	})
 }

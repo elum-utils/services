@@ -9,6 +9,10 @@ import (
 )
 
 func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale string) (Calendar, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Calendar{}, err
+	}
+
 	key := calendarCacheKey(calendarCacheUserCalendar, workspaceID, ref, locale)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -59,6 +63,10 @@ func (r *Repository) GetCalendar(ctx context.Context, workspaceID, ref, locale s
 }
 
 func (r *Repository) ListActive(ctx context.Context, workspaceID, locale string, now time.Time) ([]Calendar, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	key := calendarCacheKey(calendarCacheUserCatalog, workspaceID, locale)
 	catalog, err := sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,

@@ -8,6 +8,10 @@ import (
 )
 
 func (r *Repository) GetProgress(ctx context.Context, identity Identity, calendarID string) (*Progress, error) {
+	if err := identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	row, err := r.q.GetProgress(ctx, calendarsqlc.GetProgressParams{
 		WorkspaceID: identity.WorkspaceID, CalendarID: calendarID,
 		AppID: identity.AppID, PlatformID: identity.PlatformID,
@@ -34,6 +38,10 @@ func (r *Repository) Next(
 	ref, locale string,
 	now time.Time,
 ) (RecordResult, error) {
+	if err := identity.Validate(); err != nil {
+		return RecordResult{}, err
+	}
+
 	calendar, err := r.GetCalendar(ctx, identity.WorkspaceID, ref, locale)
 	if err != nil || calendar.ID == "" {
 		return RecordResult{Status: StatusNotFound, Calendar: calendar}, err

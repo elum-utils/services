@@ -5,6 +5,7 @@ import (
 	"time"
 
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
+	"github.com/elum-utils/services/payment/adapters/platega"
 )
 
 const defaultCacheDelay = 10 * time.Minute
@@ -46,6 +47,17 @@ type Options struct {
 	PriceUpdateInterval   time.Duration
 	PriceUpdateBaseURL    string
 	DisablePriceUpdater   bool
+
+	OrderExpirationInterval time.Duration
+	OrderExpirationAge      time.Duration
+	OrderExpirationBatch    int32
+	DisableOrderExpiration  bool
+
+	PlategaCredentialsResolver   platega.CredentialsResolver
+	PlategaReconcileInterval     time.Duration
+	PlategaReconcileMinAge       time.Duration
+	PlategaReconcileMissingAfter time.Duration
+	PlategaReconcileBatch        int32
 
 	TONWalletSyncInterval    time.Duration
 	OnCacheInvalidationError func(error)

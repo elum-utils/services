@@ -4,6 +4,7 @@ type Params struct {
 	WorkspaceID    string
 	OrderID        uint64
 	AttemptID      uint64
+	IdempotencyKey string
 	AmountMinor    uint64
 	Reason         string
 	ProviderParams any

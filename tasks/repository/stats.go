@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
@@ -72,6 +71,10 @@ type DailyOverview struct {
 }
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID string) (Stats, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Stats{}, err
+	}
+
 	row, err := r.q.AdminGetTaskStats(ctx, tasksqlc.AdminGetTaskStatsParams{
 		WorkspaceID: workspaceID, WorkspaceID_2: workspaceID, WorkspaceID_3: workspaceID,
 	})
@@ -95,6 +98,10 @@ func (r *Repository) GetSingleTaskStats(
 	workspaceID string,
 	taskID uint64,
 ) (SingleTaskStats, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return SingleTaskStats{}, err
+	}
+
 	row, err := r.q.AdminGetSingleTaskStats(ctx, tasksqlc.AdminGetSingleTaskStatsParams{
 		WorkspaceID: workspaceID, TaskID: int64(taskID),
 		WorkspaceID_2: workspaceID, TaskID_2: int64(taskID),
@@ -120,6 +127,10 @@ func (r *Repository) ListDailyStats(
 	taskID uint64,
 	from, until time.Time,
 ) ([]DailyStats, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	rows, err := r.q.AdminListTaskDailyStats(ctx, tasksqlc.AdminListTaskDailyStatsParams{
 		WorkspaceID: workspaceID, TaskID: int64(taskID),
 		StatsDate: from, StatsDate_2: until,
@@ -148,6 +159,10 @@ func (r *Repository) ListDailyOverview(
 	workspaceID string,
 	from, until time.Time,
 ) ([]DailyOverview, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	rows, err := r.q.AdminListTaskDailyOverview(ctx, tasksqlc.AdminListTaskDailyOverviewParams{
 		WorkspaceID: workspaceID, StatsDate: from, StatsDate_2: until,
 		WorkspaceID_2: workspaceID, WorkspaceID_3: workspaceID, WorkspaceID_4: workspaceID,
@@ -171,7 +186,10 @@ func (r *Repository) ListDailyOverview(
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
-	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
 		return fmt.Errorf("tasks stats workspace or date range is invalid")
 	}
 

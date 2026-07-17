@@ -114,6 +114,15 @@ func (r *Repository) importBulk(
 	); err != nil {
 		return err
 	}
+	if err := r.replaceImportedItemLocalizations(
+		ctx,
+		workspaceID,
+		pkg.Items,
+		strategy,
+		conflicts,
+	); err != nil {
+		return err
+	}
 	return r.importLocalizationsBulk(
 		ctx,
 		workspaceID,
@@ -122,6 +131,38 @@ func (r *Repository) importBulk(
 		conflicts,
 		result,
 	)
+}
+
+func (r *Repository) replaceImportedItemLocalizations(
+	ctx context.Context,
+	workspaceID string,
+	items []ExportItem,
+	strategy string,
+	conflicts map[string]struct{},
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	keys := make([]string, 0, len(items))
+	for _, item := range items {
+		if hasImportConflict(conflicts, "item", item.Key) {
+			keys = append(keys, item.Key)
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	_, err := r.executor.ExecContext(
+		ctx,
+		`DELETE FROM reference_localization
+WHERE workspace_id = $1
+  AND item_key = ANY($2::text[])`,
+		workspaceID,
+		keys,
+	)
+	return err
 }
 
 func (r *Repository) importItemsBulk(

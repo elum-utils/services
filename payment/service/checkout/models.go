@@ -51,6 +51,7 @@ type Order struct {
 }
 
 type CreateAttemptParams struct {
+	Identity               services.Identity
 	OrderID                uint64
 	ProviderCode           string
 	ProviderPaymentID      *string
@@ -74,6 +75,7 @@ type Attempt struct {
 }
 
 type CreateEventParams struct {
+	WorkspaceID       string
 	ProviderCode      string
 	AttemptID         *int64
 	OrderID           *int64
@@ -86,6 +88,7 @@ type CreateEventParams struct {
 }
 
 type CompleteAttemptParams struct {
+	WorkspaceID       string
 	AttemptID         uint64
 	ProviderCode      string
 	ProviderPaymentID *string

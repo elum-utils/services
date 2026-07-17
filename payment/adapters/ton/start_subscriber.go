@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	services "github.com/elum-utils/services"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -17,11 +18,10 @@ type SubscriberParams struct {
 }
 
 func (a *TON) StartSubscriber(ctx context.Context, params SubscriberParams) (*Sub, error) {
-	params.WorkspaceID = strings.TrimSpace(params.WorkspaceID)
 	params.NetworkConfigURL = strings.TrimSpace(params.NetworkConfigURL)
 	params.WalletAddress = strings.TrimSpace(params.WalletAddress)
-	if params.WorkspaceID == "" {
-		return nil, ErrWorkspaceIDRequired
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return nil, err
 	}
 	if params.WalletAddress == "" {
 		return nil, ErrWalletAddressRequired

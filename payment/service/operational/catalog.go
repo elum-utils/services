@@ -5,14 +5,13 @@ import (
 
 	"github.com/elum-utils/services/internal/utils/contextutil"
 	"github.com/elum-utils/services/payment/repository"
-	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
 func (o *Operational) UpsertProvider(ctx context.Context, params ProviderUpsertParams) error {
 	mergedCtx, cancel := contextutil.Merge(o.rootCtx, ctx)
 	defer cancel()
 
-	return o.repository.AdminUpsertProvider(mergedCtx, paymentsqlc.AdminUpsertProviderParams{
+	return o.repository.UpsertProvider(mergedCtx, repository.ProviderUpsertParams{
 		Code:             params.Code,
 		Title:            params.Title,
 		ProviderKind:     params.ProviderKind,

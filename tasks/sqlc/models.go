@@ -115,6 +115,7 @@ type TaskPartnerIssue struct {
 	PlatformUserID  string                `json:"platform_user_id"`
 	PublicPayload   pqtype.NullRawMessage `json:"public_payload"`
 	PrivatePayload  pqtype.NullRawMessage `json:"private_payload"`
+	RewardsSnapshot json.RawMessage       `json:"rewards_snapshot"`
 	Status          string                `json:"status"`
 	IssuedAt        time.Time             `json:"issued_at"`
 	StartedAt       sql.NullTime          `json:"started_at"`
@@ -123,6 +124,15 @@ type TaskPartnerIssue struct {
 	ExpiresAt       sql.NullTime          `json:"expires_at"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
+}
+
+type TaskPartnerIssueStartLease struct {
+	WorkspaceID string    `json:"workspace_id"`
+	IssueID     int64     `json:"issue_id"`
+	LeaseToken  string    `json:"lease_token"`
+	LeaseUntil  time.Time `json:"lease_until"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type TaskPartnerRewardGrant struct {
@@ -263,6 +273,14 @@ type TaskReward struct {
 	Position     int32          `json:"position"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
+}
+
+type TaskRewardOperation struct {
+	WorkspaceID string    `json:"workspace_id"`
+	OperationID string    `json:"operation_id"`
+	SourceKind  string    `json:"source_kind"`
+	SourceID    int64     `json:"source_id"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type TaskSequence struct {

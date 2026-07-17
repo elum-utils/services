@@ -11,12 +11,14 @@ import (
 type ProviderRefundFunc func(context.Context, ProviderRefundParams) (ProviderRefundResult, error)
 
 type ProviderRefundOrder struct {
-	ID             uint64
-	WorkspaceID    string
-	AppID          int64
-	PlatformID     int64
-	PlatformUserID string
-	ProductID      string
+	ID                  uint64
+	WorkspaceID         string
+	AppID               int64
+	PlatformID          int64
+	PlatformUserID      string
+	PayerPlatformID     *int64
+	PayerPlatformUserID *string
+	ProductID           string
 }
 
 type ProviderRefundAttempt struct {

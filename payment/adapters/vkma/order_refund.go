@@ -23,6 +23,7 @@ func (a *VKMA) RefundOrderForWorkspace(ctx context.Context, workspaceID string, 
 		ProviderRefundID:  providerPaymentID,
 		Reason:            refIfNotEmpty(string(params.CancelReason)),
 		Event: repository.EventCreateParams{
+			WorkspaceID:       workspaceID,
 			ProviderCode:      ProviderCode,
 			ProviderEventID:   eventID(params),
 			ProviderPaymentID: utils.Ref(providerPaymentID),

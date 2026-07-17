@@ -4,11 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/elum-utils/services/internal/testsupport"
 	"github.com/elum-utils/services/reference/repository"
 	"github.com/elum-utils/services/reference/service/admin"
 	"github.com/elum-utils/services/reference/service/user"
 	"testing"
 	"time"
+)
+
+var (
+	referenceBenchmarkWorkspace       = testsupport.WorkspaceID("reference-benchmark")
+	referenceBenchmarkImportWorkspace = testsupport.WorkspaceID("reference-benchmark-import")
 )
 
 func BenchmarkReferenceServiceMethods(b *testing.B) {
@@ -21,13 +27,13 @@ func BenchmarkReferenceServiceMethods(b *testing.B) {
 			itemType = repository.ItemTypeDuration
 		}
 		if err := service.Admin.CreateItem(ctx, admin.SaveItemParams{
-			WorkspaceID: "bench", Key: key, Type: itemType,
+			WorkspaceID: referenceBenchmarkWorkspace, Key: key, Type: itemType,
 			Payload: json.RawMessage(fmt.Sprintf(`{"position":%d}`, index)), IsActive: true,
 		}); err != nil {
 			b.Fatal(err)
 		}
 		if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-			WorkspaceID: "bench", ItemKey: key, Locale: "ru",
+			WorkspaceID: referenceBenchmarkWorkspace, ItemKey: key, Locale: "ru",
 			Title: "Item " + key, Description: "Benchmark item",
 		}); err != nil {
 			b.Fatal(err)
@@ -42,7 +48,7 @@ func BenchmarkReferenceServiceMethods(b *testing.B) {
 	b.Run("User.Get", func(b *testing.B) {
 		for range b.N {
 			_, err := service.User.Get(ctx, user.GetParams{
-				WorkspaceID: "bench", Key: "item.0500", Locale: "ru",
+				WorkspaceID: referenceBenchmarkWorkspace, Key: "item.0500", Locale: "ru",
 			})
 			benchError(b, err)
 		}
@@ -50,34 +56,34 @@ func BenchmarkReferenceServiceMethods(b *testing.B) {
 	b.Run("User.Resolve/100", func(b *testing.B) {
 		for range b.N {
 			_, err := service.User.Resolve(ctx, user.ResolveParams{
-				WorkspaceID: "bench", Keys: resolveKeys, Locale: "ru",
+				WorkspaceID: referenceBenchmarkWorkspace, Keys: resolveKeys, Locale: "ru",
 			})
 			benchError(b, err)
 		}
 	})
 	b.Run("User.List/100", func(b *testing.B) {
 		for range b.N {
-			_, err := service.User.List(ctx, user.ListParams{WorkspaceID: "bench", Locale: "ru", Page: user.Page{Limit: 100}})
+			_, err := service.User.List(ctx, user.ListParams{WorkspaceID: referenceBenchmarkWorkspace, Locale: "ru", Page: user.Page{Limit: 100}})
 			benchError(b, err)
 		}
 	})
 	b.Run("Admin.GetItem", func(b *testing.B) {
 		for range b.N {
-			_, err := service.Admin.GetItem(ctx, "bench", "item.0500")
+			_, err := service.Admin.GetItem(ctx, referenceBenchmarkWorkspace, "item.0500")
 			benchError(b, err)
 		}
 	})
 	b.Run("Admin.ListItems/100", func(b *testing.B) {
 		for range b.N {
 			_, err := service.Admin.ListItems(ctx, admin.ItemListParams{
-				WorkspaceID: "bench", OnlyNotDeleted: true, Page: admin.Page{Limit: 100},
+				WorkspaceID: referenceBenchmarkWorkspace, OnlyNotDeleted: true, Page: admin.Page{Limit: 100},
 			})
 			benchError(b, err)
 		}
 	})
 	b.Run("Admin.GetStats", func(b *testing.B) {
 		for range b.N {
-			_, err := service.Admin.GetStats(ctx, "bench")
+			_, err := service.Admin.GetStats(ctx, referenceBenchmarkWorkspace)
 			benchError(b, err)
 		}
 	})
@@ -89,7 +95,7 @@ func BenchmarkReferenceUserGetCacheModes(b *testing.B) {
 	prepare := func(b *testing.B, serviceAdmin *admin.Admin) {
 		b.Helper()
 		if err := serviceAdmin.CreateItem(ctx, admin.SaveItemParams{
-			WorkspaceID: "bench",
+			WorkspaceID: referenceBenchmarkWorkspace,
 			Key:         "item.0500",
 			Type:        repository.ItemTypeQuantity,
 			Payload:     json.RawMessage(`{"position":500}`),
@@ -98,7 +104,7 @@ func BenchmarkReferenceUserGetCacheModes(b *testing.B) {
 			b.Fatal(err)
 		}
 		if err := serviceAdmin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-			WorkspaceID: "bench",
+			WorkspaceID: referenceBenchmarkWorkspace,
 			ItemKey:     "item.0500",
 			Locale:      "ru",
 			Title:       "Item item.0500",
@@ -115,7 +121,7 @@ func BenchmarkReferenceUserGetCacheModes(b *testing.B) {
 		b.ResetTimer()
 		for range b.N {
 			_, err := service.User.Get(ctx, user.GetParams{
-				WorkspaceID: "bench",
+				WorkspaceID: referenceBenchmarkWorkspace,
 				Key:         "item.0500",
 				Locale:      "ru",
 			})
@@ -131,7 +137,7 @@ func BenchmarkReferenceUserGetCacheModes(b *testing.B) {
 		})
 		prepare(b, service.Admin)
 		_, err := service.User.Get(ctx, user.GetParams{
-			WorkspaceID: "bench",
+			WorkspaceID: referenceBenchmarkWorkspace,
 			Key:         "item.0500",
 			Locale:      "ru",
 		})
@@ -140,7 +146,7 @@ func BenchmarkReferenceUserGetCacheModes(b *testing.B) {
 		b.ResetTimer()
 		for range b.N {
 			_, err := service.User.Get(ctx, user.GetParams{
-				WorkspaceID: "bench",
+				WorkspaceID: referenceBenchmarkWorkspace,
 				Key:         "item.0500",
 				Locale:      "ru",
 			})
@@ -155,30 +161,30 @@ func BenchmarkReferenceImportExport(b *testing.B) {
 	for index := range 1000 {
 		key := fmt.Sprintf("export.%04d", index)
 		if err := service.Admin.CreateItem(ctx, admin.SaveItemParams{
-			WorkspaceID: "bench-import", Key: key, Type: repository.ItemTypeQuantity,
+			WorkspaceID: referenceBenchmarkImportWorkspace, Key: key, Type: repository.ItemTypeQuantity,
 			Payload: json.RawMessage(fmt.Sprintf(`{"position":%d}`, index)), IsActive: true,
 		}); err != nil {
 			b.Fatal(err)
 		}
 		if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-			WorkspaceID: "bench-import", ItemKey: key, Locale: "ru",
+			WorkspaceID: referenceBenchmarkImportWorkspace, ItemKey: key, Locale: "ru",
 			Title: "Item " + key, Description: "Benchmark item",
 		}); err != nil {
 			b.Fatal(err)
 		}
 	}
-	pkg, err := service.Admin.Export(ctx, "bench-import", admin.ExportRequest{})
+	pkg, err := service.Admin.Export(ctx, referenceBenchmarkImportWorkspace, admin.ExportRequest{})
 	benchError(b, err)
 	b.ReportAllocs()
 	b.Run("Export", func(b *testing.B) {
 		for range b.N {
-			_, err := service.Admin.Export(ctx, "bench-import", admin.ExportRequest{})
+			_, err := service.Admin.Export(ctx, referenceBenchmarkImportWorkspace, admin.ExportRequest{})
 			benchError(b, err)
 		}
 	})
 	b.Run("Import/update", func(b *testing.B) {
 		for range b.N {
-			_, err := service.Admin.Import(ctx, "bench-import", admin.ImportRequest{
+			_, err := service.Admin.Import(ctx, referenceBenchmarkImportWorkspace, admin.ImportRequest{
 				Package: pkg, ConflictStrategy: repository.ImportConflictUpdate,
 			})
 			benchError(b, err)

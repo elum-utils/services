@@ -37,6 +37,53 @@ func TestIsReady(t *testing.T) {
 	}
 }
 
+func TestCalendarRunBlocksUntilContextCanceled(t *testing.T) {
+	newCalendarTestService(t)
+	service := New(DatabaseParams{
+		User:     calendarTestPGUser,
+		Password: calendarTestPGPassword,
+		Database: calendarTestDB,
+		Host:     calendarTestPGHost,
+		Port:     calendarTestPGPort,
+		Options:  calendarTestOptions(),
+	})
+	runCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- service.Run(runCtx)
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !service.IsReady() {
+		select {
+		case err := <-done:
+			cancel()
+			t.Fatalf("Run returned before readiness: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("calendar service did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := service.Run(context.Background()); !errors.Is(err, ErrServiceRunning) {
+		cancel()
+		t.Fatalf("second Run error = %v, want ErrServiceRunning", err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("calendar Run did not stop after cancellation")
+	}
+}
+
 func TestCalendarCacheVersionInvalidatesOtherNode(t *testing.T) {
 	cache := testsupport.NewCache()
 	options := calendarTestOptions()
@@ -55,7 +102,7 @@ func TestCalendarCacheVersionInvalidatesOtherNode(t *testing.T) {
 	t.Cleanup(func() { _ = nodeB.Close() })
 
 	calendarID, err := nodeA.Admin.CreateCalendar(context.Background(), admin.SaveCalendarParams{
-		WorkspaceID:   "cache-workspace",
+		WorkspaceID:   testsupport.WorkspaceID("cache-workspace"),
 		Type:          "daily",
 		Mode:          repository.ModeSequential,
 		IntervalType:  repository.IntervalFloating,
@@ -69,7 +116,7 @@ func TestCalendarCacheVersionInvalidatesOtherNode(t *testing.T) {
 		t.Fatalf("create cached calendar: %v", err)
 	}
 	if err := nodeA.Admin.UpsertLocalization(context.Background(), admin.SaveLocalizationParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		CalendarID:  calendarID,
 		Locale:      "ru",
 		Title:       "Old title",
@@ -79,7 +126,7 @@ func TestCalendarCacheVersionInvalidatesOtherNode(t *testing.T) {
 	assertCalendarCacheRead(t, nodeB, "Old title")
 
 	if err := nodeA.Admin.UpsertLocalization(context.Background(), admin.SaveLocalizationParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		CalendarID:  calendarID,
 		Locale:      "ru",
 		Title:       "New title",
@@ -106,7 +153,7 @@ func TestCalendarImportBatchesMoreThanPostgresParameterLimit(t *testing.T) {
 		})
 	}
 
-	result, err := service.Admin.Import(context.Background(), "large-workspace", admin.ImportRequest{
+	result, err := service.Admin.Import(context.Background(), testsupport.WorkspaceID("large-workspace"), admin.ImportRequest{
 		Package: admin.ExportPackage{
 			Format:    repository.ExportFormat,
 			Service:   "calendar",
@@ -130,7 +177,7 @@ func TestCalendarImportSerializesWithAdminWrite(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
-	workspaceID := "concurrent-workspace"
+	workspaceID := testsupport.WorkspaceID("concurrent-workspace")
 	transaction, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatalf("begin calendar lock transaction: %v", err)
@@ -229,7 +276,7 @@ func assertCalendarCacheRead(t *testing.T, service *Calendar, title string) {
 	t.Helper()
 	ctx := context.Background()
 	active, err := service.User.ListActive(ctx, user.ListActiveParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		Locale:      "ru",
 	})
 	if err != nil || len(active) != 1 || active[0].Title != title {
@@ -237,7 +284,7 @@ func assertCalendarCacheRead(t *testing.T, service *Calendar, title string) {
 	}
 	value, err := service.User.GetCalendar(ctx, user.GetCalendarParams{
 		Identity: services.Identity{
-			WorkspaceID:    "cache-workspace",
+			WorkspaceID:    testsupport.WorkspaceID("cache-workspace"),
 			AppID:          1,
 			PlatformID:     1,
 			PlatformUserID: "cache-user",
@@ -263,20 +310,20 @@ func TestCalendarSequentialLifecycleAndCallback(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
 	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
-		WorkspaceID: "workspace-a", Type: "daily", Mode: repository.ModeSequential,
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), Type: "daily", Mode: repository.ModeSequential,
 		IntervalType: repository.IntervalFloating, IntervalUnit: "hour", IntervalCount: 1,
 		EndBehavior: repository.EndStop, Timezone: "UTC", IsActive: true,
 	})
-	step1 := createStepReward(t, service, "workspace-a", calendarID, 1, "coin", 100)
-	createStepReward(t, service, "workspace-a", calendarID, 2, "gem", 2)
+	step1 := createStepReward(t, service, testsupport.WorkspaceID("workspace-a"), calendarID, 1, "coin", 100)
+	createStepReward(t, service, testsupport.WorkspaceID("workspace-a"), calendarID, 2, "gem", 2)
 	if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-		WorkspaceID: "workspace-a", CalendarID: calendarID, Locale: "ru",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), CalendarID: calendarID, Locale: "ru",
 		Title: "Ежедневные награды", Description: "Описание",
 	}); err != nil {
 		t.Fatalf("upsert localization: %v", err)
 	}
 	identity := user.Identity{
-		WorkspaceID: "workspace-a", AppID: 1, PlatformID: 2, PlatformUserID: "player",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), AppID: 1, PlatformID: 2, PlatformUserID: "player",
 	}
 	first := record(t, service, identity, "daily", "op-1", start)
 	if !first.Granted || first.Status != repository.StatusGranted ||
@@ -303,7 +350,7 @@ func TestCalendarSequentialLifecycleAndCallback(t *testing.T) {
 		t.Fatalf("unexpected second result: %+v", second)
 	}
 	if _, err := service.Admin.UpdateReward(ctx, admin.SaveRewardParams{
-		ID: step1.rewardID, WorkspaceID: "workspace-a", CalendarID: calendarID,
+		ID: step1.rewardID, WorkspaceID: testsupport.WorkspaceID("workspace-a"), CalendarID: calendarID,
 		StepID: step1.stepID, Key: "coin", Quantity: 999, Position: 1,
 	}); err != nil {
 		t.Fatalf("update reward: %v", err)
@@ -323,7 +370,12 @@ func TestCalendarSequentialLifecycleAndCallback(t *testing.T) {
 		}
 		cancel()
 		return nil
-	}, WithCallbackIdleDelay(10*time.Millisecond))
+	},
+		WithCallbackWorkerID("calendar-test-worker"),
+		WithCallbackBatchSize(10),
+		WithCallbackLeaseTimeout(time.Second),
+		WithCallbackIdleDelay(10*time.Millisecond),
+	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("OnCallback error = %v", err)
 	}
@@ -332,18 +384,53 @@ func TestCalendarSequentialLifecycleAndCallback(t *testing.T) {
 	if err != nil || progress == nil || progress.ClaimCount != 2 || !progress.IsCompleted {
 		t.Fatalf("progress: %+v, err=%v", progress, err)
 	}
-	stats, err := service.Admin.GetStats(ctx, "workspace-a", calendarID)
+	stats, err := service.Admin.GetStats(ctx, testsupport.WorkspaceID("workspace-a"), calendarID)
 	if err != nil || stats.OperationCount != 3 || stats.GrantCount != 2 || stats.UniqueUsers != 1 {
 		t.Fatalf("stats: %+v, err=%v", stats, err)
 	}
-	if err := service.Admin.RefreshDailyStats(ctx, "workspace-a", start.Add(-time.Hour), start.Add(4*time.Hour)); err != nil {
+	if err := service.Admin.RefreshDailyStats(ctx, testsupport.WorkspaceID("workspace-a"), start.Add(-time.Hour), start.Add(4*time.Hour)); err != nil {
 		t.Fatalf("refresh daily stats: %v", err)
 	}
 	daily, err := service.Admin.ListDailyStats(
-		ctx, "workspace-a", calendarID, start.Add(-24*time.Hour), start.Add(24*time.Hour),
+		ctx, testsupport.WorkspaceID("workspace-a"), calendarID, start.Add(-24*time.Hour), start.Add(24*time.Hour),
 	)
 	if err != nil || len(daily) != 1 || daily[0].GrantCount != 2 {
 		t.Fatalf("daily stats: %+v, err=%v", daily, err)
+	}
+}
+
+func TestCalendarSequentialSupportsSparsePositions(t *testing.T) {
+	service := newCalendarTestService(t)
+	workspaceID := testsupport.WorkspaceID("sparse-steps")
+	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
+		WorkspaceID:   workspaceID,
+		Type:          "sparse",
+		Mode:          repository.ModeSequential,
+		IntervalType:  repository.IntervalFloating,
+		IntervalUnit:  "hour",
+		IntervalCount: 1,
+		EndBehavior:   repository.EndStop,
+		Timezone:      "UTC",
+		IsActive:      true,
+	})
+	createStepReward(t, service, workspaceID, calendarID, 1, "coin", 1)
+	createStepReward(t, service, workspaceID, calendarID, 3, "gem", 1)
+
+	identity := user.Identity{
+		WorkspaceID:    workspaceID,
+		AppID:          1,
+		PlatformID:     1,
+		PlatformUserID: "player",
+	}
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	first := record(t, service, identity, calendarID, "sparse-1", start)
+	second := record(t, service, identity, calendarID, "sparse-2", start.Add(2*time.Hour))
+
+	if !first.Granted || first.Position == nil || *first.Position != 1 {
+		t.Fatalf("first sparse grant: %+v", first)
+	}
+	if !second.Granted || second.Position == nil || *second.Position != 3 {
+		t.Fatalf("second sparse grant: %+v", second)
 	}
 }
 
@@ -351,27 +438,27 @@ func TestCalendarImportExportCycle(t *testing.T) {
 	service := newCalendarTestService(t)
 	ctx := context.Background()
 	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
-		WorkspaceID: "workspace-export", Type: "daily_export", Mode: repository.ModeSequential,
+		WorkspaceID: testsupport.WorkspaceID("workspace-export"), Type: "daily_export", Mode: repository.ModeSequential,
 		IntervalType: repository.IntervalFloating, IntervalUnit: "day", IntervalCount: 1,
 		EndBehavior: repository.EndStop, Timezone: "UTC", IsActive: true,
 	})
-	createStepReward(t, service, "workspace-export", calendarID, 1, "stars", 25)
+	createStepReward(t, service, testsupport.WorkspaceID("workspace-export"), calendarID, 1, "stars", 25)
 	if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-		WorkspaceID: "workspace-export", CalendarID: calendarID, Locale: "ru",
+		WorkspaceID: testsupport.WorkspaceID("workspace-export"), CalendarID: calendarID, Locale: "ru",
 		Title: "Календарь", Description: "Описание",
 	}); err != nil {
 		t.Fatalf("upsert localization: %v", err)
 	}
-	pkg, err := service.Admin.Export(ctx, "workspace-export", admin.ExportRequest{})
+	pkg, err := service.Admin.Export(ctx, testsupport.WorkspaceID("workspace-export"), admin.ExportRequest{})
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	if _, err := service.Admin.Import(ctx, "workspace-import", admin.ImportRequest{
+	if _, err := service.Admin.Import(ctx, testsupport.WorkspaceID("workspace-import"), admin.ImportRequest{
 		Package: pkg, ConflictStrategy: repository.ImportConflictUpdate,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	imported, err := service.Admin.Export(ctx, "workspace-import", admin.ExportRequest{})
+	imported, err := service.Admin.Export(ctx, testsupport.WorkspaceID("workspace-import"), admin.ExportRequest{})
 	if err != nil {
 		t.Fatalf("export imported: %v", err)
 	}
@@ -379,13 +466,35 @@ func TestCalendarImportExportCycle(t *testing.T) {
 		len(imported.Calendars[0].Steps) != 1 || len(imported.Calendars[0].Steps[0].Rewards) != 1 {
 		t.Fatalf("unexpected imported package: %+v", imported)
 	}
+
+	pkg.Calendars[0].Localization = nil
+	pkg.Calendars[0].Steps = nil
+	if _, err := service.Admin.Import(ctx, testsupport.WorkspaceID("workspace-import"), admin.ImportRequest{
+		Package:          pkg,
+		ConflictStrategy: repository.ImportConflictUpdate,
+	}); err != nil {
+		t.Fatalf("replace imported calendar: %v", err)
+	}
+	replaced, err := service.Admin.Export(
+		ctx,
+		testsupport.WorkspaceID("workspace-import"),
+		admin.ExportRequest{},
+	)
+	if err != nil {
+		t.Fatalf("export replaced calendar: %v", err)
+	}
+	if len(replaced.Calendars) != 1 ||
+		len(replaced.Calendars[0].Localization) != 0 ||
+		len(replaced.Calendars[0].Steps) != 0 {
+		t.Fatalf("update_existing kept removed calendar children: %+v", replaced.Calendars)
+	}
 }
 
 func TestCalendarIntervalAndResetModes(t *testing.T) {
 	service := newCalendarTestService(t)
 	start := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	identity := user.Identity{
-		WorkspaceID: "workspace-modes", AppID: 1, PlatformID: 1, PlatformUserID: "user",
+		WorkspaceID: testsupport.WorkspaceID("workspace-modes"), AppID: 1, PlatformID: 1, PlatformUserID: "user",
 	}
 
 	intervalID := createCalendar(t, service, admin.SaveCalendarParams{
@@ -423,14 +532,14 @@ func TestCalendarConcurrentSingleIntervalGrant(t *testing.T) {
 	service := newCalendarTestService(t)
 	start := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
-		WorkspaceID: "workspace-concurrent", Type: "concurrent",
+		WorkspaceID: testsupport.WorkspaceID("workspace-concurrent"), Type: "concurrent",
 		Mode: repository.ModeSequential, IntervalType: repository.IntervalFloating,
 		IntervalUnit: "hour", IntervalCount: 1, EndBehavior: repository.EndRepeatLast,
 		Timezone: "UTC", IsActive: true,
 	})
-	createStepReward(t, service, "workspace-concurrent", calendarID, 1, "coin", 1)
+	createStepReward(t, service, testsupport.WorkspaceID("workspace-concurrent"), calendarID, 1, "coin", 1)
 	identity := user.Identity{
-		WorkspaceID: "workspace-concurrent", AppID: 1, PlatformID: 1, PlatformUserID: "same",
+		WorkspaceID: testsupport.WorkspaceID("workspace-concurrent"), AppID: 1, PlatformID: 1, PlatformUserID: "same",
 	}
 	const workers = 8
 	results := make(chan user.RecordResult, workers)
@@ -474,7 +583,7 @@ func TestCalendarStatusesVisibilityAndAdminCRUD(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 	identity := user.Identity{
-		WorkspaceID: "workspace-admin", AppID: 9, PlatformID: 3, PlatformUserID: "player",
+		WorkspaceID: testsupport.WorkspaceID("workspace-admin"), AppID: 9, PlatformID: 3, PlatformUserID: "player",
 	}
 
 	inactiveID := createCalendar(t, service, admin.SaveCalendarParams{
@@ -559,6 +668,195 @@ func TestCalendarStatusesVisibilityAndAdminCRUD(t *testing.T) {
 	if deleted.Status != repository.StatusNotFound {
 		t.Fatalf("deleted status: %+v", deleted)
 	}
+}
+
+func TestCalendarAdminSurfaceAndCallbackControls(t *testing.T) {
+
+	service := newCalendarTestService(t)
+	ctx := context.Background()
+	workspaceID := testsupport.WorkspaceID("admin-surface")
+	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
+		WorkspaceID:   workspaceID,
+		Type:          "admin-surface",
+		Mode:          repository.ModeSequential,
+		IntervalType:  repository.IntervalFloating,
+		IntervalUnit:  "hour",
+		IntervalCount: 1,
+		EndBehavior:   repository.EndStop,
+		Timezone:      "UTC",
+		IsActive:      true,
+	})
+	if changed, err := service.Admin.UpdateCalendar(ctx, admin.SaveCalendarParams{
+		ID:                  calendarID,
+		WorkspaceID:         workspaceID,
+		Type:                "admin-surface-updated",
+		Mode:                repository.ModeSequential,
+		IntervalType:        repository.IntervalFloating,
+		IntervalUnit:        "hour",
+		IntervalCount:       1,
+		ResetAfterIntervals: 1,
+		EndBehavior:         repository.EndStop,
+		Timezone:            "UTC",
+		IsActive:            true,
+	}); err != nil || changed != 1 {
+		t.Fatalf("update calendar: changed=%d err=%v", changed, err)
+	}
+
+	for _, localization := range []admin.SaveLocalizationParams{
+		{
+			WorkspaceID: workspaceID,
+			CalendarID:  calendarID,
+			Locale:      "ru",
+			Title:       "Календарь",
+			Description: "Описание",
+		},
+		{
+			WorkspaceID: workspaceID,
+			CalendarID:  calendarID,
+			Locale:      "en",
+			Title:       "Calendar",
+			Description: "Description",
+		},
+	} {
+		if err := service.Admin.UpsertLocalization(ctx, localization); err != nil {
+			t.Fatalf("upsert localization %s: %v", localization.Locale, err)
+		}
+	}
+
+	localization, err := service.Admin.GetLocalization(ctx, workspaceID, calendarID, "ru")
+	if err != nil || localization.Title != "Календарь" {
+		t.Fatalf("get localization: value=%+v err=%v", localization, err)
+	}
+	localizations, err := service.Admin.ListLocalizations(ctx, workspaceID, calendarID)
+	if err != nil || len(localizations) != 2 {
+		t.Fatalf("list localizations: values=%+v err=%v", localizations, err)
+	}
+
+	mainStep := createStepReward(t, service, workspaceID, calendarID, 1, "coin", 10)
+	deleteStepID, err := service.Admin.CreateStep(ctx, admin.SaveStepParams{
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		Position:    2,
+	})
+	if err != nil {
+		t.Fatalf("create removable step: %v", err)
+	}
+	day := "day"
+	deleteRewardID, err := service.Admin.CreateReward(ctx, admin.SaveRewardParams{
+		WorkspaceID: workspaceID,
+		CalendarID:  calendarID,
+		StepID:      deleteStepID,
+		Key:         "premium",
+		Type:        "duration",
+		Quantity:    1,
+		Unit:        &day,
+		Position:    1,
+	})
+	if err != nil {
+		t.Fatalf("create removable duration reward: %v", err)
+	}
+
+	calendarValue, err := service.Admin.GetCalendar(ctx, workspaceID, calendarID)
+	if err != nil || calendarValue.Type != "admin-surface-updated" ||
+		len(calendarValue.Localizations) != 2 || len(calendarValue.Steps) != 2 {
+		t.Fatalf("get calendar: value=%+v err=%v", calendarValue, err)
+	}
+
+	now := time.Now().UTC()
+	for index := 0; index < 4; index++ {
+		identity := user.Identity{
+			WorkspaceID:    workspaceID,
+			AppID:          1,
+			PlatformID:     1,
+			PlatformUserID: fmt.Sprintf("admin-user-%d", index),
+		}
+		result := record(
+			t,
+			service,
+			identity,
+			calendarID,
+			fmt.Sprintf("admin-operation-%d", index),
+			now,
+		)
+		if !result.Granted {
+			t.Fatalf("operation %d was not granted: %+v", index, result)
+		}
+	}
+
+	operations, err := service.Admin.ListOperations(
+		ctx,
+		workspaceID,
+		calendarID,
+		admin.Page{Limit: 10},
+	)
+	if err != nil || len(operations) != 4 {
+		t.Fatalf("list operations: values=%+v err=%v", operations, err)
+	}
+
+	pkg, err := service.Admin.Export(ctx, workspaceID, admin.ExportRequest{})
+	if err != nil {
+		t.Fatalf("export calendar: %v", err)
+	}
+	preview, err := service.Admin.PreviewImport(ctx, workspaceID, pkg)
+	if err != nil || preview.Counts.Calendars != 1 || len(preview.Conflicts) != 1 {
+		t.Fatalf("preview import: value=%+v err=%v", preview, err)
+	}
+
+	events, err := service.Admin.ListCallbackEvents(ctx, admin.CallbackEventListParams{
+		WorkspaceID: workspaceID,
+		Page:        admin.Page{Limit: 10},
+	})
+	if err != nil || len(events) != 4 {
+		t.Fatalf("list callback events: values=%+v err=%v", events, err)
+	}
+	loaded, err := service.Admin.GetCallbackEvent(ctx, workspaceID, events[0].ID)
+	if err != nil || loaded.ID != events[0].ID {
+		t.Fatalf("get callback event: value=%+v err=%v", loaded, err)
+	}
+	if changed, err := service.Admin.RetryCallbackEventNow(ctx, workspaceID, events[0].ID); err != nil || changed != 1 {
+		t.Fatalf("retry callback: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.MarkCallbackEventOK(ctx, workspaceID, events[0].ID); err != nil || changed != 1 {
+		t.Fatalf("mark callback ok: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.MarkCallbackEventReject(
+		ctx,
+		workspaceID,
+		events[1].ID,
+		"manual reject",
+	); err != nil || changed != 1 {
+		t.Fatalf("mark callback reject: changed=%d err=%v", changed, err)
+	}
+
+	db, err := openCalendarPostgres(calendarTestDB)
+	if err != nil {
+		t.Fatalf("open callback database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.ExecContext(ctx, `
+		UPDATE calendar_clb_event
+		SET status = 'processing', locked_until = now() - interval '1 minute'
+		WHERE id = $1
+	`, events[2].ID); err != nil {
+		t.Fatalf("expire callback lease: %v", err)
+	}
+	if changed, err := service.Admin.ResetExpiredCallbackProcessing(ctx, workspaceID); err != nil || changed != 1 {
+		t.Fatalf("reset callback processing: changed=%d err=%v", changed, err)
+	}
+
+	if changed, err := service.Admin.DeleteReward(ctx, workspaceID, calendarID, deleteRewardID); err != nil || changed != 1 {
+		t.Fatalf("delete reward: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.DeleteStep(ctx, workspaceID, calendarID, deleteStepID); err != nil || changed != 1 {
+		t.Fatalf("delete step: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.DeleteLocalization(ctx, workspaceID, calendarID, "en"); err != nil || changed != 1 {
+		t.Fatalf("delete localization: changed=%d err=%v", changed, err)
+	}
+	if _, err := service.Admin.DeleteReward(ctx, "invalid", calendarID, mainStep.rewardID); !errors.Is(err, services.ErrIdentityWorkspaceInvalid) {
+		t.Fatalf("invalid workspace delete reward error = %v", err)
+	}
+
 }
 
 type stepReward struct {
@@ -669,6 +967,69 @@ WHERE datname = $1 AND pid <> pg_backend_pid()`, database)
 	if err != nil {
 		t.Fatalf("terminate postgres connections: %v", err)
 	}
+}
+
+func TestCalendarHideFutureRewardsLimitsMutationResponses(t *testing.T) {
+	service := newCalendarTestService(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	workspaceID := testsupport.WorkspaceID("hidden-mutation-rewards")
+	calendarID := createCalendar(t, service, admin.SaveCalendarParams{
+		WorkspaceID:       workspaceID,
+		Type:              "hidden-mutation",
+		Mode:              repository.ModeSequential,
+		IntervalType:      repository.IntervalFloating,
+		IntervalUnit:      "hour",
+		EndBehavior:       repository.EndStop,
+		Timezone:          "UTC",
+		IsActive:          true,
+		HideFutureRewards: true,
+	})
+	createStepReward(t, service, workspaceID, calendarID, 1, "current", 1)
+	createStepReward(t, service, workspaceID, calendarID, 2, "next", 1)
+	createStepReward(t, service, workspaceID, calendarID, 3, "future", 1)
+
+	assertVisibleSteps := func(t *testing.T, value user.RecordResult) {
+		t.Helper()
+		if len(value.Calendar.Steps) != 2 ||
+			value.Calendar.Steps[0].Position != 1 ||
+			value.Calendar.Steps[1].Position != 2 {
+			t.Fatalf("future rewards leaked: %+v", value.Calendar.Steps)
+		}
+	}
+
+	t.Run("Next", func(t *testing.T) {
+		identity := user.Identity{
+			WorkspaceID:    workspaceID,
+			AppID:          1,
+			PlatformID:     1,
+			PlatformUserID: "next-user",
+		}
+		result, err := service.User.Next(ctx, user.NextParams{
+			Identity:    identity,
+			CalendarRef: calendarID,
+			Locale:      "ru",
+			Now:         now,
+		})
+		if err != nil {
+			t.Fatalf("next: %v", err)
+		}
+		if !result.Granted {
+			t.Fatalf("current step must be granted: %+v", result)
+		}
+		assertVisibleSteps(t, result)
+	})
+
+	t.Run("Record", func(t *testing.T) {
+		identity := user.Identity{
+			WorkspaceID:    workspaceID,
+			AppID:          1,
+			PlatformID:     1,
+			PlatformUserID: "record-user",
+		}
+		result := record(t, service, identity, calendarID, "hidden-record", now)
+		assertVisibleSteps(t, result)
+	})
 }
 
 func openCalendarPostgres(database string) (*sql.DB, error) {

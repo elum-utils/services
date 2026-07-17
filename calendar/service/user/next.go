@@ -27,11 +27,7 @@ func (u *User) Next(ctx context.Context, params NextParams) (RecordResult, error
 		return RecordResult{}, err
 	}
 	result := mapRecord(value)
-	if result.Calendar.HideFutureRewards && !result.Granted {
-		result.Rewards = nil
-		for index := range result.Calendar.Steps {
-			result.Calendar.Steps[index].Rewards = nil
-		}
-	}
+	hideFutureRewardSteps(&result)
+
 	return result, nil
 }

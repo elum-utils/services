@@ -171,24 +171,35 @@ func (t *Tasks) adopt(running *Tasks) {
 func newTasks(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Options) *Tasks {
 	rootCtx, cancel := context.WithCancel(contextutil.Normalize(ctx))
 	repositoryOptions := repositoryOptions(options)
+	goroutines := goroutinemanager.New()
 	runtimeOptions := options.Runtime
 	if runtimeOptions.ScriptLoader == nil {
 		runtimeOptions.ScriptLoader = partnerScriptLoader(db, repositoryOptions)
 	}
 	runtimeManager := taskruntime.New(rootCtx, runtimeOptions)
+
 	return &Tasks{
-		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions), Internal: internalapi.NewWithServiceOptions(rootCtx, db, internalapi.Options{
+		Admin: admin.NewWithOptions(rootCtx, db, repositoryOptions),
+		Internal: internalapi.NewWithServiceOptions(rootCtx, db, internalapi.Options{
 			RepositoryOptions: repositoryOptions,
 			Runtime:           runtimeManager,
 		}),
 		Integration: integration.NewWithOptions(rootCtx, db, integrationOptions(options, repositoryOptions)),
 		User: user.NewWithServiceOptions(rootCtx, db, user.Options{
-			RepositoryOptions: repositoryOptions,
-			PartnerProviders:  options.PartnerProviders,
-			Runtime:           runtimeManager,
+			RepositoryOptions:         repositoryOptions,
+			PartnerProviders:          options.PartnerProviders,
+			Runtime:                   runtimeManager,
+			Goroutines:                goroutines,
+			PartnerStartLeaseDuration: options.PartnerStartLeaseDuration,
 		}),
-		callbacks: callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable), runtime: runtimeManager, client: db, ownsClient: ownsClient,
-		rootCtx: rootCtx, rootCancel: cancel, options: options, goroutines: goroutinemanager.New(),
+		callbacks:  callbackutil.NewWithTable(db.DB(), callbackutil.TasksTable),
+		runtime:    runtimeManager,
+		client:     db,
+		ownsClient: ownsClient,
+		rootCtx:    rootCtx,
+		rootCancel: cancel,
+		options:    options,
+		goroutines: goroutines,
 	}
 }
 

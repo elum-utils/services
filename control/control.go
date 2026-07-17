@@ -84,6 +84,7 @@ func open(ctx context.Context, params DatabaseParams) (*Control, error) {
 		CacheL1Delay:             params.Options.CacheL1Delay,
 		CacheL2Delay:             params.Options.CacheL2Delay,
 		OnCacheInvalidationError: params.Options.OnCacheInvalidationError,
+		SecretEncryptionKey:      params.Options.SecretEncryptionKey,
 	})
 	if err := bootstrap.Bootstrap(contextutil.Normalize(ctx)); err != nil {
 		_ = bootstrap.Close()
@@ -130,6 +131,7 @@ func newControl(ctx context.Context, db *sqlwrap.Client, ownsClient bool, option
 		CacheL1Delay:             options.CacheL1Delay,
 		CacheL2Delay:             options.CacheL2Delay,
 		OnCacheInvalidationError: options.OnCacheInvalidationError,
+		SecretEncryptionKey:      options.SecretEncryptionKey,
 	}
 	return &Control{
 		Admin:      admin.NewWithOptions(rootCtx, db, repositoryOptions),

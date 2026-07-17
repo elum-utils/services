@@ -249,6 +249,7 @@ func (a *Admin) UpdateSubscriptionStatus(ctx context.Context, params Subscriptio
 	defer paymentRequestCancel()
 	ctx = mergedCtx
 	return a.repository.UpdateSubscriptionStatus(ctx, repository.SubscriptionStatusUpdateParams{
+		WorkspaceID:            params.WorkspaceID,
 		ProviderCode:           params.ProviderCode,
 		ProviderSubscriptionID: params.ProviderSubscriptionID,
 		Status:                 params.Status,

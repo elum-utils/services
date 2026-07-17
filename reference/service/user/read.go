@@ -11,7 +11,7 @@ func (u *User) Get(ctx context.Context, params GetParams) (ItemModel, error) {
 	mergedCtx, cancel := u.withContext(ctx)
 	defer cancel()
 	item, err := u.repository.Get(
-		mergedCtx, strings.TrimSpace(params.WorkspaceID),
+		mergedCtx, params.WorkspaceID,
 		normalizeKey(params.Key), normalizeLocale(params.Locale),
 	)
 	if err != nil {
@@ -31,7 +31,7 @@ func (u *User) Resolve(ctx context.Context, params ResolveParams) (ResolveResult
 		return ResolveResult{}, ErrTooManyKeys
 	}
 	items, err := u.repository.Resolve(
-		mergedCtx, strings.TrimSpace(params.WorkspaceID), keys, normalizeLocale(params.Locale),
+		mergedCtx, params.WorkspaceID, keys, normalizeLocale(params.Locale),
 	)
 	if err != nil {
 		return ResolveResult{}, err
@@ -55,7 +55,7 @@ func (u *User) List(ctx context.Context, params ListParams) ([]ItemModel, error)
 	defer cancel()
 	limit, offset := normalizePage(params.Page)
 	items, err := u.repository.List(
-		mergedCtx, strings.TrimSpace(params.WorkspaceID), normalizeLocale(params.Locale), limit, offset,
+		mergedCtx, params.WorkspaceID, normalizeLocale(params.Locale), limit, offset,
 	)
 	if err != nil {
 		return nil, err

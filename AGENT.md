@@ -1,423 +1,382 @@
-# Services Style Guide
+# Общие правила разработки сервисов
 
-Обязательные правила проектирования и поддержки сервисов в этом репозитории.
+Этот файл обязателен для всего репозитория. `AGENT.md` внутри конкретного
+сервиса дополняет эти правила доменными требованиями, но не отменяет их. При
+расхождении действуют более строгие требования.
 
-## 1. Основные принципы
+## 1. Технологический контракт
 
-- Каждый сервис полностью независим:
-  - собственная схема и repository;
-  - собственные domain-модели;
-  - собственный callback producer;
-  - никаких связей таблиц или прямых вызовов другого бизнес-сервиса.
-- Общими могут быть только технические utilities из `internal/utils`.
-- Публичное API должно скрывать SQL, sqlc, bootstrap и устройство callback-очереди.
-- Бизнес-инварианты должны защищаться не только Go-кодом, но и ограничениями БД:
-  `UNIQUE`, `FOREIGN KEY`, `CHECK`, транзакциями и блокировками.
-- Для горячих методов количество SQL round-trip является частью дизайна, а не
-  задачей последующей оптимизации.
+- Язык: Go в версии, указанной в `go.mod`.
+- Основная БД: PostgreSQL. Новый MySQL-код, MySQL-синтаксис и dual-driver
+  compatibility не добавлять.
+- Драйвер PostgreSQL: `pgx` через существующий `database/sql`/`sqlwrap` слой.
+- Статические SQL-запросы описывать в SQLC. Сгенерированный код вручную не
+  редактировать.
+- JSON кодировать через `github.com/goccy/go-json`, а не `encoding/json`.
+- Денежные значения и количества не хранить и не вычислять через float.
+- Публичные enum и статусы оформлять отдельными типами и typed constants.
+- Для HTTP-интеграций использовать существующие клиенты и utilities проекта;
+  не создавать второй инфраструктурный слой без необходимости.
 
-## 2. Структура сервиса
+## 2. Границы сервисов
 
-Корневой каталог самостоятельного сервиса:
+- Каждый бизнес-сервис владеет своей схемой, repository, моделями и
+  lifecycle.
+- Между таблицами разных сервисов нет внешних ключей и JOIN.
+- Один бизнес-сервис не импортирует repository или SQLC другого.
+- Связь между сервисами неявная: хранится стабильный ключ, а подробными
+  данными владеет исходный сервис.
+- `reference` — единственный владелец метаданных item. Остальные сервисы
+  используют только непрозрачный item/reward key и собственные параметры
+  выдачи.
+- Общими могут быть публичные корневые модели и технические utilities из
+  `internal/utils`.
+- Контроллеры HTTP/WebSocket/Fiber находятся во внешнем приложении. Этот
+  репозиторий предоставляет Go API, но не привязывает сервисы к transport.
+
+## 3. Публичные слои и контракты
+
+- `service/user` содержит только действия конечного пользователя.
+- `service/admin` содержит действия оператора и управление каталогом.
+- `service/internalapi`, `service/integration` и `service/operational`
+  добавляются только для системных сценариев, которые не являются admin API.
+- Адаптеры провайдеров не смешивать с user/admin service-кодом.
+- Control является внутренним административным сервисом и не имеет
+  искусственного `User` слоя.
+- Системные callback/webhook/worker-действия не являются RBAC access и не
+  должны появляться среди административных разрешений.
+- Один публичный метод принимает `ctx` и один предметный `Params` объект.
+  Не смешивать params со множеством дополнительных позиционных аргументов в
+  новых и изменяемых контрактах.
+- Не сохранять deprecated wrappers и обратную совместимость при согласованной
+  унификации API, если это отдельно не требуется.
+- Публичные сигнатуры не содержат `sqlc`, `sql.Null*`, `database/sql` и типы
+  из `internal`.
+- Общие сущности (`Identity`, `Actor`, `Reward`) использовать из корневого
+  пакета, если их смысл совпадает. Не создавать несовместимые копии.
+
+## 4. Identity и workspace
+
+- Go-поле называется `WorkspaceID`, JSON/SQL поле — `workspace_id`.
+- Публичное Go-представление workspace остаётся `string`.
+- Workspace ID — канонический lowercase UUID длиной 36 символов.
+- Пробелы, uppercase UUID, aliases вроде `main` и автоматический `TrimSpace`
+  не допускаются: некорректное значение отклоняется.
+- Каноническая форма обязательна также для cache keys, advisory locks и
+  callback scopes, чтобы один workspace не получал несколько технических
+  представлений.
+- Все публичные user/admin/internal entry points и repository boundaries,
+  доступные отдельно, проверяют workspace через общий validator.
+- SQL-колонка workspace имеет тип `VARCHAR(36)` и участвует во всех
+  business unique keys, FK и lookup, где данные scoped по workspace.
+- `Identity` должна иметь валидный workspace, положительные `AppID` и
+  `PlatformID`, непустой `PlatformUserID`; дополнительные поля target не
+  меняют identity пользователя.
+- Числового ID сущности недостаточно для admin/repository lookup: вместе с
+  ним передаётся workspace scope, кроме явно global catalog в Control или
+  Payment.
+
+## 5. Валидация и ошибки
+
+- Внешний API слой проверяет transport/UI форму запроса. Сервис не дублирует
+  проектно-зависимые правила интерфейса.
+- Service/repository всегда защищают доменные и storage-инварианты:
+  обязательные ключи, enum, длины PostgreSQL-полей, числовые границы,
+  корректность JSON, интервалы времени, взаимозависимые поля, workspace
+  isolation и idempotency.
+- Import выполняет полную preflight-валидацию всех вложенных объектов до
+  открытия write transaction.
+- Ожидаемые ошибки возвращаются как typed domain errors. Raw PostgreSQL error
+  не является публичным ответом для ожидаемого conflict/not-found/limit.
+- Ошибка вложенного объекта содержит индекс и путь поля, пригодный для API.
+- Не нормализовать silently данные, если после нормализации два разных input
+  становятся одним ключом. Правило нормализации должно быть частью контракта.
+
+## 6. Immutable snapshots
+
+- Все данные, обещанные пользователю при выдаче/старте/создании операции,
+  фиксируются в immutable snapshot.
+- Snapshot включает награды, item key и параметры выдачи, цену, asset,
+  quantity, scale, скидку и другие изменяемые поля, влияющие на результат.
+- Admin update/delete исходного каталога не меняет уже созданные assignment,
+  progress, redemption, order, fulfillment, callback и idempotent response.
+- Повторный вызов читает snapshot первой успешной операции, а не актуальный
+  каталог.
+- Snapshot и business write создаются в одной транзакции. Callback payload
+  строится из этого snapshot.
+- JSON snapshot допустим как неизменяемый документ. Поля, используемые для
+  поиска, блокировки и агрегации, остаются реляционными колонками.
+
+## 7. Структура пакета
+
+Базовая структура:
 
 ```text
 <service>/
+  AGENT.md
   <service>.go
   config.go
-  callback.go
+  errors.go
+  callback.go              # если нужен outbox
+  <service>_test.go
+  <service>_bench_test.go
   repository/
   service/
     admin/
-    user/
+    user/                   # если есть user API
+    internalapi/            # только системные операции
   sqlc/
     schema.sql
     query.sql
-    event.sql
-    trigger.sql
-  tests/
+    bootstrap.go
+  sqlc.yaml
 ```
 
-Необязательные файлы (`event.sql`, `trigger.sql`, `callback.go`) добавляются
-только когда сервису действительно нужна соответствующая функциональность.
+- Корневая структура называется предметно: `CPA`, `Tasks`, `Payment`, а не
+  `API`, `Manager` или `Service`.
+- Корневой пакет собирает слои, владеет lifecycle и скрывает bootstrap.
+- `repository` — единственный бизнес-слой, работающий с SQLC, транзакциями,
+  locks, `sql.Null*` и плоскими DB rows.
+- `service` выполняет orchestration и преобразует repository models в
+  публичные модели. Он не знает о колонках и SQLC params.
+- Общие публичные DTO метода размещаются в `models.go`, локальные params/result
+  могут находиться рядом с методом.
+- Один файл содержит один метод или тесно связанную CRUD-группу. Не собирать
+  весь сервис, модели и helpers в одном файле.
+- Helper создаётся при реальном повторном использовании или когда выделяет
+  сложный алгоритм. Тривиальные однострочные wrappers не добавлять.
 
-Корневая структура должна называться предметно:
+## 8. Стиль Go-кода
+
+- Логические этапы функции отделять пустой строкой: подготовка context,
+  validation, repository call, обработка ошибки, построение result.
+- После открывающей `{` функции и перед закрывающей `}` оставлять пустую
+  строку, когда функция содержит несколько логических этапов. Для коротких
+  однострочных функций это не требуется.
+- Не писать плотные literals, mapper calls и длинные сигнатуры.
+- В многострочном struct literal каждое поле находится на отдельной строке.
+- Если вызов функции не помещается как короткое выражение, каждый аргумент
+  находится на отдельной строке. Не раскладывать по несколько аргументов на
+  одну строку.
+- Не использовать positional mapper с большим числом scalar arguments.
+  Передавать row/model или именованный params object.
+- Сложный mapper разбивать на предметные helpers, не скрывая ошибки
+  преобразования.
+- Импорты группировать `stdlib`, внутренние пакеты сервиса, общие пакеты,
+  внешние зависимости; фактическую сортировку оставлять `gofmt`.
+- Комментарии объясняют неочевидный инвариант или причину, а не пересказывают
+  код.
+- Имена должны отражать действие и предмет: `GetApplyBundleForUpdate`,
+  `CreateRedemption`, `ExecuteRefund`.
+- Не оставлять неиспользуемые fallback, compatibility path, SQL query и
+  мёртвые модели после перехода на новый контракт.
+
+Рекомендуемая форма метода:
 
 ```go
-type Payment struct {}
-type CPA struct {}
-type Promo struct {}
-```
+func (u *User) GetCode(ctx context.Context, params GetCodeParams) (GetCodeResult, error) {
 
-Не использовать `Api`, `Manager`, `Service` как имя основной структуры.
+    mergedCtx, cancel := u.withContext(ctx)
+    defer cancel()
 
-Если у сервиса есть административное и пользовательское API:
+    if err := params.Identity.Validate(); err != nil {
+        return GetCodeResult{}, err
+    }
 
-```go
-type Promo struct {
-    Admin *admin.Admin
-    User  *user.User
+    result, err := u.repository.Issue(
+        mergedCtx,
+        scope(params.Identity, params.CPAID),
+    )
+    if err != nil {
+        return GetCodeResult{}, err
+    }
+
+    return GetCodeResult{
+        Assignment:    mapAssignment(result.Assignment),
+        Rewards:       mapRewards(result.Rewards),
+        AlreadyIssued: result.AlreadyIssued,
+    }, nil
+
 }
 ```
 
-## 3. Слои
-
-### `sqlc`
-
-- Содержит SQL schema/query/event/trigger и сгенерированный код.
-- Не содержит бизнес-логики на Go.
-- Не используется напрямую из `service`.
-- Сгенерированные файлы нельзя редактировать вручную.
-- После изменения SQL обязательно запускать `sqlc generate`.
-
-### `repository`
-
-- Единственный слой, который работает с:
-  - `sqlc`;
-  - `database/sql`;
-  - `sql.Null*`;
-  - транзакциями;
-  - DB-locking;
-  - DB-oriented инвариантами.
-- Принимает и возвращает обычные Go-типы и repository domain-модели.
-- Сам выполняет преобразования `sql.Null*`.
-- Собирает плоские строки JOIN-запросов в готовые domain-модели.
-- Не возвращает `sqlc.*Row`, `sqlc.*Params` или `sql.Null*` наружу.
-
-### `service`
-
-- Содержит бизнес-валидацию и orchestration.
-- Не импортирует `database/sql` и пакет `sqlc`.
-- Не знает о колонках, nullable SQL-типах и механике запросов.
-- Преобразует repository-модели в публичные модели API.
-- Не дублирует DB-инварианты сложной логикой, если они уже атомарно защищены
-  repository/БД.
-
-### Корневой пакет
-
-- Собирает `Admin`, `User`, adapters и callback store.
-- Управляет root context и graceful shutdown.
-- `New(DatabaseParams)` только создает и настраивает экземпляр, не открывая БД.
-- `OnCallback` до запуска только регистрирует callback worker.
-- `Run(ctx)` создает БД при отсутствии, открывает пул, выполняет полный
-  идемпотентный bootstrap schema/callback tables/triggers/events, собирает
-  внутренние сервисы, запускает workers и блокируется до отмены `ctx`, вызова
-  `Close` или ошибки worker.
-- Callback workers нельзя запускать до успешного завершения всего bootstrap:
-  сервис не должен работать на частично подготовленной схеме.
-- `Run` самостоятельно выполняет graceful shutdown и закрывает принадлежащие
-  сервису соединения.
-- Для тестов и специального встраивания допускается
-  `NewWithDatabase(ctx, *sql.DB, Options)`, который не владеет переданной БД.
-- Не предоставлять `Open`: запуск и владение ресурсами должны быть скрыты под
-  блокирующим `Run`.
-- Публичный config не должен выставлять `sqlwrap.Options` напрямую.
-- Публичные сигнатуры не должны содержать типы из `internal`.
-
-## 4. Компоновка файлов
-
-Пример `service/product`:
-
-```text
-product.go
-models.go
-create.go
-get.go
-list.go
-delete_price.go
-helpers.go
-```
-
-- `<service>.go`:
-  - основная структура;
-  - `New`;
-  - `Close`;
-  - `withContext`.
-- `models.go`:
-  - общие публичные модели;
-  - типы, используемые несколькими методами.
-- `<method>.go`:
-  - один публичный метод или тесно связанная группа CRUD-методов;
-  - params и result, используемые только этим методом.
-- `helpers.go`:
-  - общие внутренние mapper/helper;
-  - не создавать ради одной тривиальной функции.
-
-Не размещать в одном файле структуру сервиса, все DTO и большое количество
-несвязанных методов.
-
-## 5. Именование
-
-- Сервис: `product.Product`, `admin.Admin`, `user.User`.
-- Публичная модель при конфликте с сервисом:
-  - `product.ProductModel`;
-  - `PromoModel`;
-  - `RewardModel`.
-- Команда должна называться действием:
-  - `Refund.Execute`, а не `Refund.Refund`.
-- Административные методы находятся под `service.Admin`, а не смешиваются с
-  пользовательскими.
-- SQL-запросы получают предметные имена:
-  - `GetApplyBundleForUpdate`;
-  - `AdminListPromos`;
-  - `CreateRedemption`.
-
-## 6. Типы и преобразования
-
-В `service` запрещены:
-
-- `database/sql`;
-- `sql.Null*`;
-- `sqlc.*`;
-- DB-specific enum types.
-
-В публичных моделях использовать:
-
-- обычные scalar-типы;
-- указатели для nullable значений;
-- `time.Time` / `*time.Time`;
-- `json.RawMessage` для произвольного JSON payload;
-- slices и domain-структуры.
-
-Общие pointer helpers брать из `internal/utils`, не создавать локальные
-`stringPtr`, `int64Ptr`, `deref` и их аналоги.
-
-SQL-преобразования должны находиться максимально близко к repository.
-
-## 7. Workspace-изоляция
-
-- Все пользовательские и административные операции scoped по `workspace_id`.
-- Один числовой `id` без `workspace_id` недостаточен для repository-метода.
-- Бизнес-уникальность должна включать workspace:
-
-```sql
-UNIQUE KEY (... workspace_id, ...)
-```
-
-- Дочерние таблицы должны ссылаться на родителя составным FK:
-
-```sql
-FOREIGN KEY (workspace_id, entity_id)
-REFERENCES parent (workspace_id, id)
-```
-
-- Родитель должен иметь подходящий `UNIQUE (workspace_id, id)`.
-- Нельзя полагаться только на `WHERE workspace_id = ?` в Go-коде: БД также
-  должна запрещать cross-workspace связи.
-
-## 8. SQL и производительность
-
-### Query budget
-
-Для пользовательского горячего метода ориентир:
-
-- read/idempotent path: 1 SQL round-trip;
-- successful write path: не более 2 SQL round-trip;
-- превышение допускается только с измеримым обоснованием.
-
-Количество запросов должно быть понятно из repository-кода.
-
-### Чтение агрегатов
-
-- Не делать последовательные запросы `entity -> localization -> rewards ->
-  state`.
-- Использовать один плоский `JOIN`-запрос и собирать строки в Go.
-- Не использовать `JSON_ARRAYAGG`/`JSON_OBJECTAGG` для обычных вложенных
-  коллекций, если можно вернуть набор строк:
-  это добавляет сериализацию в MySQL и десериализацию/аллокации в Go.
-- Не использовать `SELECT *` в горячих JOIN-запросах. Перечислять только
-  необходимые поля.
-- Не допускать N+1.
-
-### Индексы
-
-- Каждый lookup/locking query должен иметь индекс, начинающийся с полей
-  equality-фильтра.
-- Индексы проектируются под реальные `WHERE`, `JOIN`, `ORDER BY`.
-- После изменения горячего запроса проверять `EXPLAIN ANALYZE`.
-- Избыточные индексы не добавлять: каждый индекс удорожает запись.
-
-### Денормализация
-
-Денормализация допустима и желательна, когда она:
-
-- уменьшает round-trip горячего метода;
-- сохраняет исторически выданные данные;
-- устраняет гонку между записью и callback payload.
-
-Пример: snapshot награды в записи выдачи. Изменение текущей награды после
-выдачи не должно менять уже выданную награду или callback.
-
-Snapshot должен храниться в структурированном JSON только если набор данных
-естественно является неизменяемым документом. Основные searchable поля
-остаются отдельными колонками.
-
-## 9. Транзакции и конкурентность
-
-- Операции `check -> write -> outbox` выполняются атомарно.
-- Для lifetime/global limit использовать блокировку общей строки:
-  `SELECT ... FOR UPDATE`.
-- Идемпотентность защищается `UNIQUE`, а не только предварительным `SELECT`.
-- Повторный вызов не должен повторно:
-  - выдавать награду;
-  - увеличивать счетчик;
-  - создавать callback.
-- Нельзя открывать транзакцию в `service`; транзакциями владеет repository.
-- Rollback должен отменять business write, raw event и callback outbox вместе.
-- DB-trigger допустим для коротких атомарных действий, непосредственно
-  являющихся следствием вставки:
-  - счетчик;
-  - raw event;
-  - outbox event.
-- Trigger не должен содержать сетевые вызовы, сложные циклы или скрытую
-  бизнес-оркестрацию.
-- Trigger SQL хранится отдельно и устанавливается bootstrap-ом.
-
-## 10. Callback/outbox
-
-- Callback создается в той же транзакции, что и бизнес-событие.
-- Нельзя сначала commit бизнес-запись, а затем отдельной транзакцией создавать
-  callback.
-- `event_key` обязан быть детерминированным и уникальным.
-- Повторное применение/выдача не создает второй callback.
-- Payload содержит snapshot фактически выданных данных.
-- `OnCallback` скрывает leasing, retry, success/fail/reject и десериализацию.
-- Сервис десериализует payload в предметный `Context`, а не отдает наружу
-  сырые байты очереди.
-- Админ API callback-системы должен позволять:
-  - получить/list события;
-  - повторить сейчас;
-  - отметить `ok`;
-  - отметить `reject`;
-  - сбросить истекший processing lease.
-
-## 11. Bootstrap
-
-- Пользователь сервиса не должен передавать путь к `schema.sql`.
-- SQL-файлы встраиваются через `go:embed` в `sqlc/bootstrap.go`.
-- `repository.Bootstrap(ctx)` устанавливает:
-  1. schema;
-  2. общую callback schema;
-  3. triggers;
-  4. DB events.
-- Bootstrap должен быть идемпотентным.
-- Payment не менять автоматически при приведении новых сервисов к этому
-  правилу: отдельный существующий сервис меняется только отдельной задачей.
-
-## 12. Контексты и shutdown
-
-- `New` принимает root lifecycle context.
-- Каждый публичный метод принимает request context.
-- Метод выполняется на merged context:
-  - отмена root context останавливает все операции сервиса;
-  - отмена request context останавливает конкретный запрос.
-- При `nil` context использовать нормализованный `context.Background()`.
-- `Close`:
-  1. отменяет root context;
-  2. ждет background workers;
-  3. закрывает сервисы/callback store;
-  4. закрывает DB client только если сервис владеет им.
-
-## 13. Admin и User API
-
-- `User` содержит только минимальные пользовательские сценарии.
-- `Admin` содержит полный CRUD и операционные методы.
-- Soft-deleted сущности нельзя физически удалять, если нужна история.
-- Admin CRUD обязан охватывать:
-  - create/update/get/list/delete или soft delete;
-  - localization CRUD;
-  - reward CRUD;
-  - raw records;
-  - aggregated statistics;
-  - lookup статуса конкретного пользователя;
-  - callback administration, если сервис создает callbacks.
-
-## 14. Статистика
-
-- Raw события сохраняются отдельно и не изменяются.
-- Суммарная ежедневная статистика хранится в отдельной таблице.
-- Для ежедневной агрегации использовать MySQL Event, когда не требуется Go
-  orchestration.
-- Стандартное расписание:
-
-```sql
-EVERY '1' DAY
-STARTS '2025-11-08 00:05:00'
-```
-
-- Должен существовать admin-метод ручного пересчета диапазона.
-- `unique_users` считает business identity, а не количество строк событий.
-
-## 15. Тесты
-
-Минимальный интеграционный набор нового сервиса:
-
-- полный successful lifecycle;
-- idempotent repeat;
-- все публичные status/error outcomes;
-- workspace isolation;
-- case normalization, если применимо;
-- soft delete;
-- global/lifetime limit;
-- конкурентный тест лимита;
-- callback создается ровно один раз;
-- callback payload полностью десериализуется;
-- snapshot не меняется после редактирования исходных данных;
-- admin CRUD;
-- raw и daily statistics;
-- graceful context cancellation.
-
-Тесты должны работать с реальной MySQL-схемой сервиса, когда проверяются SQL,
-транзакции, locks, triggers или events.
-
-## 16. Бенчмарки
-
-- Для публичных горячих методов обязательны service benchmarks.
-- Всегда включать `-benchmem`.
-- Отдельно измерять:
-  - successful path;
-  - idempotent/read path;
-  - ключевые admin reads.
-- Пользователи/ключи successful benchmark должны быть уникальны между
-  калибровочными запусками `testing.B`.
-- После SQL-оптимизации фиксировать до/после:
-  - `ns/op`;
-  - `B/op`;
-  - `allocs/op`;
-  - количество SQL round-trip.
-- Оптимизация не считается завершенной без повторного конкурентного теста.
-
-## 17. Порядок создания нового сервиса
-
-1. Зафиксировать domain-инварианты, identity и workspace scope.
-2. Спроектировать таблицы, уникальности, FK и индексы.
-3. Спроектировать горячие методы и их query budget.
-4. Добавить `schema.sql`, `query.sql`, при необходимости `trigger.sql` и
-   `event.sql`.
-5. Запустить `sqlc generate`.
-6. Создать repository и спрятать все DB-типы.
-7. Создать `service/admin` и `service/user`.
-8. Создать корневой wiring, config и callback wrapper.
-9. Встроить SQL и реализовать скрытый bootstrap.
-10. Добавить интеграционные тесты, concurrency tests и benchmarks.
-11. Запустить:
+## 9. SQLC и repository
+
+- Все статические SQL statements находятся в SQLC query files.
+- Исключения: bootstrap runner, advisory lock и динамический bulk import SQL,
+  если SQLC не может выразить переменное число `VALUES`. Исключение должно
+  быть локальным repository helper, использовать только placeholders и
+  статические имена таблиц/колонок.
+- Не собирать значения пользователя конкатенацией SQL-строк.
+- PostgreSQL placeholders — `$1`, `$2`, ...; параметры генерирует helper.
+- SQLC params в repository вызовах оформлять по одному полю на строку.
+- Repository не возвращает наружу generated rows/params и DB-specific enum.
+- Не допускать N+1. Для вложенных агрегатов использовать плоские relational
+  rows и сборку в Go либо несколько заранее ограниченных bulk reads.
+- JSON aggregation не использовать как замену реляционному запросу.
+- Для горячего read/idempotent path ориентир — 1 SQL round-trip, для write
+  path — минимальное измеренное число round-trip без ослабления consistency.
+- Индексы проектировать по реальным `WHERE`, `JOIN`, `ORDER BY`; горячие
+  изменения проверять через `EXPLAIN (ANALYZE, BUFFERS)`.
+- Multi-query read, который формирует один документ/export, выполняется в
+  `REPEATABLE READ READ ONLY` transaction.
+
+## 10. Транзакции и конкурентность
+
+- Транзакцией владеет repository, не service.
+- `check -> state write -> snapshot -> stats/raw event -> callback outbox`
+  выполняется атомарно.
+- Идемпотентность защищается `UNIQUE`/`ON CONFLICT`, а не только pre-count.
+- Повтор операции не выдаёт награду, не увеличивает статистику и не создаёт
+  callback второй раз.
+- Лимиты защищаются подходящей row/advisory lock и повторной проверкой внутри
+  transaction.
+- Catalog admin writes и import используют один workspace advisory-lock
+  contract, если import conflict semantics зависит от их взаимного порядка.
+- Внешний HTTP/Lua/provider вызов не выполнять внутри DB transaction или
+  удерживаемой DB lock. Сетевой timeout не должен становиться timeout БД.
+- Триггеры допустимы только для коротких локальных атомарных последствий.
+  Скрытую orchestration и сетевые вызовы в trigger не помещать.
+
+## 11. Callback/outbox
+
+- Callback создаётся в той же транзакции, что business event.
+- `event_key` детерминирован и уникален.
+- Payload содержит фактически выданный snapshot.
+- Worker скрывает lease, retry и ack/reject, поддерживает graceful shutdown.
+- Admin API callback store scoped по workspace.
+- После claim отмена провайдером не переписывает историю молча: создаётся
+  отдельное компенсационное/revoke событие согласно домену.
+
+## 12. Кэш
+
+- Использовать общий cache contract `sqlwrap`, не писать отдельный cache
+  engine в сервисе.
+- Кэшированные методы имеют version scope как минимум по service, method и
+  workspace. Версия метода меняется независимо от остальных методов.
+- Mutation после успешного commit bump-ает версию затронутого scope. Старые
+  ключи становятся недостижимыми; сканирование и удаление concrete keys не
+  используется.
+- Ошибка cache invalidation после успешного DB commit не превращает успешную
+  mutation в ложную API-ошибку. Ошибка уходит в диагностический callback.
+- L1 может кратко кэшировать version, чтобы не удваивать Redis traffic.
+- При нескольких нодах custom distributed cache должен использовать
+  совместимый distributed mutex/singleflight. In-memory mutex допустим только
+  для одной ноды.
+- Cache miss stampede защищать mutex; lock не должен охватывать внешний HTTP.
+- Multi-node поведение проверять двумя независимыми L1 и общим L2.
+
+## 13. Import/export
+
+- Import/export реализуется самим доменным сервисом.
+- Формат имеет одно versioned имя вида `<service>.export.v1`; отдельное
+  дублирующее поле `version` не добавлять.
+- Не экспортировать source server/workspace: пакет предназначен для другой
+  workspace.
+- JSON повторяет доменную иерархию: дочерние localization/rewards/conditions
+  вложены в владельца, а не вынесены в несвязанные верхнеуровневые массивы.
+- Сервисы, кроме `reference`, не экспортируют item catalog и dependencies.
+  Они доверяют непрозрачному ключу награды/item.
+- Secrets не попадают в export по умолчанию. Явный `include_secrets` является
+  осознанной операцией; import может принять отдельную map секретов.
+- Import сначала полностью валидирует и компилирует package, затем в одной
+  transaction пишет таблицы в FK-порядке bulk batches.
+- Для bulk использовать `internal/utils/importexport`: до 1000 строк и до
+  60 000 PostgreSQL parameters на statement.
+- Поддерживать и тестировать `fail_on_conflict`, `skip_existing` и
+  `update_existing`. Update заменяет вложенный snapshot, не оставляя старые
+  дочерние rows.
+- Cache version bump выполняется один раз после commit, а не после каждой
+  строки.
+
+## 14. Target, localization и rewards
+
+- Target регулирует только отображение материала, не право на уже созданную
+  историческую операцию.
+- Поддерживаемые общие признаки: premium, sex, country, locale, platform name
+  и numeric platform/application IDs. Фильтрация каталога выполняется в Go,
+  чтобы не размножать cache variants тяжёлым SQL.
+- Private/integration payload никогда не возвращается фронту. Public payload
+  является договорённостью backend/frontend и хранит только отображаемые
+  данные.
+- Группы и пользовательские сущности возвращают локализацию выбранного locale.
+- Reward содержит `Key`, typed `Type`, integer `Quantity`, `Scale`, `Unit`.
+  Например `Quantity=25, Scale=2` означает `0.25`.
+
+## 15. Lifecycle и фоновые задачи
+
+- `New(DatabaseParams)` только сохраняет конфигурацию.
+- `Run(ctx)` открывает PostgreSQL, выполняет идемпотентный bootstrap, собирает
+  сервис, запускает workers и блокируется до shutdown/error.
+- `NewWithDatabase` используется тестами/embedding и не закрывает чужую БД.
+- `Close` отменяет root context, останавливает workers, ждёт их завершения и
+  закрывает только принадлежащие сервису ресурсы.
+- Каждый public method объединяет request context с root context.
+- Фоновые операции запускать только через общий goroutine manager с panic
+  recovery; naked `go func()` в сервисах не использовать.
+- Pollers/subscribers синхронизируют конфигурацию из БД: появившиеся запускают,
+  удалённые/disabled останавливают, неизменившиеся не пересоздают по одному TTL.
+
+## 16. Тесты
+
+- В корне каждого сервиса ровно два test-файла:
+  `<service>_test.go` и `<service>_bench_test.go`. Папку `tests/` не создавать.
+- Каждый публичный метод покрывается валидным и невалидным сценарием.
+- Обязательны integration tests на реальной PostgreSQL schema для SQL,
+  transaction, locks, triggers, cache и import/export.
+- Негативные tests проверяют typed error и отсутствие частичной записи.
+- Для mutation проверять idempotency, workspace isolation, concurrency,
+  immutable snapshot и callback exactly-once.
+- Для cache проверять hit/miss, version bump и две ноды.
+- Для import/export проверять round trip, все conflict strategies, invalid
+  preflight, согласованный snapshot, конкурентный admin write и пакет больше
+  parameter limit.
+- Live provider/blockchain tests, требующие токенов или внешней сети, не входят
+  в обычный `go test ./...` и не могут задерживать CI по timeout.
+- Не ослаблять старые тесты ради нового поведения; при намеренной смене
+  контракта обновлять и реализацию, и явное ожидание.
+
+## 17. Бенчмарки
+
+- Измерять отдельные публичные методы и отдельные ветки, а не полный lifecycle,
+  который в production может длиться часы или дни.
+- Разделять successful, idempotent/already-exists, cache hit/miss и admin read.
+- Всегда использовать `-benchmem`.
+- Stateful benchmark генерирует уникальную identity/operation key на итерацию.
+- Внешний HTTP не включать в DB benchmark; provider benchmark выделять
+  отдельно.
+- После оптимизации фиксировать до/после: `ns/op`, `B/op`, `allocs/op` и число
+  SQL round-trip.
+- Низкая скорость не является основанием убирать lock/snapshot/idempotency;
+  сначала измерять запросы, планы, transport и allocations.
+
+## 18. Access, документация и совместимость
+
+- На каждое самостоятельное admin-действие существует отдельный static access
+  key. Методы с batch/single вариантами одного действия могут делить ключ.
+- Access catalog не редактируется через CRUD. Control возвращает его с RU/EN
+  localization, service/group/access positions и сортирует по position, не
+  выдавая position наружу.
+- При изменении публичного метода обновлять соответствующий `METHODS.md`.
+- При изменении пользовательских полей Tasks/Payment обновлять README/DESIGN и
+  import/export example.
+- TODO содержит только подтверждённые проблемы с конкретным местом и ожидаемым
+  исправлением. Завершённый пункт помечается после теста, а не после намерения.
+
+## 19. Проверка перед завершением
+
+Для любого изменения выполнить применимую часть, а перед крупным завершением —
+весь набор:
 
 ```bash
-sqlc generate
-gofmt -w <service>
-go vet ./<service>/...
-go test -count=1 ./<service>/...
-go test -run '^$' -bench . -benchmem ./<service>/tests
+gofmt -w <изменённые-go-файлы>
+test -z "$(gofmt -l .)"
+find . -name sqlc.yaml -execdir sqlc generate \;
+go test ./...
+go vet ./...
+git diff --check
 ```
 
-12. Для горячих запросов проверить `EXPLAIN ANALYZE`.
-
-## 18. Правила рефакторинга
-
-1. Не менять публичное поведение без отдельного требования.
-2. Сначала отделить компоновку файлов от логики.
-3. Затем убрать DB-типы из service.
-4. Затем оптимизировать SQL и количество round-trip.
-5. Не смешивать архитектурный рефакторинг с несвязанными изменениями.
-6. Не редактировать generated sqlc вручную.
-7. После каждого этапа запускать целевые тесты.
-8. В конце запускать `go vet`, полный набор тестов сервиса и benchmarks.
+После `sqlc generate` проверить, что generated diff ожидаем и в нём нет
+ручных либо посторонних изменений. Для горячего SQL дополнительно выполнить
+`EXPLAIN (ANALYZE, BUFFERS)` и соответствующий benchmark.

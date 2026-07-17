@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	callbacksqlc "github.com/elum-utils/services/internal/utils/callback/sqlc"
 )
 
@@ -137,9 +138,9 @@ func (s *Store) CreateEvent(ctx context.Context, params CreateParams) (uint64, e
 	if err := s.validate(); err != nil {
 		return 0, err
 	}
-	workspaceID := strings.TrimSpace(params.WorkspaceID)
-	if workspaceID == "" {
-		return 0, errors.New("callback: workspace id is required")
+	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
+	if err != nil {
+		return 0, err
 	}
 	sourceService := params.SourceService
 	if sourceService == "" {
@@ -179,7 +180,7 @@ ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, s.table()),
 		return uint64(id), err
 	}
 	var id int64
-	err := s.executor.QueryRowContext(ctx, fmt.Sprintf(`
+	err = s.executor.QueryRowContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (
     workspace_id, source_service, event_type, event_key, idempotency_key,
     payload, payload_content_type, next_attempt_at
@@ -197,9 +198,9 @@ func (s *Store) GetEvent(ctx context.Context, workspaceID string, id uint64) (Ev
 	if err := s.validate(); err != nil {
 		return Event{}, err
 	}
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return Event{}, errors.New("callback: workspace id is required")
+	workspaceID, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return Event{}, err
 	}
 	query := fmt.Sprintf(`
 SELECT %s FROM %s WHERE workspace_id = ? AND id = ? LIMIT 1`, eventColumns, s.table())
@@ -218,9 +219,9 @@ func (s *Store) AdminListEvents(ctx context.Context, params AdminListEventsParam
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
-	workspaceID := strings.TrimSpace(params.WorkspaceID)
-	if workspaceID == "" {
-		return nil, errors.New("callback: workspace id is required")
+	workspaceID, err := requireWorkspaceID(params.WorkspaceID)
+	if err != nil {
+		return nil, err
 	}
 	limit, offset := normalizePage(params.Limit, params.Offset)
 	query := fmt.Sprintf(`
@@ -456,9 +457,8 @@ func normalizePage(limit int32, offset int32) (int32, int32) {
 }
 
 func requireWorkspaceID(value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", errors.New("callback: workspace id is required")
+	if err := services.ValidateWorkspaceID(value); err != nil {
+		return "", err
 	}
 	return value, nil
 }

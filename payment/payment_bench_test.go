@@ -171,6 +171,7 @@ func BenchmarkPaymentServiceMethods(b *testing.B) {
 			order := orders[i]
 			paymentID := benchRunValue("bench_method_attempt", seq)
 			_, err := env.api.User.CreateAttempt(env.ctx, checkout.CreateAttemptParams{
+				Identity:          paymentAttemptIdentity(order),
 				OrderID:           order.ID,
 				ProviderCode:      "yookassa",
 				ProviderPaymentID: &paymentID,
@@ -185,6 +186,7 @@ func BenchmarkPaymentServiceMethods(b *testing.B) {
 			eventID := benchRunValue("bench_method_event", seq)
 			paymentID := benchRunValue("bench_method_event_pay", seq)
 			_, err := env.api.Operational.CreateEvent(env.ctx, checkout.CreateEventParams{
+				WorkspaceID:       benchWorkspaceID,
 				ProviderCode:      "yookassa",
 				AttemptID:         utils.Ref(int64(fulfilledAttemptID)),
 				OrderID:           utils.Ref(int64(env.orders[0])),
@@ -202,6 +204,7 @@ func BenchmarkPaymentServiceMethods(b *testing.B) {
 	b.Run("Checkout.CompleteAttempt/idempotent", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_, err := env.api.Operational.CompleteAttempt(env.ctx, checkout.CompleteAttemptParams{
+				WorkspaceID:       benchWorkspaceID,
 				AttemptID:         fulfilledAttemptID,
 				ProviderCode:      "yookassa",
 				ProviderPaymentID: &providerPaymentID,
@@ -257,17 +260,24 @@ func BenchmarkPaymentServiceMethods(b *testing.B) {
 		b.StopTimer()
 		for i := 0; i < b.N; i++ {
 			subscriptionIDs[i] = int((paymentBenchRunNumber % 1_000_000_000) + benchNextSeq())
-			_, err := env.q.UpsertPaymentSubscription(env.ctx, benchmarkUpsertSubscriptionParams(
-				productB.id,
-				env.orders[i%len(env.orders)],
-				env.attempts[i%len(env.attempts)],
+			attempt, err := env.q.AdminGetPaymentAttempt(
+				env.ctx,
+				int64(env.attempts[i%len(env.attempts)]),
+			)
+			benchNoError(b, err)
+			order, err := env.q.GetPaymentOrder(env.ctx, attempt.OrderID)
+			benchNoError(b, err)
+			_, err = env.q.UpsertPaymentSubscription(env.ctx, benchmarkUpsertSubscriptionParams(
+				order.ProductID,
+				uint64(order.ID),
+				uint64(attempt.ID),
 				strconv.Itoa(subscriptionIDs[i]),
 			))
 			benchNoError(b, err)
 		}
 		b.StartTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := env.api.Adapters.VKMA.Canceled(env.ctx, vkmashop.Params{
+			_, err := env.api.Adapters.VKMA.Canceled(env.ctx, benchWorkspaceID, vkmashop.Params{
 				NotificationType: vkmashop.SubscriptionStatusChange,
 				Status:           vkmashop.Canceled,
 				AppID:            7001,
@@ -596,10 +606,10 @@ func BenchmarkPaymentSQLCQueries(b *testing.B) {
 		}
 	})
 
-	b.Run("IncrementPurchaseKeyUsage", func(b *testing.B) {
+	b.Run("ReservePurchaseKeyUsage", func(b *testing.B) {
 		keyID := int64(1)
 		for i := 0; i < b.N; i++ {
-			_, err := q.IncrementPurchaseKeyUsage(env.ctx, keyID)
+			_, err := q.ReservePurchaseKeyUsage(env.ctx, keyID)
 			benchNoError(b, err)
 		}
 	})
@@ -730,7 +740,7 @@ func BenchmarkPaymentSQLCQueries(b *testing.B) {
 
 	b.Run("UpdatePaymentSubscriptionStatus", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, err := q.UpdatePaymentSubscriptionStatus(env.ctx, paymentsqlc.UpdatePaymentSubscriptionStatusParams{
+			_, err := q.UpdatePaymentSubscriptionStatusByProvider(env.ctx, paymentsqlc.UpdatePaymentSubscriptionStatusByProviderParams{
 				ProviderCode:           "vkma",
 				ProviderSubscriptionID: "bench_sub_1",
 				Status:                 paymentsqlc.PaymentSubscriptionStatusActive,
@@ -1449,23 +1459,23 @@ func bulkInsertBenchmarkOrderItems(ctx context.Context, db *sql.DB, products []b
 }
 
 func bulkInsertBenchmarkAttempts(ctx context.Context, db *sql.DB, count int, batchSize int) error {
-	columns := `(order_id, provider_code, asset_code, amount_minor, status, provider_payment_id, provider_invoice_id, provider_charge_id, provider_subscription_id, idempotency_key, confirmation_url, return_url, expires_at)`
+	columns := `(order_id, workspace_id, provider_code, asset_code, amount_minor, status, provider_payment_id, provider_invoice_id, provider_charge_id, provider_subscription_id, idempotency_key, confirmation_url, return_url, expires_at)`
 	return bulkInsert(ctx, db, "payment_attempt", columns, count, batchSize, func(i int) string {
 		asset := benchAssets[(i-1)%len(benchAssets)]
 		provider := providerForAsset(asset)
 		return fmt.Sprintf(
-			"(%d,'%s','%s',1000,'succeeded','bench_pay_%d',NULL,NULL,NULL,'bench_idem_%d',NULL,NULL,NULL)",
-			i, provider, asset, i, i,
+			"(%d,'%s','%s','%s',1000,'succeeded','bench_pay_%d',NULL,NULL,NULL,'bench_idem_%d',NULL,NULL,NULL)",
+			i, benchWorkspaceID, provider, asset, i, i,
 		)
 	})
 }
 
 func bulkInsertBenchmarkEvents(ctx context.Context, db *sql.DB, count int, batchSize int) error {
-	columns := `(provider_code, attempt_id, order_id, provider_event_id, provider_payment_id, event_type, event_status, payload_hash, signature_valid, processing_status, processed_at)`
+	columns := `(workspace_id, provider_code, attempt_id, order_id, provider_event_id, provider_payment_id, event_type, event_status, payload_hash, signature_valid, processing_status, processed_at)`
 	return bulkInsert(ctx, db, "payment_event", columns, count, batchSize, func(i int) string {
 		return fmt.Sprintf(
-			"('yookassa',%d,%d,'bench_event_%d','bench_pay_%d','succeeded','succeeded','%064x',true,'processed',now())",
-			i, i, i, i, i,
+			"('%s','yookassa',%d,%d,'bench_event_%d','bench_pay_%d','succeeded','succeeded','%064x',true,'processed',now())",
+			benchWorkspaceID, i, i, i, i, i,
 		)
 	})
 }
@@ -1502,8 +1512,9 @@ VALUES (1000000001, 'bench-vkma-public-1', $1, 7001, 1, '9000', $2, 1, $3, 'VOTE
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `
-INSERT INTO payment_attempt (id, order_id, provider_code, asset_code, amount_minor, status, provider_payment_id, idempotency_key)
-VALUES (1000000001, 1000000001, 'vkma', 'VOTE', 1000, 'succeeded', '1', 'vkma:1')`); err != nil {
+INSERT INTO payment_attempt (id, order_id, workspace_id, provider_code, asset_code, amount_minor, status, provider_payment_id, idempotency_key)
+VALUES (1000000001, 1000000001, $1, 'vkma', 'VOTE', 1000, 'succeeded', '1', 'vkma:1')`,
+		benchWorkspaceID); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -1633,6 +1644,7 @@ func benchmarkCreateAttemptParams(orderID uint64, providerPaymentID string) paym
 
 func benchmarkCreateEventParams(orderID uint64, attemptID uint64, eventID string) paymentsqlc.CreatePaymentEventParams {
 	return paymentsqlc.CreatePaymentEventParams{
+		WorkspaceID:       benchWorkspaceID,
 		ProviderCode:      "yookassa",
 		AttemptID:         sql.NullInt64{Int64: int64(attemptID), Valid: true},
 		OrderID:           sql.NullInt64{Int64: int64(orderID), Valid: true},
@@ -2463,10 +2475,17 @@ func BenchmarkPaymentLatencyPercentiles(b *testing.B) {
 		b.StopTimer()
 		for i := range subscriptionIDs {
 			subscriptionIDs[i] = int((paymentBenchRunNumber % 1_000_000_000) + benchNextSeq())
-			_, err := q.UpsertPaymentSubscription(env.ctx, benchmarkUpsertSubscriptionParams(
-				productB.id,
-				env.orders[i%len(env.orders)],
-				env.attempts[i%len(env.attempts)],
+			attempt, err := q.AdminGetPaymentAttempt(
+				env.ctx,
+				int64(env.attempts[i%len(env.attempts)]),
+			)
+			benchNoError(b, err)
+			order, err := q.GetPaymentOrder(env.ctx, attempt.OrderID)
+			benchNoError(b, err)
+			_, err = q.UpsertPaymentSubscription(env.ctx, benchmarkUpsertSubscriptionParams(
+				order.ProductID,
+				uint64(order.ID),
+				uint64(attempt.ID),
 				strconv.Itoa(subscriptionIDs[i]),
 			))
 			benchNoError(b, err)
@@ -2474,7 +2493,7 @@ func BenchmarkPaymentLatencyPercentiles(b *testing.B) {
 		b.StartTimer()
 
 		measurePaymentLatency(b, func(i int) error {
-			_, err := env.api.Adapters.VKMA.Canceled(env.ctx, vkmashop.Params{
+			_, err := env.api.Adapters.VKMA.Canceled(env.ctx, testWorkspaceID, vkmashop.Params{
 				NotificationType: vkmashop.SubscriptionStatusChange,
 				Status:           vkmashop.Canceled,
 				AppID:            7001,
@@ -2628,9 +2647,9 @@ func BenchmarkPaymentLatencyPercentiles(b *testing.B) {
 		})
 	})
 
-	b.Run("sqlc/IncrementPurchaseKeyUsage", func(b *testing.B) {
+	b.Run("sqlc/ReservePurchaseKeyUsage", func(b *testing.B) {
 		measurePaymentLatency(b, func(i int) error {
-			_, err := q.IncrementPurchaseKeyUsage(env.ctx, int64(1))
+			_, err := q.ReservePurchaseKeyUsage(env.ctx, int64(1))
 			return err
 		})
 	})
@@ -3208,6 +3227,7 @@ func benchmarkVKMAPaymentProcedure(b *testing.B, env paymentBenchmarkEnv, produc
 
 		start = time.Now()
 		attempt, err := env.api.User.CreateAttempt(env.ctx, checkout.CreateAttemptParams{
+			Identity:          paymentAttemptIdentity(order),
 			OrderID:           order.ID,
 			ProviderCode:      paymentvkma.ProviderCode,
 			ProviderPaymentID: &providerPaymentID,
@@ -3237,6 +3257,7 @@ func benchmarkVKMAPaymentProcedure(b *testing.B, env paymentBenchmarkEnv, produc
 
 		start = time.Now()
 		_, err = env.api.Operational.CompleteAttempt(env.ctx, checkout.CompleteAttemptParams{
+			WorkspaceID:       testWorkspaceID,
 			AttemptID:         attempt.ID,
 			ProviderCode:      paymentvkma.ProviderCode,
 			ProviderPaymentID: &providerPaymentID,

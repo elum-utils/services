@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	importexport "github.com/elum-utils/services/internal/utils/importexport"
 	"github.com/google/uuid"
 )
@@ -64,6 +65,10 @@ func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportR
 }
 
 func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
 	_, err := r.executor.ExecContext(
 		ctx,
 		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -111,6 +116,16 @@ func (r *Repository) importBulk(
 	); err != nil {
 		return err
 	}
+	if err := r.replaceImportedCalendarChildren(
+		ctx,
+		workspaceID,
+		pkg.Calendars,
+		calendarIDs,
+		strategy,
+		preview,
+	); err != nil {
+		return err
+	}
 	if err := r.importLocalizationsBulk(
 		ctx,
 		workspaceID,
@@ -147,6 +162,45 @@ func (r *Repository) importBulk(
 		preview,
 		result,
 	)
+}
+
+func (r *Repository) replaceImportedCalendarChildren(
+	ctx context.Context,
+	workspaceID string,
+	calendars []ExportCalendar,
+	calendarIDs map[string]string,
+	strategy string,
+	preview ImportPreview,
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	ids := make([]string, 0, len(calendars))
+	for _, calendar := range calendars {
+		if previewHasConflict(preview, "calendar", calendar.Type) {
+			ids = append(ids, calendarIDs[calendar.Type])
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	for _, table := range []string{
+		"calendar_reward",
+		"calendar_step",
+		"calendar_localization",
+	} {
+		if _, err := r.executor.ExecContext(
+			ctx,
+			"DELETE FROM "+table+" WHERE workspace_id = $1 AND calendar_id = ANY($2::text[])",
+			workspaceID,
+			ids,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repository) importCalendarsBulk(
@@ -399,8 +453,8 @@ func compileImportBulkUpsert(
 }
 
 func validateExportPackage(workspaceID string, pkg ExportPackage) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return fmt.Errorf("calendar import workspace is required")
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
 	}
 	if pkg.Format != ExportFormat {
 		return fmt.Errorf("unsupported export format: %s", pkg.Format)

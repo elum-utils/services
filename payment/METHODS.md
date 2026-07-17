@@ -88,7 +88,7 @@
 | `Admin.UpdateFulfillmentStatus(ctx, id, status, message)` | `id`, `status`, `message`. | Обновляет статус fulfillment. |
 | `Admin.ListFulfillmentItems(ctx, params)` | `FulfillmentItemListParams{WorkspaceID, FulfillmentID, Page}`. | Возвращает fulfillment items. |
 | `Admin.CreateRefund(ctx, params)` | `RefundCreateParams{OrderID, AttemptID, ProviderCode, ProviderRefundID, AmountMinor, AssetCode, Status, Reason}`. | Создает запись refund. |
-| `Admin.ExecuteRefund(ctx, params)` | `ExecuteRefundParams`. | Выполняет refund через платежный слой и возвращает результат. |
+| `Admin.ExecuteRefund(ctx, params)` | `ExecuteRefundParams{WorkspaceID, OrderID, AttemptID, IdempotencyKey, AmountMinor, Reason, ProviderParams}`. | Выполняет refund через платежный слой. `IdempotencyKey` обязателен: повтор возвращает тот же refund и использует тот же provider idempotency key. Неоднозначная сетевая ошибка оставляет refund в `pending` для безопасного продолжения. |
 | `Admin.ListRefunds(ctx, params)` | `RefundListParams{WorkspaceID, OrderID, ProviderCode, Status, Page}`. | Возвращает refunds. |
 | `Admin.GetRefund(ctx, id)` | `id`. | Возвращает refund. |
 | `Admin.UpdateRefundStatus(ctx, id, status, reason)` | `id`, `status`, `reason`. | Обновляет статус refund. |

@@ -8,6 +8,10 @@ import (
 )
 
 func (r *Repository) Export(ctx context.Context, workspaceID string, req ExportRequest) (ExportPackage, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return ExportPackage{}, err
+	}
+
 	now := req.Now
 	if now.IsZero() {
 		now = time.Now().UTC()

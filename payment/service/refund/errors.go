@@ -12,4 +12,9 @@ var (
 	ErrAttemptRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment refund attempt is required")
 	// ErrAmountInvalid means the requested refund amount is zero or otherwise invalid.
 	ErrAmountInvalid = serviceerrors.New(serviceerrors.CodeInvalidFields, "payment refund amount is invalid")
+	// ErrIdempotencyKeyRequired means an external refund cannot be retried safely.
+	ErrIdempotencyKeyRequired = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"payment refund idempotency key is required",
+	)
 )

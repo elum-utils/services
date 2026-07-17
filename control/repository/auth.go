@@ -42,7 +42,7 @@ func (r *Repository) AuthenticateIdentity(ctx context.Context, value IdentityInp
 			if _, err := tx.ExecContext(
 				ctx,
 				"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-				"control:identity:"+value.Provider+"\x00"+value.Subject,
+				"control:identity:"+tokenHash(value.Provider+"\x00"+value.Subject),
 			); err != nil {
 				return err
 			}
@@ -124,7 +124,6 @@ func (r *Repository) ListIdentities(ctx context.Context, accountID string) ([]Id
 				AccountID:       row.AccountID,
 				Provider:        row.Provider,
 				ProviderSubject: row.ProviderSubject,
-				Payload:         nullRawMessage(row.Payload),
 				CreatedAt:       row.CreatedAt,
 				UpdatedAt:       row.UpdatedAt,
 			},
@@ -215,13 +214,24 @@ func (r *Repository) CreateTwoFactorChallenge(
 	if err := required(accountID); err != nil {
 		return "", err
 	}
+
+	if value.ExpiresAt.IsZero() {
+		value.ExpiresAt = time.Now().Add(30 * 24 * time.Hour)
+	}
+
 	rawToken, err := randomToken()
 	if err != nil {
 		return "", err
 	}
 	if err := r.q.CreateTwoFactorChallenge(ctx, controlsqlc.CreateTwoFactorChallengeParams{
-		ID: uuid.NewString(), AccountID: accountID, TokenHash: tokenHash(rawToken), Ip: value.IP, UserAgent: value.UserAgent,
-		BindToIp: value.BindToIP, ExpiresAt: time.Now().Add(10 * time.Minute),
+		ID:               uuid.NewString(),
+		AccountID:        accountID,
+		TokenHash:        tokenHash(rawToken),
+		Ip:               value.IP,
+		UserAgent:        value.UserAgent,
+		BindToIp:         value.BindToIP,
+		ExpiresAt:        time.Now().Add(10 * time.Minute),
+		SessionExpiresAt: value.ExpiresAt,
 	}); err != nil {
 		return "", err
 	}

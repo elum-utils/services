@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -42,6 +43,10 @@ func parseRubAmount(value string) (uint64, error) {
 	minor, err := strconv.ParseUint(fraction, 10, 64)
 	if err != nil {
 		return 0, err
+	}
+	maxAmountMinor := uint64(math.MaxInt64)
+	if major > (maxAmountMinor-minor)/100 {
+		return 0, fmt.Errorf("yookassa: RUB amount is out of range: %s", value)
 	}
 	return major*100 + minor, nil
 }

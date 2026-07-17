@@ -8,11 +8,16 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+func requireWorkspaceID(workspaceID string) error {
+	return services.ValidateWorkspaceID(workspaceID)
+}
 
 type Repository struct {
 	db                       *sqlwrap.Client

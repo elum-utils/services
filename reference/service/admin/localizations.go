@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/reference/repository"
 )
 
@@ -12,7 +13,10 @@ func (a *Admin) UpsertLocalization(ctx context.Context, params SaveLocalizationP
 	defer cancel()
 	params.ItemKey = normalizeKey(params.ItemKey)
 	params.Locale = strings.ToLower(strings.TrimSpace(params.Locale))
-	if strings.TrimSpace(params.WorkspaceID) == "" || !itemKeyPattern.MatchString(params.ItemKey) ||
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+	if !itemKeyPattern.MatchString(params.ItemKey) ||
 		params.Locale == "" || strings.TrimSpace(params.Title) == "" {
 		return ErrLocalizationRequired
 	}
@@ -26,7 +30,7 @@ func (a *Admin) GetLocalization(ctx context.Context, workspaceID, key, locale st
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	value, err := a.repository.GetLocalization(
-		mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key),
+		mergedCtx, workspaceID, normalizeKey(key),
 		strings.ToLower(strings.TrimSpace(locale)),
 	)
 	if err != nil {
@@ -38,7 +42,7 @@ func (a *Admin) GetLocalization(ctx context.Context, workspaceID, key, locale st
 func (a *Admin) ListLocalizations(ctx context.Context, workspaceID, key string) ([]LocalizationModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	values, err := a.repository.ListLocalizations(mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key))
+	values, err := a.repository.ListLocalizations(mergedCtx, workspaceID, normalizeKey(key))
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +57,7 @@ func (a *Admin) DeleteLocalization(ctx context.Context, workspaceID, key, locale
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	return a.repository.DeleteLocalization(
-		mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key),
+		mergedCtx, workspaceID, normalizeKey(key),
 		strings.ToLower(strings.TrimSpace(locale)),
 	)
 }

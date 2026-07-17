@@ -53,6 +53,7 @@ func (p LuaProvider) ListPartnerTasks(
 			PrivatePayload: rawJSON(item["private_payload"]),
 			ExpiresAt:      expiresAt,
 			StartMode:      firstNonEmpty(stringValue(item["start_mode"]), repository.StartModeNone),
+			WindowKey:      stringValue(item["window_key"]),
 		})
 	}
 	return tasks, nil

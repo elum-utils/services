@@ -316,20 +316,21 @@ func (ns NullCpaRewardType) Value() (driver.Value, error) {
 }
 
 type CpaAssignment struct {
-	ID             int64               `json:"id"`
-	WorkspaceID    string              `json:"workspace_id"`
-	CpaID          string              `json:"cpa_id"`
-	AppID          int64               `json:"app_id"`
-	PlatformID     int64               `json:"platform_id"`
-	PlatformUserID string              `json:"platform_user_id"`
-	CodeID         sql.NullInt64       `json:"code_id"`
-	Code           string              `json:"code"`
-	CodeMode       CpaCodeMode         `json:"code_mode"`
-	Status         CpaAssignmentStatus `json:"status"`
-	IssuedAt       time.Time           `json:"issued_at"`
-	CompletedAt    sql.NullTime        `json:"completed_at"`
-	DeletedAt      sql.NullTime        `json:"deleted_at"`
-	UpdatedAt      time.Time           `json:"updated_at"`
+	ID              int64               `json:"id"`
+	WorkspaceID     string              `json:"workspace_id"`
+	CpaID           string              `json:"cpa_id"`
+	AppID           int64               `json:"app_id"`
+	PlatformID      int64               `json:"platform_id"`
+	PlatformUserID  string              `json:"platform_user_id"`
+	CodeID          sql.NullInt64       `json:"code_id"`
+	Code            string              `json:"code"`
+	CodeMode        CpaCodeMode         `json:"code_mode"`
+	RewardsSnapshot json.RawMessage     `json:"rewards_snapshot"`
+	Status          CpaAssignmentStatus `json:"status"`
+	IssuedAt        time.Time           `json:"issued_at"`
+	CompletedAt     sql.NullTime        `json:"completed_at"`
+	DeletedAt       sql.NullTime        `json:"deleted_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
 }
 
 type CpaAssignmentEvent struct {
@@ -388,7 +389,7 @@ type CpaReward struct {
 	RewardKey    string              `json:"reward_key"`
 	RewardType   CpaRewardType       `json:"reward_type"`
 	Quantity     int64               `json:"quantity"`
-	Scale        int16               `json:"scale"`
+	Scale        int32               `json:"scale"`
 	DurationUnit NullCpaDurationUnit `json:"duration_unit"`
 	CreatedAt    time.Time           `json:"created_at"`
 	UpdatedAt    time.Time           `json:"updated_at"`

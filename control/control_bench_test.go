@@ -173,7 +173,7 @@ func BenchmarkAdmin(b *testing.B) {
 
 	run("CreateWorkspace", func(b *testing.B, bench *controlBenchmark) {
 		for i := 0; i < b.N; i++ {
-			id := unique("workspace")
+			id := uuid.NewString()
 			b.StartTimer()
 			_, err := bench.admin.CreateWorkspace(bench.ctx, admin.CreateWorkspaceParams{ID: id, ActorID: bench.actorID, Slug: id, Title: "Benchmark workspace"})
 			b.StopTimer()
@@ -346,15 +346,15 @@ func BenchmarkAdmin(b *testing.B) {
 	})
 	run("AppendAudit", func(b *testing.B, bench *controlBenchmark) {
 		for i := 0; i < b.N; i++ {
-			params := admin.AuditEventParams{WorkspaceID: bench.workspaceID, ActorID: bench.actorID, MethodKey: bench.methodKey, TargetType: "benchmark", TargetID: unique("audit"), Result: "succeeded", RequestID: unique("request")}
+			params := internalapi.AuditEventParams{WorkspaceID: bench.workspaceID, ActorID: bench.actorID, MethodKey: bench.methodKey, TargetType: "benchmark", TargetID: unique("audit"), Result: "succeeded", RequestID: unique("request")}
 			b.StartTimer()
-			err := bench.admin.AppendAudit(bench.ctx, params)
+			err := bench.internal.AppendAudit(bench.ctx, params)
 			b.StopTimer()
 			mustBenchmark(b, err)
 		}
 	})
 	run("ListAudit", func(b *testing.B, bench *controlBenchmark) {
-		mustBenchmark(b, bench.admin.AppendAudit(bench.ctx, admin.AuditEventParams{WorkspaceID: bench.workspaceID, ActorID: bench.actorID, MethodKey: bench.methodKey, TargetType: "benchmark", TargetID: "list", Result: "succeeded"}))
+		mustBenchmark(b, bench.internal.AppendAudit(bench.ctx, internalapi.AuditEventParams{WorkspaceID: bench.workspaceID, ActorID: bench.actorID, MethodKey: bench.methodKey, TargetType: "benchmark", TargetID: "list", Result: "succeeded"}))
 		bench.benchmarkRead(b, func() error {
 			_, err := bench.admin.ListAudit(bench.ctx, bench.workspaceID, admin.Page{Limit: 100})
 			return err
@@ -489,6 +489,7 @@ func newControlBenchmark(b *testing.B) *controlBenchmark {
 		_ = db.Close()
 		b.Fatalf("create benchmark sql client: %v", err)
 	}
+	resetControlBenchmark(b, db)
 	bootstrap := repository.New(client)
 	if err := bootstrap.Bootstrap(context.Background()); err != nil {
 		_ = client.Close()
@@ -496,8 +497,12 @@ func newControlBenchmark(b *testing.B) *controlBenchmark {
 		b.Fatalf("bootstrap benchmark schema: %v", err)
 	}
 	_ = bootstrap.Close()
-	resetControlBenchmark(b, db)
-	c, err := control.NewWithDatabase(context.Background(), db, control.Options{MaxConnections: 32, CacheEnabled: true, CacheSize: 10_000})
+	c, err := control.NewWithDatabase(context.Background(), db, control.Options{
+		MaxConnections:      32,
+		CacheEnabled:        true,
+		CacheSize:           10_000,
+		SecretEncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	})
 	if err != nil {
 		_ = client.Close()
 		_ = db.Close()
@@ -605,7 +610,7 @@ func (b *controlBenchmark) newAccount(tb *testing.B, prefix string) string {
 
 func (b *controlBenchmark) newWorkspace(tb *testing.B) string {
 	tb.Helper()
-	id := unique("workspace")
+	id := uuid.NewString()
 	_, err := b.admin.CreateWorkspace(b.ctx, admin.CreateWorkspaceParams{ID: id, ActorID: b.actorID, Slug: id, Title: "Benchmark workspace"})
 	mustBenchmark(tb, err)
 	return id

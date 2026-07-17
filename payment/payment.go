@@ -39,21 +39,29 @@ type Payment struct {
 
 	Adapters *Adapters
 
-	asset             *asset.Asset
-	product           *product.Product
-	checkout          *checkout.Checkout
-	refund            *refund.Refund
-	subscription      *subscription.Subscription
-	callbacks         *callbackutil.Store
-	client            *sqlwrap.Client
-	ownsClient        bool
-	rootCtx           context.Context
-	rootCancel        context.CancelFunc
-	goroutines        *goroutinemanager.Manager
-	pricing           *repository.PaymentRepository
-	pricingHTTPClient *http.Client
-	pricingInterval   time.Duration
-	pricingBaseURL    string
+	asset                        *asset.Asset
+	product                      *product.Product
+	checkout                     *checkout.Checkout
+	refund                       *refund.Refund
+	subscription                 *subscription.Subscription
+	callbacks                    *callbackutil.Store
+	client                       *sqlwrap.Client
+	ownsClient                   bool
+	rootCtx                      context.Context
+	rootCancel                   context.CancelFunc
+	goroutines                   *goroutinemanager.Manager
+	pricing                      *repository.PaymentRepository
+	pricingHTTPClient            *http.Client
+	pricingInterval              time.Duration
+	pricingBaseURL               string
+	orderExpirationInterval      time.Duration
+	orderExpirationAge           time.Duration
+	orderExpirationBatch         int32
+	plategaCredentials           platega.CredentialsResolver
+	plategaReconcileInterval     time.Duration
+	plategaReconcileMinAge       time.Duration
+	plategaReconcileMissingAfter time.Duration
+	plategaReconcileBatch        int32
 
 	lifecycleMu    sync.Mutex
 	params         DatabaseParams
@@ -203,6 +211,14 @@ func (a *Payment) adopt(running *Payment) {
 	a.pricingHTTPClient = running.pricingHTTPClient
 	a.pricingInterval = running.pricingInterval
 	a.pricingBaseURL = running.pricingBaseURL
+	a.orderExpirationInterval = running.orderExpirationInterval
+	a.orderExpirationAge = running.orderExpirationAge
+	a.orderExpirationBatch = running.orderExpirationBatch
+	a.plategaCredentials = running.plategaCredentials
+	a.plategaReconcileInterval = running.plategaReconcileInterval
+	a.plategaReconcileMinAge = running.plategaReconcileMinAge
+	a.plategaReconcileMissingAfter = running.plategaReconcileMissingAfter
+	a.plategaReconcileBatch = running.plategaReconcileBatch
 	a.goroutines = running.goroutines
 }
 
@@ -240,20 +256,32 @@ func newAPI(ctx context.Context, db *sqlwrap.Client, ownsClient bool, options Op
 			VKMA:          vkmaAPI,
 			YooKassa:      yooKassaAPI,
 		},
-		client:            db,
-		ownsClient:        ownsClient,
-		callbacks:         callbackutil.NewWithTable(db.DB(), callbackutil.PaymentTable),
-		rootCtx:           rootCtx,
-		rootCancel:        rootCancel,
-		pricing:           repository.NewPaymentRepositoryWithOptions(db, repositoryOptions),
-		pricingHTTPClient: options.PriceUpdateHTTPClient,
-		pricingInterval:   options.PriceUpdateInterval,
-		pricingBaseURL:    options.PriceUpdateBaseURL,
-		goroutines:        goroutinemanager.New(),
+		client:                       db,
+		ownsClient:                   ownsClient,
+		callbacks:                    callbackutil.NewWithTable(db.DB(), callbackutil.PaymentTable),
+		rootCtx:                      rootCtx,
+		rootCancel:                   rootCancel,
+		pricing:                      repository.NewPaymentRepositoryWithOptions(db, repositoryOptions),
+		pricingHTTPClient:            options.PriceUpdateHTTPClient,
+		pricingInterval:              options.PriceUpdateInterval,
+		pricingBaseURL:               options.PriceUpdateBaseURL,
+		orderExpirationInterval:      options.OrderExpirationInterval,
+		orderExpirationAge:           options.OrderExpirationAge,
+		orderExpirationBatch:         options.OrderExpirationBatch,
+		plategaCredentials:           options.PlategaCredentialsResolver,
+		plategaReconcileInterval:     options.PlategaReconcileInterval,
+		plategaReconcileMinAge:       options.PlategaReconcileMinAge,
+		plategaReconcileMissingAfter: options.PlategaReconcileMissingAfter,
+		plategaReconcileBatch:        options.PlategaReconcileBatch,
+		goroutines:                   goroutinemanager.New(),
 	}
 	if !options.DisablePriceUpdater {
 		payments.startPriceUpdater()
 	}
+	if !options.DisableOrderExpiration {
+		payments.startOrderExpirationWorker()
+	}
+	payments.startPlategaReconciliationWorker()
 	tonAPI.StartManagedSubscribers(rootCtx, options.TONWalletSyncInterval)
 	return payments
 }
@@ -264,6 +292,9 @@ func (a *Payment) Close() error {
 	}
 	if a.rootCancel != nil {
 		a.rootCancel()
+	}
+	if a.goroutines != nil {
+		a.goroutines.Close()
 	}
 	var err error
 	if a.Adapters != nil {
@@ -282,9 +313,6 @@ func (a *Payment) Close() error {
 		if a.Adapters.YooKassa != nil {
 			err = errors.Join(err, a.Adapters.YooKassa.Close())
 		}
-	}
-	if a.goroutines != nil {
-		a.goroutines.Close()
 	}
 	if a.pricing != nil {
 		err = errors.Join(err, a.pricing.Close())
@@ -355,7 +383,12 @@ func refundProviders(
 			if params.Attempt.ProviderChargeID == nil || *params.Attempt.ProviderChargeID == "" {
 				return refund.ProviderRefundResult{}, ErrTelegramStarsChargeIDRequired
 			}
-			userID, err := strconv.ParseInt(params.Order.PlatformUserID, 10, 64)
+			platformUserID := params.Order.PlatformUserID
+			if params.Order.PayerPlatformUserID != nil {
+				platformUserID = *params.Order.PayerPlatformUserID
+			}
+
+			userID, err := strconv.ParseInt(platformUserID, 10, 64)
 			if err != nil {
 				return refund.ProviderRefundResult{}, serviceerrors.Wrap(serviceerrors.CodeInvalidFields, ErrTelegramStarsPlatformUserIDInvalid.Message(), err)
 			}

@@ -103,6 +103,21 @@ func (m *Manager) Close() error {
 	return nil
 }
 
+func (m *Manager) Stats() Stats {
+	if m == nil {
+		return Stats{}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return Stats{
+		Providers:       len(m.providers),
+		CompiledScripts: len(m.cache),
+		StatePools:      len(m.pools),
+	}
+}
+
 func (m *Manager) WarmProviders(ctx context.Context, providers []string) error {
 	if m == nil {
 		return nil
@@ -332,12 +347,34 @@ func (m *Manager) releaseState(script Script, state *runtimeState, pooled bool) 
 	state.L.RemoveContext()
 	state.L.SetTop(0)
 	key := scriptCacheKey(script)
-	pool := m.pool(key)
+	pool, current := m.currentPool(script.Provider, key)
+	if !current {
+		state.L.Close()
+		return
+	}
 	select {
 	case pool <- state:
 	default:
 		state.L.Close()
 	}
+}
+
+func (m *Manager) currentPool(provider string, key string) (chan *runtimeState, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	current, ok := m.providers[provider]
+	if !ok || !current.loaded || scriptCacheKey(current.script) != key {
+		return nil, false
+	}
+
+	pool := m.pools[key]
+	if pool == nil {
+		pool = make(chan *runtimeState, m.options.StatePoolSize)
+		m.pools[key] = pool
+	}
+
+	return pool, true
 }
 
 func (m *Manager) pool(key string) chan *runtimeState {

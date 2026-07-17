@@ -38,22 +38,12 @@ func (a *Admin) GetOffer(ctx context.Context, workspaceID, cpaID string) (OfferM
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 
-	offer, err := a.repository.GetOffer(mergedCtx, workspaceID, cpaID)
+	bundle, err := a.repository.GetOfferBundle(mergedCtx, workspaceID, cpaID)
 	if err != nil {
 		return OfferModel{}, err
 	}
 
-	localizations, err := a.repository.ListLocalizations(mergedCtx, workspaceID, cpaID)
-	if err != nil {
-		return OfferModel{}, err
-	}
-
-	rewards, err := a.repository.ListRewards(mergedCtx, workspaceID, cpaID)
-	if err != nil {
-		return OfferModel{}, err
-	}
-
-	return mapOffer(offer, localizations, rewards), nil
+	return mapOffer(bundle.Offer, bundle.Localizations, bundle.Rewards), nil
 
 }
 

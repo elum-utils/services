@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	controlsqlc "github.com/elum-utils/services/control/sqlc"
@@ -17,11 +18,18 @@ func (r *Repository) UpdateWorkspace(
 	if err := required(actorID, workspaceID, slug, title, status); err != nil {
 		return 0, err
 	}
-	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessWorkspaceUpdate); err != nil {
-		return 0, err
-	}
 	var rows int64
 	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		if err := authorizeWorkspaceMutation(
+			ctx,
+			q,
+			actorID,
+			workspaceID,
+			accessWorkspaceUpdate,
+		); err != nil {
+			return err
+		}
+
 		var writeErr error
 		rows, writeErr = q.UpdateWorkspaceAsActiveMember(ctx, controlsqlc.UpdateWorkspaceAsActiveMemberParams{
 			Slug:      slug,
@@ -45,6 +53,10 @@ func (r *Repository) UpdateWorkspace(
 }
 
 func (r *Repository) ListMembers(ctx context.Context, workspaceID string, limit, offset int32) ([]Member, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	if err := required(workspaceID); err != nil {
 		return nil, err
 	}
@@ -70,14 +82,22 @@ func (r *Repository) ListMembers(ctx context.Context, workspaceID string, limit,
 }
 
 func (r *Repository) RemoveMember(ctx context.Context, actorID, workspaceID, accountID string) (int64, error) {
-	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessMemberRemove); err != nil {
-		return 0, err
-	}
-	if err := r.requireActorHigher(ctx, actorID, workspaceID, accountID, 2147483647); err != nil {
-		return 0, err
-	}
 	var rows int64
 	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		if err := authorizeWorkspaceMutation(ctx, q, actorID, workspaceID, accessMemberRemove); err != nil {
+			return err
+		}
+		if err := requireActorHigherWithQueries(
+			ctx,
+			q,
+			actorID,
+			workspaceID,
+			accountID,
+			2147483647,
+		); err != nil {
+			return err
+		}
+
 		var err error
 		rows, err = q.RemoveWorkspaceMember(
 			ctx,
@@ -109,21 +129,10 @@ func (r *Repository) CreateInvite(
 	if err := required(actorID, workspaceID); err != nil {
 		return Invite{}, "", err
 	}
-	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessInviteCreate); err != nil {
-		return Invite{}, "", err
+	if maxUses != nil && (*maxUses == 0 || *maxUses > math.MaxInt32) {
+		return Invite{}, "", ErrInviteMaxUses
 	}
-	for _, roleID := range roleIDs {
-		role, err := r.GetRole(ctx, workspaceID, roleID)
-		if err != nil {
-			return Invite{}, "", err
-		}
-		if err := r.requireHigherThanPosition(ctx, actorID, workspaceID, role.Position); err != nil || role.IsOwner {
-			if err != nil {
-				return Invite{}, "", err
-			}
-			return Invite{}, "", ErrRoleHierarchy
-		}
-	}
+
 	rawToken, err := randomToken()
 	if err != nil {
 		return Invite{}, "", err
@@ -137,6 +146,31 @@ func (r *Repository) CreateInvite(
 		RoleIDs:     append([]string(nil), roleIDs...),
 	}
 	err = r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		if err := authorizeWorkspaceMutation(ctx, q, actorID, workspaceID, accessInviteCreate); err != nil {
+			return err
+		}
+		for _, roleID := range roleIDs {
+			role, err := q.GetRole(ctx, controlsqlc.GetRoleParams{
+				WorkspaceID: workspaceID,
+				ID:          roleID,
+			})
+			if err != nil {
+				return noRows(err, ErrRoleNotFound)
+			}
+			if role.IsOwner {
+				return ErrRoleHierarchy
+			}
+			if err := requireHigherThanPositionWithQueries(
+				ctx,
+				q,
+				actorID,
+				workspaceID,
+				role.Position,
+			); err != nil {
+				return err
+			}
+		}
+
 		var sqlMaxUses sql.NullInt32
 		if maxUses != nil {
 			sqlMaxUses = sql.NullInt32{Int32: int32(*maxUses), Valid: true}
@@ -172,9 +206,11 @@ func (r *Repository) AcceptInvite(ctx context.Context, accountID, rawToken strin
 	if err := required(accountID, rawToken); err != nil {
 		return Invite{}, err
 	}
+
 	var invite Invite
+	var changed bool
 	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
-		row, err := q.GetActiveInviteByHashForUpdate(ctx, tokenHash(rawToken))
+		row, err := q.GetInviteByHashForUpdate(ctx, tokenHash(rawToken))
 		if err != nil {
 			return noRows(err, ErrNotFound)
 		}
@@ -182,6 +218,19 @@ func (r *Repository) AcceptInvite(ctx context.Context, accountID, rawToken strin
 		if err != nil {
 			return err
 		}
+		invite = mapInvite(row, roleIDs)
+
+		accepted, err := q.CreateInviteAcceptance(ctx, controlsqlc.CreateInviteAcceptanceParams{
+			InviteID:  row.ID,
+			AccountID: accountID,
+		})
+		if err != nil {
+			return err
+		}
+		if accepted == 0 {
+			return nil
+		}
+
 		if err := q.AddWorkspaceMember(ctx, controlsqlc.AddWorkspaceMemberParams{WorkspaceID: row.WorkspaceID, AccountID: accountID}); err != nil {
 			return err
 		}
@@ -197,19 +246,28 @@ func (r *Repository) AcceptInvite(ctx context.Context, accountID, rawToken strin
 			}
 			return ErrNotFound
 		}
-		invite = mapInvite(row, roleIDs)
+		changed = true
+
 		return nil
 	})
 	if err != nil {
 		return Invite{}, err
 	}
-	if err := r.touchAuthVersion(ctx, invite.WorkspaceID); err != nil {
-		return Invite{}, err
+	if changed {
+		if err := r.touchAuthVersion(ctx, invite.WorkspaceID); err != nil {
+			return Invite{}, err
+		}
 	}
+
 	return invite, nil
+
 }
 
 func (r *Repository) ListInvites(ctx context.Context, workspaceID string, limit, offset int32) ([]Invite, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	rows, err := r.q.ListInvites(
 		ctx,
 		controlsqlc.ListInvitesParams{WorkspaceID: workspaceID, Limit: limit, Offset: offset},
@@ -232,11 +290,12 @@ func (r *Repository) RevokeInvite(ctx context.Context, actorID, workspaceID, inv
 	if err := required(actorID, workspaceID, inviteID); err != nil {
 		return 0, err
 	}
-	if err := r.requireMethodAccess(ctx, actorID, workspaceID, accessInviteRevoke); err != nil {
-		return 0, err
-	}
 	var rows int64
 	err := r.withAuditTx(ctx, func(q *controlsqlc.Queries) error {
+		if err := authorizeWorkspaceMutation(ctx, q, actorID, workspaceID, accessInviteRevoke); err != nil {
+			return err
+		}
+
 		var writeErr error
 		rows, writeErr = q.RevokeInviteAsActiveMember(ctx, controlsqlc.RevokeInviteAsActiveMemberParams{
 			ID:          inviteID,

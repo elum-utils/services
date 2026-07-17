@@ -324,7 +324,7 @@ service_credentials
 2. вызывает `Control.Internal.CheckAccess` с `accountID`, `workspaceID` и
    method key;
 3. при `allowed=true` вызывает `Tasks.Admin.SavePartnerConfig`;
-4. записывает результат через `Control.Admin.AppendAudit`.
+4. записывает результат через доверенный `Control.Internal.AppendAudit`.
 
 Сетевой API может жить отдельным приложением, но всё остаётся обычными
 типизированными вызовами сервисов. Если сервисы будут разнесены по процессам,
@@ -362,7 +362,7 @@ sessions или roles. Для этого в `account_identities.provider` сра
 - `Admin.ListRolePermissions`, `Admin.SetRolePermission`,
   `Admin.ClearRolePermissions`
 - `Admin.ListMethods`, `Admin.GetMethod`
-- `Admin.AppendAudit`, `Admin.ListAudit`
+- `Admin.ListAudit`
 
 ### `service/internalapi`
 
@@ -370,6 +370,8 @@ sessions или roles. Для этого в `account_identities.provider` сра
   доменного сервиса.
 - `Internal.CheckAccess` -- возвращает решение для одного или пачки method key.
 - `Internal.GetAuthorizedMethods` -- возвращает доступные оператору методы.
+- `Internal.AppendAudit` -- записывает аудит действия, выполненного доверенным
+  API-оркестратором в другом сервисе.
 
 ## Что переносим из старого control
 

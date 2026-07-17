@@ -96,7 +96,6 @@ func (a *Admin) ListIdentities(ctx context.Context, accountID string) ([]Identit
 			AccountID: item.AccountID,
 			Provider:  item.Provider,
 			Subject:   item.ProviderSubject,
-			Payload:   item.Payload,
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
 		})

@@ -11,7 +11,6 @@ import (
 )
 
 func normalizeSaveTaskParams(params SaveTaskParams) SaveTaskParams {
-	params.WorkspaceID = strings.TrimSpace(params.WorkspaceID)
 	params.Key = strings.TrimSpace(params.Key)
 	params.GroupKey = strings.TrimSpace(params.GroupKey)
 	params.ActionKey = strings.TrimSpace(params.ActionKey)
@@ -33,8 +32,8 @@ func normalizeSaveTaskParams(params SaveTaskParams) SaveTaskParams {
 }
 
 func validateSaveTask(params SaveTaskParams) error {
-	if params.WorkspaceID == "" {
-		return fmt.Errorf("tasks workspace_id is required")
+	if err := requireWorkspaceID(params.WorkspaceID); err != nil {
+		return err
 	}
 	if params.ID > math.MaxInt64 || params.TargetCount > math.MaxInt64 ||
 		params.ResetEvery > math.MaxInt32 {
@@ -55,8 +54,22 @@ func validateSaveTask(params SaveTaskParams) error {
 	if !validActionKind(params.ActionKind) {
 		return fmt.Errorf("tasks action_kind %q is unsupported", params.ActionKind)
 	}
+	if !validTaskActionKind(params.TaskKind, params.ActionKind) {
+		return fmt.Errorf(
+			"tasks task_kind %q is incompatible with action_kind %q",
+			params.TaskKind,
+			params.ActionKind,
+		)
+	}
 	if params.ClaimMode != ClaimModeManual && params.ClaimMode != ClaimModeAuto {
 		return fmt.Errorf("tasks claim_mode %q is unsupported", params.ClaimMode)
+	}
+	if params.ClaimMode == ClaimModeAuto && params.TaskKind != TaskKindInternal {
+		return fmt.Errorf(
+			"tasks claim_mode %q is unsupported for task_kind %q",
+			params.ClaimMode,
+			params.TaskKind,
+		)
 	}
 	if params.StartMode != StartModeNone && params.StartMode != StartModeRequired {
 		return fmt.Errorf("tasks start_mode %q is unsupported", params.StartMode)
@@ -119,6 +132,25 @@ func validActionKind(value string) bool {
 	}
 }
 
+func validTaskActionKind(taskKind, actionKind string) bool {
+	switch taskKind {
+	case TaskKindInternal:
+		return actionKind == ActionKindAppAction ||
+			actionKind == ActionKindAmountAction ||
+			actionKind == ActionKindAdvertisementView
+	case TaskKindChannelBoost:
+		return actionKind == ActionKindChannelBoost
+	case TaskKindChannelSubscribe:
+		return actionKind == ActionKindChannelSubscribe
+	case TaskKindExternalCheck, TaskKindExternalConfirming, TaskKindPartner:
+		return actionKind == ActionKindExternal
+	case TaskKindComplex:
+		return actionKind == ActionKindComposite
+	default:
+		return false
+	}
+}
+
 func validResetUnit(value string) bool {
 	switch value {
 	case ResetNever, ResetSecond, ResetMinute, ResetHour, ResetDay, ResetYear:
@@ -160,8 +192,8 @@ func validDurationUnit(value string) bool {
 }
 
 func validateComplexCondition(params SaveComplexConditionParams) error {
-	if strings.TrimSpace(params.WorkspaceID) == "" {
-		return fmt.Errorf("tasks complex condition workspace_id is required")
+	if err := requireWorkspaceID(params.WorkspaceID); err != nil {
+		return err
 	}
 	if params.ParentTaskID == 0 || params.ConditionTaskID == 0 {
 		return fmt.Errorf("tasks complex condition task IDs must be positive")

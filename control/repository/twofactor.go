@@ -34,6 +34,10 @@ func (r *Repository) BeginTwoFactor(ctx context.Context, accountID, issuer strin
 	if err != nil {
 		return TwoFactorSetup{}, err
 	}
+	encryptedSecret, err := r.encryptSecret(secret)
+	if err != nil {
+		return TwoFactorSetup{}, err
+	}
 	if issuer = strings.TrimSpace(issuer); issuer == "" {
 		issuer = "Elum"
 	}
@@ -70,7 +74,7 @@ func (r *Repository) BeginTwoFactor(ctx context.Context, accountID, issuer strin
 
 			return q.UpsertTwoFactor(ctx, controlsqlc.UpsertTwoFactorParams{
 				AccountID:    accountID,
-				Secret:       secret,
+				Secret:       encryptedSecret,
 				BackupHashes: json.RawMessage(`[]`),
 			})
 		},
@@ -105,7 +109,11 @@ func (r *Repository) ConfirmTwoFactor(ctx context.Context, accountID, code strin
 			if err != nil {
 				return noRows(err, ErrNotFound)
 			}
-			if row.ActivatedAt.Valid || !validTOTP(row.Secret, code, now) {
+			secret, err := r.decryptSecret(row.Secret)
+			if err != nil {
+				return err
+			}
+			if row.ActivatedAt.Valid || !validTOTP(secret, code, now) {
 				return ErrForbidden
 			}
 			if rows, err := q.UpdatePendingTwoFactorBackupHashes(ctx, controlsqlc.UpdatePendingTwoFactorBackupHashesParams{BackupHashes: encoded, AccountID: accountID}); err != nil ||
@@ -136,7 +144,7 @@ func (r *Repository) VerifyTwoFactor(ctx context.Context, accountID, code string
 		r.db.DB(),
 		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
 		func(_ *sql.Tx, q *controlsqlc.Queries) error {
-			return verifyTwoFactorWithQueries(ctx, q, accountID, code, now)
+			return r.verifyTwoFactorWithQueries(ctx, q, accountID, code, now)
 		},
 	)
 }
@@ -162,7 +170,16 @@ func (r *Repository) CompleteTwoFactorChallenge(
 				rejected = ErrForbidden
 				return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
 			}
-			if err := verifyTwoFactorData(ctx, q, challenge.AccountID, challenge.Secret, challenge.BackupHashes, challenge.ActivatedAt, code, now); err != nil {
+			if err := r.verifyTwoFactorData(
+				ctx,
+				q,
+				challenge.AccountID,
+				challenge.Secret,
+				challenge.BackupHashes,
+				challenge.ActivatedAt,
+				code,
+				now,
+			); err != nil {
 				if errors.Is(err, ErrForbidden) {
 					rejected = err
 					return consumeTwoFactorChallenge(ctx, q, challenge.ChallengeID)
@@ -185,14 +202,13 @@ func (r *Repository) CompleteTwoFactorChallenge(
 			if err != nil {
 				return err
 			}
-			expiresAt := now.Add(30 * 24 * time.Hour)
 			session = Session{
 				ID:        uuid.NewString(),
 				AccountID: challenge.AccountID,
 				IP:        challenge.Ip,
 				UserAgent: challenge.UserAgent,
 				BindToIP:  challenge.BindToIp,
-				ExpiresAt: expiresAt,
+				ExpiresAt: challenge.SessionExpiresAt,
 				CreatedAt: now,
 			}
 			return q.CreateSession(
@@ -229,7 +245,7 @@ func consumeTwoFactorChallenge(ctx context.Context, q *controlsqlc.Queries, chal
 	return nil
 }
 
-func verifyTwoFactorWithQueries(
+func (r *Repository) verifyTwoFactorWithQueries(
 	ctx context.Context,
 	q *controlsqlc.Queries,
 	accountID, code string,
@@ -239,10 +255,19 @@ func verifyTwoFactorWithQueries(
 	if err != nil {
 		return noRows(err, ErrNotFound)
 	}
-	return verifyTwoFactorData(ctx, q, accountID, row.Secret, row.BackupHashes, row.ActivatedAt, code, now)
+	return r.verifyTwoFactorData(
+		ctx,
+		q,
+		accountID,
+		row.Secret,
+		row.BackupHashes,
+		row.ActivatedAt,
+		code,
+		now,
+	)
 }
 
-func verifyTwoFactorData(
+func (r *Repository) verifyTwoFactorData(
 	ctx context.Context,
 	q *controlsqlc.Queries,
 	accountID, secret string,
@@ -253,6 +278,10 @@ func verifyTwoFactorData(
 ) error {
 	if !activatedAt.Valid {
 		return ErrForbidden
+	}
+	secret, err := r.decryptSecret(secret)
+	if err != nil {
+		return err
 	}
 	if validTOTP(secret, code, now) {
 		return nil
@@ -297,7 +326,7 @@ func (r *Repository) DisableTwoFactor(ctx context.Context, accountID, code strin
 		r.db.DB(),
 		func(tx *sql.Tx) *controlsqlc.Queries { return controlsqlc.New(tx) },
 		func(_ *sql.Tx, q *controlsqlc.Queries) error {
-			if err := verifyTwoFactorWithQueries(ctx, q, accountID, code, now); err != nil {
+			if err := r.verifyTwoFactorWithQueries(ctx, q, accountID, code, now); err != nil {
 				return err
 			}
 			var err error

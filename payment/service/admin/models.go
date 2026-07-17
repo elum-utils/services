@@ -1,11 +1,9 @@
 package admin
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/elum-utils/services/payment/repository"
-	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 	json "github.com/goccy/go-json"
 )
 
@@ -23,27 +21,27 @@ type ImportCounts = repository.ImportCounts
 type ImportConflict = repository.ImportConflict
 type ImportResult = repository.ImportResult
 
-type ProviderModel = paymentsqlc.PaymentProvider
-type AssetModel = paymentsqlc.PaymentAsset
-type ProviderAssetModel = paymentsqlc.PaymentProviderAsset
-type AssetRateModel = paymentsqlc.PaymentAssetRate
-type ProductGroupModel = paymentsqlc.PaymentProductGroup
-type LocalizationModel = paymentsqlc.PaymentLocalization
-type ProductModel = paymentsqlc.PaymentProduct
-type ProductItemModel = paymentsqlc.PaymentProductItem
-type PriceModel = paymentsqlc.PaymentPrice
-type ProductLimitCounterModel = paymentsqlc.PaymentProductLimitCounter
-type PurchaseKeyModel = paymentsqlc.PaymentPurchaseKey
-type OrderModel = paymentsqlc.PaymentOrder
-type PaymentAttemptModel = paymentsqlc.PaymentAttempt
-type PaymentEventModel = paymentsqlc.PaymentEvent
-type SubscriptionModel = paymentsqlc.PaymentSubscription
-type FulfillmentModel = paymentsqlc.PaymentFulfillment
-type FulfillmentItemModel = paymentsqlc.PaymentFulfillmentItem
-type RefundModel = paymentsqlc.PaymentRefund
-type ProviderCursorModel = paymentsqlc.PaymentProviderCursor
-type ProviderTransactionModel = paymentsqlc.PaymentProviderTransaction
-type TONWalletModel = paymentsqlc.PaymentTonWallet
+type ProviderModel = repository.AdminProviderModel
+type AssetModel = repository.AdminAssetModel
+type ProviderAssetModel = repository.AdminProviderAssetModel
+type AssetRateModel = repository.AdminAssetRateModel
+type ProductGroupModel = repository.AdminProductGroupModel
+type LocalizationModel = repository.AdminLocalizationModel
+type ProductModel = repository.AdminProductModel
+type ProductItemModel = repository.AdminProductItemModel
+type PriceModel = repository.AdminPriceModel
+type ProductLimitCounterModel = repository.AdminProductLimitCounterModel
+type PurchaseKeyModel = repository.AdminPurchaseKeyModel
+type OrderModel = repository.AdminOrderModel
+type PaymentAttemptModel = repository.AdminPaymentAttemptModel
+type PaymentEventModel = repository.AdminPaymentEventModel
+type SubscriptionModel = repository.AdminSubscriptionModel
+type FulfillmentModel = repository.AdminFulfillmentModel
+type FulfillmentItemModel = repository.AdminFulfillmentItemModel
+type RefundModel = repository.AdminRefundModel
+type ProviderCursorModel = repository.AdminProviderCursorModel
+type ProviderTransactionModel = repository.AdminProviderTransactionModel
+type TONWalletModel = repository.AdminTONWalletModel
 
 type PageParams struct {
 	Limit  int32
@@ -355,22 +353,23 @@ type SubscriptionUpsertParams struct {
 	AppID                  int64
 	PlatformID             int64
 	PlatformUserID         string
-	InternalUserID         sql.NullInt64
+	InternalUserID         *int64
 	ProductID              string
-	OrderID                sql.NullInt64
-	AttemptID              sql.NullInt64
+	OrderID                *int64
+	AttemptID              *int64
 	Status                 string
-	CancelReason           sql.NullString
+	CancelReason           *string
 	StartedAt              time.Time
-	EndedAt                sql.NullTime
+	EndedAt                *time.Time
 }
 
 type SubscriptionStatusUpdateParams struct {
+	WorkspaceID            string
 	ProviderCode           string
 	ProviderSubscriptionID string
 	Status                 string
-	CancelReason           sql.NullString
-	EndedAt                sql.NullTime
+	CancelReason           *string
+	EndedAt                *time.Time
 }
 
 type FulfillmentListParams struct {

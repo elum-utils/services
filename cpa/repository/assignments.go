@@ -48,7 +48,7 @@ func (r *Repository) GetAssignment(ctx context.Context, scope UserScope) (Assign
 	if err != nil {
 		return Assignment{}, err
 	}
-	return mapAssignment(row), nil
+	return mapAssignment(row)
 }
 
 func (r *Repository) FindAssignment(ctx context.Context, scope UserScope) (*Assignment, error) {
@@ -77,7 +77,11 @@ func (r *Repository) ListUserAssignments(ctx context.Context, scope UserScope) (
 	}
 	result := make([]Assignment, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, mapAssignment(row))
+		assignment, err := mapAssignment(row)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, assignment)
 	}
 	return result, nil
 }
@@ -100,7 +104,11 @@ func (r *Repository) ListAssignments(ctx context.Context, workspaceID, cpaID str
 	}
 	result := make([]Assignment, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, mapAssignment(row))
+		assignment, err := mapAssignment(row)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, assignment)
 	}
 	return result, nil
 }
@@ -174,32 +182,41 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 	}
 	var result IssueResult
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceCatalogRead(ctx, scope.WorkspaceID); err != nil {
+			return err
+		}
+		if err := txRepo.lockIssueIdentity(ctx, scope); err != nil {
+			return err
+		}
+
 		existing, err := txRepo.q.GetAssignment(ctx, assignmentParams(scope))
 		if err == nil {
-			result.Assignment = mapAssignment(existing)
+			result.Assignment, err = mapAssignment(existing)
+			if err != nil {
+				return err
+			}
+			result.Rewards = result.Assignment.Rewards
 			result.AlreadyIssued = true
-			result.Rewards, err = txRepo.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
-			return err
+			return nil
 		}
 		if !isNoRows(err) {
 			return err
 		}
 
-		offer, err := txRepo.q.GetActiveOfferForUpdate(ctx, cpasqlc.GetActiveOfferForUpdateParams{
+		offer, err := txRepo.q.GetActiveOffer(ctx, cpasqlc.GetActiveOfferParams{
 			WorkspaceID: scope.WorkspaceID,
 			ID:          scope.CPAID,
 		})
 		if err != nil {
 			return err
 		}
-		existing, err = txRepo.q.GetAssignmentForUpdate(ctx, assignmentForUpdateParams(scope))
-		if err == nil {
-			result.Assignment = mapAssignment(existing)
-			result.AlreadyIssued = true
-			result.Rewards, err = txRepo.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
+
+		rewards, err := txRepo.listRewardsDirect(ctx, scope.WorkspaceID, scope.CPAID)
+		if err != nil {
 			return err
 		}
-		if !isNoRows(err) {
+		rewardsSnapshot, err := encodeRewardsSnapshot(rewards)
+		if err != nil {
 			return err
 		}
 
@@ -216,8 +233,9 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 			CodeID: sqlwrap.NullFromPtr(codeID, func(v uint64) sql.NullInt64 {
 				return sql.NullInt64{Int64: int64(v), Valid: true}
 			}),
-			Code:     code,
-			CodeMode: offer.CodeMode,
+			Code:            code,
+			CodeMode:        offer.CodeMode,
+			RewardsSnapshot: rewardsSnapshot,
 		})
 		if err != nil {
 			return err
@@ -238,11 +256,11 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 		if err != nil {
 			return err
 		}
-		result.Assignment = mapAssignment(row)
-		result.Rewards, err = txRepo.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
+		result.Assignment, err = mapAssignment(row)
 		if err != nil {
 			return err
 		}
+		result.Rewards = result.Assignment.Rewards
 		return txRepo.recordEvent(ctx, result.Assignment, result.Rewards, model.AssignmentEventTypeIssued)
 	})
 	return result, err
@@ -254,13 +272,13 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 	}
 	existing, err := r.q.GetAssignment(ctx, assignmentParams(scope))
 	if err == nil && existing.Status == cpasqlc.CpaAssignmentStatusCompleted {
-		rewards, err := r.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
+		assignment, err := mapAssignment(existing)
 		if err != nil {
 			return CompleteResult{}, err
 		}
 		return CompleteResult{
-			Assignment:  mapAssignment(existing),
-			Rewards:     rewards,
+			Assignment:  assignment,
+			Rewards:     assignment.Rewards,
 			AlreadyDone: true,
 		}, nil
 	}
@@ -273,11 +291,11 @@ func (r *Repository) Complete(ctx context.Context, scope UserScope) (CompleteRes
 		if err != nil {
 			return err
 		}
-		result.Assignment = mapAssignment(row)
-		result.Rewards, err = txRepo.ListRewards(ctx, scope.WorkspaceID, scope.CPAID)
+		result.Assignment, err = mapAssignment(row)
 		if err != nil {
 			return err
 		}
+		result.Rewards = result.Assignment.Rewards
 		if result.Assignment.Status == model.AssignmentStatusCompleted {
 			result.AlreadyDone = true
 			return nil
@@ -314,8 +332,14 @@ func requireUserScope(scope UserScope, requireOffer bool) error {
 	}).Validate(); err != nil {
 		return err
 	}
+	if err := validateStoredString("platform_user_id", scope.PlatformUserID, 255); err != nil {
+		return err
+	}
 	if requireOffer && strings.TrimSpace(scope.CPAID) == "" {
 		return ErrOfferRequired
+	}
+	if requireOffer {
+		return validateStoredString("cpa_id", scope.CPAID, maxOfferIDLength)
 	}
 	return nil
 }
@@ -331,10 +355,30 @@ func (r *Repository) AddCodes(ctx context.Context, workspaceID, cpaID string, co
 		if strings.TrimSpace(code) == "" {
 			return 0, ErrCodeRequired
 		}
+		if err := validateStoredString("code", code, maxCodeLength); err != nil {
+			return 0, err
+		}
 	}
 
 	added := 0
 	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+
+		offer, err := txRepo.q.AdminGetOffer(ctx, cpasqlc.AdminGetOfferParams{
+			WorkspaceID: workspaceID,
+			ID:          cpaID,
+		})
+		if err != nil {
+			return err
+		}
+		if offer.CodeMode != cpasqlc.CpaCodeModePersonalCode ||
+			!offer.CodeSource.Valid ||
+			offer.CodeSource.CpaCodeSource != cpasqlc.CpaCodeSourcePool {
+			return ErrCodeUploadMode
+		}
+
 		for _, code := range codes {
 			affected, err := txRepo.q.AdminAddCode(ctx, cpasqlc.AdminAddCodeParams{
 				WorkspaceID: workspaceID,
@@ -357,10 +401,19 @@ func (r *Repository) DeleteAvailableCodes(ctx context.Context, workspaceID, cpaI
 		return 0, err
 	}
 
-	return r.q.AdminDeleteAvailableCodes(ctx, cpasqlc.AdminDeleteAvailableCodesParams{
-		WorkspaceID: workspaceID,
-		CpaID:       cpaID,
+	var rows int64
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+		var err error
+		rows, err = txRepo.q.AdminDeleteAvailableCodes(ctx, cpasqlc.AdminDeleteAvailableCodesParams{
+			WorkspaceID: workspaceID,
+			CpaID:       cpaID,
+		})
+		return err
 	})
+	return rows, err
 }
 
 func (r *Repository) DeleteIssuedCodes(ctx context.Context, workspaceID, cpaID string) (int64, error) {
@@ -368,10 +421,19 @@ func (r *Repository) DeleteIssuedCodes(ctx context.Context, workspaceID, cpaID s
 		return 0, err
 	}
 
-	return r.q.AdminDeleteIssuedCodes(ctx, cpasqlc.AdminDeleteIssuedCodesParams{
-		WorkspaceID: workspaceID,
-		CpaID:       cpaID,
+	var rows int64
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+		var err error
+		rows, err = txRepo.q.AdminDeleteIssuedCodes(ctx, cpasqlc.AdminDeleteIssuedCodesParams{
+			WorkspaceID: workspaceID,
+			CpaID:       cpaID,
+		})
+		return err
 	})
+	return rows, err
 }
 
 func (r *Repository) DeleteCompletedCodes(ctx context.Context, workspaceID, cpaID string) (int64, error) {
@@ -379,10 +441,19 @@ func (r *Repository) DeleteCompletedCodes(ctx context.Context, workspaceID, cpaI
 		return 0, err
 	}
 
-	return r.q.AdminDeleteCompletedCodes(ctx, cpasqlc.AdminDeleteCompletedCodesParams{
-		WorkspaceID: workspaceID,
-		CpaID:       cpaID,
+	var rows int64
+	err := r.WithTx(ctx, func(txRepo *Repository) error {
+		if err := txRepo.lockWorkspaceMutation(ctx, workspaceID); err != nil {
+			return err
+		}
+		var err error
+		rows, err = txRepo.q.AdminDeleteCompletedCodes(ctx, cpasqlc.AdminDeleteCompletedCodesParams{
+			WorkspaceID: workspaceID,
+			CpaID:       cpaID,
+		})
+		return err
 	})
+	return rows, err
 }
 
 func (r *Repository) allocateCode(ctx context.Context, offer cpasqlc.CpaOffer) (string, *uint64, error) {
@@ -516,12 +587,17 @@ func assignmentForUpdateParams(scope UserScope) cpasqlc.GetAssignmentForUpdatePa
 	return cpasqlc.GetAssignmentForUpdateParams(assignmentParams(scope))
 }
 
-func mapAssignment(row cpasqlc.CpaAssignment) Assignment {
+func mapAssignment(row cpasqlc.CpaAssignment) (Assignment, error) {
 	var codeID *uint64
 	if row.CodeID.Valid {
 		value := uint64(row.CodeID.Int64)
 		codeID = &value
 	}
+	rewards, err := decodeRewardsSnapshot(row.WorkspaceID, row.CpaID, row.RewardsSnapshot)
+	if err != nil {
+		return Assignment{}, err
+	}
+
 	return Assignment{
 		ID:             uint64(row.ID),
 		WorkspaceID:    row.WorkspaceID,
@@ -532,10 +608,46 @@ func mapAssignment(row cpasqlc.CpaAssignment) Assignment {
 		CodeID:         codeID,
 		Code:           row.Code,
 		CodeMode:       string(row.CodeMode),
+		Rewards:        rewards,
 		Status:         model.AssignmentStatus(row.Status),
 		IssuedAt:       row.IssuedAt,
 		CompletedAt:    sqlwrap.NullTimePtr(row.CompletedAt),
+	}, nil
+}
+
+func encodeRewardsSnapshot(rewards []Reward) (json.RawMessage, error) {
+	values := make([]callbackReward, 0, len(rewards))
+	for _, reward := range rewards {
+		values = append(values, callbackReward{
+			Key:      reward.Key,
+			Type:     reward.Type,
+			Quantity: reward.Quantity,
+			Scale:    reward.Scale,
+			Unit:     reward.Unit,
+		})
 	}
+	return json.Marshal(values)
+}
+
+func decodeRewardsSnapshot(workspaceID, cpaID string, raw json.RawMessage) ([]Reward, error) {
+	var values []callbackReward
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("cpa assignment reward snapshot decode failed: %w", err)
+	}
+
+	result := make([]Reward, 0, len(values))
+	for _, reward := range values {
+		result = append(result, Reward{
+			WorkspaceID: workspaceID,
+			CPAID:       cpaID,
+			Key:         reward.Key,
+			Type:        reward.Type,
+			Quantity:    reward.Quantity,
+			Scale:       reward.Scale,
+			Unit:        reward.Unit,
+		})
+	}
+	return result, nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -545,7 +657,7 @@ func isUniqueViolation(err error) bool {
 
 func randomCode(length int, alphabet string) (string, error) {
 	runes := []rune(alphabet)
-	if length <= 0 || len(runes) < 2 {
+	if length <= 0 || length > maxCodeLength || uniqueRuneCount(alphabet) < 2 {
 		return "", ErrInvalidCodeConfig
 	}
 	result := make([]rune, length)

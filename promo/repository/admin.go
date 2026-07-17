@@ -96,6 +96,10 @@ func (r *Repository) UpdatePromo(ctx context.Context, params SavePromoParams) (i
 }
 
 func (r *Repository) GetPromo(ctx context.Context, workspaceID string, id uint64) (Promo, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Promo{}, err
+	}
+
 	key := promoCacheKey(promoCacheAdminPromo, workspaceID, id)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,
@@ -116,6 +120,10 @@ func (r *Repository) GetPromo(ctx context.Context, workspaceID string, id uint64
 }
 
 func (r *Repository) ListPromos(ctx context.Context, workspaceID string, limit, offset int32) ([]Promo, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	limit, offset = normalizePage(limit, offset)
 	key := promoCacheKey(promoCacheAdminList, workspaceID, limit, offset)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
@@ -278,6 +286,10 @@ func (r *Repository) UpsertReward(ctx context.Context, workspaceID string, promo
 }
 
 func (r *Repository) GetReward(ctx context.Context, workspaceID string, promoID uint64, key string) (Reward, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Reward{}, err
+	}
+
 	cacheKey := promoCacheKey(promoCacheAdminReward, workspaceID, promoID, key)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               cacheKey,
@@ -299,6 +311,10 @@ func (r *Repository) GetReward(ctx context.Context, workspaceID string, promoID 
 }
 
 func (r *Repository) ListRewards(ctx context.Context, workspaceID string, promoID uint64) ([]Reward, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return nil, err
+	}
+
 	key := promoCacheKey(promoCacheAdminRewards, workspaceID, promoID)
 	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key:               key,

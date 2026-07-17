@@ -33,5 +33,9 @@ func (u *User) Record(ctx context.Context, params RecordParams) (RecordResult, e
 	if err != nil {
 		return RecordResult{}, err
 	}
-	return mapRecord(value), nil
+
+	result := mapRecord(value)
+	hideFutureRewardSteps(&result)
+
+	return result, nil
 }

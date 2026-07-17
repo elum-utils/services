@@ -2,6 +2,7 @@ package internalapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -10,11 +11,15 @@ import (
 
 	json "github.com/goccy/go-json"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/tasks/repository"
 	taskruntime "github.com/elum-utils/services/tasks/runtime"
 )
 
-const PartnerCallbackStatusRevoked = "revoked"
+const (
+	PartnerCallbackStatusRevoked   = "revoked"
+	PartnerCallbackStatusAmbiguous = "ambiguous"
+)
 
 var partnerLookupKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
@@ -38,6 +43,8 @@ type PartnerCallbackParams struct {
 	ExternalID      string
 	ExternalClickID string
 	PlatformUserID  string
+	AppID           int64
+	PlatformID      int64
 	Lookup          PartnerCallbackLookup
 	Status          string
 	Payload         json.RawMessage
@@ -61,6 +68,14 @@ type PartnerWebhookParams struct {
 func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallbackParams) (PartnerCallbackResult, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
+
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return PartnerCallbackResult{}, err
+	}
+	if params.Provider == "" {
+		return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
+	}
+
 	issueID := params.IssueID
 	if issueID == 0 && params.IssueRef != "" {
 		if parsed, ok := repository.ParsePartnerIssueRef(params.IssueRef); ok {
@@ -69,10 +84,7 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 			issueID = parsed
 		}
 	}
-	if issueID == 0 || params.WorkspaceID == "" {
-		if params.WorkspaceID == "" || params.Provider == "" {
-			return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
-		}
+	if issueID == 0 {
 		var issue repository.PartnerIssue
 		var found bool
 		var err error
@@ -86,12 +98,16 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 		} else if params.ExternalID != "" && params.PlatformUserID != "" {
 			issue, found, err = i.repository.GetPartnerIssueByExternalUser(
 				mergedCtx,
-				params.WorkspaceID,
-				params.Provider,
-				params.GroupKey,
-				params.Platform,
-				params.ExternalID,
-				params.PlatformUserID,
+				repository.PartnerIssueExternalUserLookup{
+					WorkspaceID:    params.WorkspaceID,
+					Provider:       params.Provider,
+					GroupKey:       params.GroupKey,
+					Platform:       params.Platform,
+					ExternalID:     params.ExternalID,
+					PlatformUserID: params.PlatformUserID,
+					AppID:          params.AppID,
+					PlatformID:     params.PlatformID,
+				},
 			)
 		} else if len(params.Lookup.PrivatePayload) > 0 && params.Lookup.PlatformUserID != "" {
 			issue, found, err = i.lookupPartnerIssueByPrivatePayloadList(mergedCtx, params, params.Lookup.PrivatePayload, params.Lookup.PlatformUserID)
@@ -99,18 +115,35 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 			return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
 		}
 		if err != nil {
+			if errors.Is(err, repository.ErrPartnerIssueAmbiguous) {
+				return PartnerCallbackResult{Status: PartnerCallbackStatusAmbiguous}, nil
+			}
+
 			return PartnerCallbackResult{}, err
 		}
 		if !found {
 			return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
 		}
 		issueID = issue.ID
+		params.GroupKey = issue.GroupKey
+		params.Platform = issue.Platform
 	}
+	if params.GroupKey == "" || params.Platform == "" {
+		return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
+	}
+
+	scope := repository.PartnerIssueScope{
+		WorkspaceID: params.WorkspaceID,
+		Provider:    params.Provider,
+		GroupKey:    params.GroupKey,
+		Platform:    params.Platform,
+	}
+
 	switch params.Status {
 	case repository.PartnerIssueStatusCompleted, "complete", "step_completed", "subscribed":
 		issue, changed, err := i.repository.CompletePartnerIssue(
 			mergedCtx,
-			params.WorkspaceID,
+			scope,
 			issueID,
 			params.Status,
 			params.Payload,
@@ -134,7 +167,7 @@ func (i *Internal) OnPartnerCallback(ctx context.Context, params PartnerCallback
 		"canceled":
 		issue, changed, err := i.repository.RevokePartnerIssue(
 			mergedCtx,
-			params.WorkspaceID,
+			scope,
 			issueID,
 			params.Status,
 			params.Payload,
@@ -185,13 +218,17 @@ func (i *Internal) lookupPartnerIssueByPrivatePayload(
 	}
 	return i.repository.GetPartnerIssueByPrivatePayloadUser(
 		ctx,
-		params.WorkspaceID,
-		params.Provider,
-		params.GroupKey,
-		params.Platform,
-		key,
-		value,
-		platformUserID,
+		repository.PartnerIssuePrivatePayloadLookup{
+			WorkspaceID:    params.WorkspaceID,
+			Provider:       params.Provider,
+			GroupKey:       params.GroupKey,
+			Platform:       params.Platform,
+			LookupKey:      key,
+			LookupValue:    value,
+			PlatformUserID: platformUserID,
+			AppID:          params.AppID,
+			PlatformID:     params.PlatformID,
+		},
 	)
 }
 
@@ -201,7 +238,11 @@ func (i *Internal) HandlePartnerWebhook(
 ) (PartnerCallbackResult, error) {
 	mergedCtx, cancel := i.withContext(ctx)
 	defer cancel()
-	if params.WorkspaceID == "" || params.Secret == "" {
+
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return PartnerCallbackResult{}, err
+	}
+	if params.Secret == "" {
 		return PartnerCallbackResult{Status: repository.ClaimStatusNotFound}, nil
 	}
 	config, found, err := i.repository.GetPartnerConfigByWebhookSecret(
@@ -302,6 +343,8 @@ func (i *Internal) applyPartnerWebhookCallback(
 		ExternalID:      firstWebhookString(result["external_id"], result["offer_id"], result["task_id"]),
 		ExternalClickID: firstWebhookString(result["external_click_id"], result["click_id"]),
 		PlatformUserID:  firstWebhookString(result["platform_user_id"], result["user_id"], result["tg_user_id"]),
+		AppID:           int64(webhookUint64(result["app_id"])),
+		PlatformID:      int64(webhookUint64(result["platform_id"])),
 		Lookup:          webhookLookup(result),
 		Status:          status,
 		Payload:         payload,

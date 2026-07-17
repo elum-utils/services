@@ -14,6 +14,10 @@ import (
 )
 
 func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg ExportPackage) (ImportPreview, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return ImportPreview{}, err
+	}
+
 	if err := validateExportPackage(pkg); err != nil {
 		return ImportPreview{}, err
 	}
@@ -89,6 +93,10 @@ func (r *Repository) PreviewImport(ctx context.Context, workspaceID string, pkg 
 }
 
 func (r *Repository) Import(ctx context.Context, workspaceID string, req ImportRequest) (ImportResult, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return ImportResult{}, err
+	}
+
 	if err := validateExportPackage(req.Package); err != nil {
 		return ImportResult{}, err
 	}
@@ -142,6 +150,15 @@ func (r *Repository) importBulk(
 	); err != nil {
 		return err
 	}
+	if err := r.replaceImportedGroupChildren(
+		ctx,
+		workspaceID,
+		req.Package.Groups,
+		strategy,
+		preview,
+	); err != nil {
+		return err
+	}
 	if err := r.importGroupsBulk(
 		ctx,
 		workspaceID,
@@ -163,6 +180,16 @@ func (r *Repository) importBulk(
 	if err != nil {
 		return err
 	}
+	if err := r.replaceImportedTaskChildren(
+		ctx,
+		workspaceID,
+		req.Package.Groups,
+		taskIDs,
+		strategy,
+		preview,
+	); err != nil {
+		return err
+	}
 	if err := r.importTaskLocalizationsBulk(ctx, workspaceID, req.Package.Groups, taskIDs, strategy, preview, result); err != nil {
 		return err
 	}
@@ -176,6 +203,88 @@ func (r *Repository) importBulk(
 		return err
 	}
 	return r.importPartnerRewardRulesBulk(ctx, workspaceID, req.Package.Groups, strategy, preview, result)
+}
+
+func (r *Repository) replaceImportedGroupChildren(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	strategy string,
+	preview ImportPreview,
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	groupKeys := make([]string, 0, len(groups))
+	for _, group := range groups {
+		if previewHasConflict(preview, "group", group.Key) {
+			groupKeys = append(groupKeys, group.Key)
+		}
+	}
+	if len(groupKeys) == 0 {
+		return nil
+	}
+
+	for _, table := range []string{
+		"task_group_localization",
+		"task_partner_config",
+		"task_partner_reward_rule",
+	} {
+		if _, err := r.executor.ExecContext(
+			ctx,
+			"DELETE FROM "+table+" WHERE workspace_id = $1 AND group_key = ANY($2::text[])",
+			workspaceID,
+			groupKeys,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) replaceImportedTaskChildren(
+	ctx context.Context,
+	workspaceID string,
+	groups []ExportGroup,
+	taskIDs map[string]uint64,
+	strategy string,
+	preview ImportPreview,
+) error {
+	if strategy != ImportConflictUpdate {
+		return nil
+	}
+
+	taskIDValues := make([]int64, 0)
+	for _, group := range groups {
+		for _, task := range group.Tasks {
+			if previewHasConflict(preview, "task", task.Key) {
+				taskIDValues = append(taskIDValues, int64(taskIDs[task.Key]))
+			}
+		}
+	}
+
+	if len(taskIDValues) == 0 {
+		return nil
+	}
+	for _, spec := range []struct {
+		table  string
+		column string
+	}{
+		{table: "task_complex_condition", column: "parent_task_id"},
+		{table: "task_localization", column: "task_id"},
+		{table: "task_reward", column: "task_id"},
+	} {
+		if _, err := r.executor.ExecContext(
+			ctx,
+			"DELETE FROM "+spec.table+" WHERE workspace_id = $1 AND "+spec.column+" = ANY($2::bigint[])",
+			workspaceID,
+			taskIDValues,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repository) importSequencesBulk(
@@ -808,7 +917,7 @@ func validateExportPackage(pkg ExportPackage) error {
 			taskPaths[task.Key] = taskPath
 
 			params := normalizeSaveTaskParams(SaveTaskParams{
-				WorkspaceID:         "import",
+				WorkspaceID:         "00000000-0000-0000-0000-000000000000",
 				Key:                 task.Key,
 				GroupKey:            group.Key,
 				SequenceKey:         task.SequenceKey,
@@ -865,6 +974,9 @@ func validateExportPackage(pkg ExportPackage) error {
 			}
 
 			conditionKeys := make(map[string]int, len(task.Conditions))
+			if len(task.Conditions) > 0 && task.TaskKind != TaskKindComplex {
+				return fmt.Errorf("%s.conditions require task_kind %q", taskPath, TaskKindComplex)
+			}
 			for conditionIndex, condition := range task.Conditions {
 				if strings.TrimSpace(condition.TaskKey) == "" || condition.TaskKey == task.Key {
 					return fmt.Errorf("%s.conditions[%d].task_key is invalid", taskPath, conditionIndex)

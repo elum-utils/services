@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	serviceerrors "github.com/elum-utils/services/errors"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	refsqlc "github.com/elum-utils/services/reference/sqlc"
@@ -129,10 +129,7 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func requireWorkspace(workspaceID string) error {
-	if strings.TrimSpace(workspaceID) == "" {
-		return ErrWorkspaceRequired
-	}
-	return nil
+	return services.ValidateWorkspaceID(workspaceID)
 }
 
 func mapNoRows(err error) error {

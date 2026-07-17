@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/calendar/repository"
 	"github.com/elum-utils/services/calendar/service/user"
 	"github.com/google/uuid"
@@ -101,7 +102,10 @@ func (a *Admin) DeleteCalendar(ctx context.Context, workspaceID, id string) (int
 }
 
 func validateCalendar(params *SaveCalendarParams) error {
-	if params.WorkspaceID == "" || strings.TrimSpace(params.Type) == "" {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(params.Type) == "" {
 		return ErrCalendarScopeRequired
 	}
 	if params.IntervalCount == 0 {

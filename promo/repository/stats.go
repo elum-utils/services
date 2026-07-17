@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	promosqlc "github.com/elum-utils/services/promo/sqlc"
@@ -51,6 +50,10 @@ func (r *Repository) ListRedemptions(
 }
 
 func (r *Repository) GetStats(ctx context.Context, workspaceID string, promoID uint64) (Stats, error) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return Stats{}, err
+	}
+
 	row, err := r.q.AdminGetStats(ctx, promosqlc.AdminGetStatsParams{
 		WorkspaceID: workspaceID,
 		ID:          int64(promoID),
@@ -92,7 +95,10 @@ func (r *Repository) ListDailyStats(
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
-	if strings.TrimSpace(workspaceID) == "" || from.IsZero() || until.IsZero() || from.After(until) {
+	if err := requireWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
 		return fmt.Errorf("promo stats workspace or date range is invalid")
 	}
 

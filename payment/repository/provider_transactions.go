@@ -22,9 +22,9 @@ func (r *PaymentRepository) GetAsset(ctx context.Context, code string) (payments
 func (r *PaymentRepository) GetAssetByChainContract(
 	ctx context.Context,
 	params paymentsqlc.GetAssetByChainContractParams,
-) (paymentsqlc.PaymentAsset, error) {
+) (AdminAssetModel, error) {
 	key := paymentCacheKey("asset_chain_contract", params.Chain, params.Network, params.ContractAddress)
-	return queryPaymentCache(
+	row, err := queryPaymentCache(
 		ctx,
 		r,
 		paymentGlobalCacheScope,
@@ -33,13 +33,15 @@ func (r *PaymentRepository) GetAssetByChainContract(
 			return r.q.GetAssetByChainContract(ctx, params)
 		},
 	)
+	return mapAdminResult(row, err, mapAdminAsset)
 }
 
 func (r *PaymentRepository) GetProviderCursor(
 	ctx context.Context,
 	params paymentsqlc.GetProviderCursorParams,
-) (paymentsqlc.PaymentProviderCursor, error) {
-	return r.q.GetProviderCursor(ctx, params)
+) (AdminProviderCursorModel, error) {
+	row, err := r.q.GetProviderCursor(ctx, params)
+	return mapAdminResult(row, err, mapAdminProviderCursor)
 }
 
 func (r *PaymentRepository) UpsertProviderCursor(
@@ -52,8 +54,9 @@ func (r *PaymentRepository) UpsertProviderCursor(
 func (r *PaymentRepository) GetProviderTransactionByExternalID(
 	ctx context.Context,
 	params paymentsqlc.GetProviderTransactionByExternalIDParams,
-) (paymentsqlc.PaymentProviderTransaction, error) {
-	return r.q.GetProviderTransactionByExternalID(ctx, params)
+) (AdminProviderTransactionModel, error) {
+	row, err := r.q.GetProviderTransactionByExternalID(ctx, params)
+	return mapAdminResult(row, err, mapAdminProviderTransaction)
 }
 
 func (r *PaymentRepository) CreateProviderTransaction(
@@ -83,25 +86,51 @@ func (r *PaymentRepository) StoreProviderTransaction(
 	return id, err
 }
 
+func (r *PaymentRepository) RecoverFailedProviderTransaction(
+	ctx context.Context,
+	transaction paymentsqlc.RecoverProviderTransactionParams,
+	cursor paymentsqlc.UpsertProviderCursorParams,
+) (bool, error) {
+
+	var recovered bool
+	err := r.WithTx(ctx, func(tx *PaymentRepository) error {
+		updated, err := tx.q.RecoverProviderTransaction(ctx, transaction)
+		if err != nil {
+			return err
+		}
+
+		recovered = updated == 1
+		_, err = tx.UpsertProviderCursor(ctx, cursor)
+
+		return err
+	})
+
+	return recovered, err
+
+}
+
 func (r *PaymentRepository) AdminListProviderCursors(
 	ctx context.Context,
 	params paymentsqlc.AdminListProviderCursorsParams,
-) ([]paymentsqlc.PaymentProviderCursor, error) {
-	return r.q.AdminListProviderCursors(ctx, params)
+) ([]AdminProviderCursorModel, error) {
+	rows, err := r.q.AdminListProviderCursors(ctx, params)
+	return mapAdminSlice(rows, mapAdminProviderCursor), err
 }
 
 func (r *PaymentRepository) AdminListProviderTransactions(
 	ctx context.Context,
 	params paymentsqlc.AdminListProviderTransactionsParams,
-) ([]paymentsqlc.PaymentProviderTransaction, error) {
-	return r.q.AdminListProviderTransactions(ctx, params)
+) ([]AdminProviderTransactionModel, error) {
+	rows, err := r.q.AdminListProviderTransactions(ctx, params)
+	return mapAdminSlice(rows, mapAdminProviderTransaction), err
 }
 
 func (r *PaymentRepository) AdminGetProviderTransaction(
 	ctx context.Context,
 	params paymentsqlc.AdminGetProviderTransactionParams,
-) (paymentsqlc.PaymentProviderTransaction, error) {
-	return r.q.AdminGetProviderTransaction(ctx, params)
+) (AdminProviderTransactionModel, error) {
+	row, err := r.q.AdminGetProviderTransaction(ctx, params)
+	return mapAdminResult(row, err, mapAdminProviderTransaction)
 }
 
 func (r *PaymentRepository) AdminUpdateProviderTransactionStatus(

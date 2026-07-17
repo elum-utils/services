@@ -12,36 +12,43 @@ import (
 	"github.com/elum-utils/sign/vkmashop"
 )
 
-func (a *VKMA) Active(ctx context.Context, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
+func (a *VKMA) Active(ctx context.Context, workspaceID string, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.updateSubscriptionStatus(ctx, params, "active", sql.NullTime{})
+	return a.updateSubscriptionStatus(ctx, workspaceID, params, "active", nil)
 }
 
-func (a *VKMA) Canceled(ctx context.Context, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
+func (a *VKMA) Canceled(ctx context.Context, workspaceID string, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.updateSubscriptionStatus(ctx, params, "canceled", sql.NullTime{Time: time.Now(), Valid: true})
+	return a.updateSubscriptionStatus(ctx, workspaceID, params, "canceled", utils.Ref(time.Now()))
 }
 
-func (a *VKMA) Refunded(ctx context.Context, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
+func (a *VKMA) Refunded(ctx context.Context, workspaceID string, params vkmashop.Params) (*SubscriptionStatusResponse, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	return a.updateSubscriptionStatus(ctx, params, "refunded", sql.NullTime{Time: time.Now(), Valid: true})
+	return a.updateSubscriptionStatus(ctx, workspaceID, params, "refunded", utils.Ref(time.Now()))
 }
 
-func (a *VKMA) updateSubscriptionStatus(ctx context.Context, params vkmashop.Params, status string, endedAt sql.NullTime) (*SubscriptionStatusResponse, error) {
+func (a *VKMA) updateSubscriptionStatus(
+	ctx context.Context,
+	workspaceID string,
+	params vkmashop.Params,
+	status string,
+	endedAt *time.Time,
+) (*SubscriptionStatusResponse, error) {
 	mergedCtx, paymentRequestCancel := a.withContext(ctx)
 	defer paymentRequestCancel()
 	ctx = mergedCtx
-	rows, err := a.repository.UpdateSubscriptionStatus(ctx, repository.SubscriptionStatusUpdateParams{
+	rows, err := a.repository.UpdateSubscriptionStatusByProvider(ctx, repository.SubscriptionStatusUpdateParams{
+		WorkspaceID:            workspaceID,
 		ProviderCode:           ProviderCode,
 		ProviderSubscriptionID: strconv.Itoa(params.SubscriptionID),
 		Status:                 status,
-		CancelReason:           sql.NullString{String: string(params.CancelReason), Valid: params.CancelReason != ""},
+		CancelReason:           nonEmptyStringPtr(string(params.CancelReason)),
 		EndedAt:                endedAt,
 	})
 	if err != nil {
@@ -52,6 +59,7 @@ func (a *VKMA) updateSubscriptionStatus(ctx context.Context, params vkmashop.Par
 	}
 
 	if _, err := a.repository.CreateEvent(ctx, repository.EventCreateParams{
+		WorkspaceID:       workspaceID,
 		ProviderCode:      ProviderCode,
 		ProviderEventID:   eventID(params),
 		ProviderPaymentID: positiveString(params.OrderID),
@@ -67,4 +75,11 @@ func (a *VKMA) updateSubscriptionStatus(ctx context.Context, params vkmashop.Par
 		SubscriptionID: params.SubscriptionID,
 		Status:         status,
 	}, nil
+}
+
+func nonEmptyStringPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

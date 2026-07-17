@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/promo/repository"
 	"github.com/elum-utils/services/promo/service/user"
 )
@@ -25,7 +26,10 @@ func (a *Admin) UpsertReward(ctx context.Context, params SaveRewardParams) error
 	if err != nil {
 		return err
 	}
-	if params.WorkspaceID == "" || params.PromoID == 0 {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+	if params.PromoID == 0 {
 		return ErrRewardRequired
 	}
 	if params.PromoID > math.MaxInt64 || params.Scale > math.MaxInt16 {
@@ -77,7 +81,10 @@ func (a *Admin) ListRewards(ctx context.Context, workspaceID string, promoID uin
 func (a *Admin) DeleteReward(ctx context.Context, workspaceID string, promoID uint64, key string) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || promoID == 0 || key == "" {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if promoID == 0 || key == "" {
 		return 0, ErrRewardRequired
 	}
 	if promoID > math.MaxInt64 {

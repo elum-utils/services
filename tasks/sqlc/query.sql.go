@@ -15,6 +15,53 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+const acquirePartnerIssueStartLease = `-- name: AcquirePartnerIssueStartLease :one
+INSERT INTO task_partner_issue_start_lease (
+    workspace_id,
+    issue_id,
+    lease_token,
+    lease_until
+)
+SELECT
+    $1::varchar,
+    $2::bigint,
+    $3::varchar,
+    now() + (
+        $4::bigint * INTERVAL '1 millisecond'
+    )
+FROM task_partner_issue AS issue
+WHERE issue.workspace_id = $1::varchar
+  AND issue.id = $2::bigint
+  AND issue.status = 'issued'
+  AND issue.started_at IS NULL
+FOR UPDATE OF issue
+ON CONFLICT (workspace_id, issue_id) DO UPDATE SET
+    lease_token = EXCLUDED.lease_token,
+    lease_until = EXCLUDED.lease_until,
+    updated_at = now()
+WHERE task_partner_issue_start_lease.lease_until <= now()
+RETURNING lease_token
+`
+
+type AcquirePartnerIssueStartLeaseParams struct {
+	WorkspaceID               string `json:"workspace_id"`
+	IssueID                   int64  `json:"issue_id"`
+	LeaseToken                string `json:"lease_token"`
+	LeaseDurationMilliseconds int64  `json:"lease_duration_milliseconds"`
+}
+
+func (q *Queries) AcquirePartnerIssueStartLease(ctx context.Context, arg AcquirePartnerIssueStartLeaseParams) (string, error) {
+	row := q.queryRow(ctx, q.acquirePartnerIssueStartLeaseStmt, acquirePartnerIssueStartLease,
+		arg.WorkspaceID,
+		arg.IssueID,
+		arg.LeaseToken,
+		arg.LeaseDurationMilliseconds,
+	)
+	var lease_token string
+	err := row.Scan(&lease_token)
+	return lease_token, err
+}
+
 const adminCreateTask = `-- name: AdminCreateTask :one
 INSERT INTO task_definition (
     workspace_id, key, group_key, sequence_key, sequence_position, task_kind,
@@ -1796,8 +1843,9 @@ func (q *Queries) CountProgressEventsByExternalKey(ctx context.Context, arg Coun
 const createPartnerIssue = `-- name: CreatePartnerIssue :one
 INSERT INTO task_partner_issue (
     workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, started_at, expires_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'issued', $15, NULL, $16)
+    app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
+    status, issued_at, started_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'issued', $16, NULL, $17)
 ON CONFLICT (workspace_id, issue_key) DO UPDATE SET
     public_payload = EXCLUDED.public_payload,
     private_payload = EXCLUDED.private_payload,
@@ -1821,6 +1869,7 @@ type CreatePartnerIssueParams struct {
 	PlatformUserID  string                `json:"platform_user_id"`
 	PublicPayload   pqtype.NullRawMessage `json:"public_payload"`
 	PrivatePayload  pqtype.NullRawMessage `json:"private_payload"`
+	RewardsSnapshot json.RawMessage       `json:"rewards_snapshot"`
 	IssuedAt        time.Time             `json:"issued_at"`
 	ExpiresAt       sql.NullTime          `json:"expires_at"`
 }
@@ -1841,6 +1890,7 @@ func (q *Queries) CreatePartnerIssue(ctx context.Context, arg CreatePartnerIssue
 		arg.PlatformUserID,
 		arg.PublicPayload,
 		arg.PrivatePayload,
+		arg.RewardsSnapshot,
 		arg.IssuedAt,
 		arg.ExpiresAt,
 	)
@@ -1852,8 +1902,8 @@ func (q *Queries) CreatePartnerIssue(ctx context.Context, arg CreatePartnerIssue
 const ensureProgress = `-- name: EnsureProgress :one
 INSERT INTO task_progress (
     workspace_id, task_id, app_id, platform_id, platform_user_id,
-    period_start_at, period_end_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    period_start_at, period_end_at, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET
     period_end_at = EXCLUDED.period_end_at,
     updated_at = now()
@@ -1861,13 +1911,14 @@ RETURNING id
 `
 
 type EnsureProgressParams struct {
-	WorkspaceID    string    `json:"workspace_id"`
-	TaskID         int64     `json:"task_id"`
-	AppID          int64     `json:"app_id"`
-	PlatformID     int64     `json:"platform_id"`
-	PlatformUserID string    `json:"platform_user_id"`
-	PeriodStartAt  time.Time `json:"period_start_at"`
-	PeriodEndAt    time.Time `json:"period_end_at"`
+	WorkspaceID     string                `json:"workspace_id"`
+	TaskID          int64                 `json:"task_id"`
+	AppID           int64                 `json:"app_id"`
+	PlatformID      int64                 `json:"platform_id"`
+	PlatformUserID  string                `json:"platform_user_id"`
+	PeriodStartAt   time.Time             `json:"period_start_at"`
+	PeriodEndAt     time.Time             `json:"period_end_at"`
+	RewardsSnapshot pqtype.NullRawMessage `json:"rewards_snapshot"`
 }
 
 func (q *Queries) EnsureProgress(ctx context.Context, arg EnsureProgressParams) (int64, error) {
@@ -1879,10 +1930,30 @@ func (q *Queries) EnsureProgress(ctx context.Context, arg EnsureProgressParams) 
 		arg.PlatformUserID,
 		arg.PeriodStartAt,
 		arg.PeriodEndAt,
+		arg.RewardsSnapshot,
 	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const expirePartnerIssue = `-- name: ExpirePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'expired', updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND status IN ('issued', 'completed')
+`
+
+type ExpirePartnerIssueParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) ExpirePartnerIssue(ctx context.Context, arg ExpirePartnerIssueParams) (int64, error) {
+	result, err := q.exec(ctx, q.expirePartnerIssueStmt, expirePartnerIssue, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const exportListTasks = `-- name: ExportListTasks :many
@@ -2669,7 +2740,7 @@ func (q *Queries) GetPartnerConfigByWebhookSecret(ctx context.Context, arg GetPa
 
 const getPartnerIssueByExternalClickID = `-- name: GetPartnerIssueByExternalClickID :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND provider = $2 AND external_click_id = $3
@@ -2701,68 +2772,7 @@ func (q *Queries) GetPartnerIssueByExternalClickID(ctx context.Context, arg GetP
 		&i.PlatformUserID,
 		&i.PublicPayload,
 		&i.PrivatePayload,
-		&i.Status,
-		&i.IssuedAt,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ClaimedAt,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getPartnerIssueByExternalUser = `-- name: GetPartnerIssueByExternalUser :one
-SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
-       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
-FROM task_partner_issue
-WHERE workspace_id = $1
-  AND provider = $2
-  AND group_key = $3
-  AND platform = $4
-  AND external_id = $5
-  AND platform_user_id = $6
-ORDER BY issued_at DESC, id DESC
-LIMIT 1
-`
-
-type GetPartnerIssueByExternalUserParams struct {
-	WorkspaceID    string `json:"workspace_id"`
-	Provider       string `json:"provider"`
-	GroupKey       string `json:"group_key"`
-	Platform       string `json:"platform"`
-	ExternalID     string `json:"external_id"`
-	PlatformUserID string `json:"platform_user_id"`
-}
-
-func (q *Queries) GetPartnerIssueByExternalUser(ctx context.Context, arg GetPartnerIssueByExternalUserParams) (TaskPartnerIssue, error) {
-	row := q.queryRow(ctx, q.getPartnerIssueByExternalUserStmt, getPartnerIssueByExternalUser,
-		arg.WorkspaceID,
-		arg.Provider,
-		arg.GroupKey,
-		arg.Platform,
-		arg.ExternalID,
-		arg.PlatformUserID,
-	)
-	var i TaskPartnerIssue
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Provider,
-		&i.GroupKey,
-		&i.Platform,
-		&i.ExternalID,
-		&i.ExternalType,
-		&i.ExternalClickID,
-		&i.StartMode,
-		&i.IssueKey,
-		&i.AppID,
-		&i.PlatformID,
-		&i.PlatformUserID,
-		&i.PublicPayload,
-		&i.PrivatePayload,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.StartedAt,
@@ -2777,7 +2787,7 @@ func (q *Queries) GetPartnerIssueByExternalUser(ctx context.Context, arg GetPart
 
 const getPartnerIssueByID = `-- name: GetPartnerIssueByID :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND id = $2
@@ -2808,6 +2818,7 @@ func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueBy
 		&i.PlatformUserID,
 		&i.PublicPayload,
 		&i.PrivatePayload,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.StartedAt,
@@ -2822,7 +2833,7 @@ func (q *Queries) GetPartnerIssueByID(ctx context.Context, arg GetPartnerIssueBy
 
 const getPartnerIssueByIDForUpdate = `-- name: GetPartnerIssueByIDForUpdate :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND id = $2
@@ -2854,6 +2865,7 @@ func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartn
 		&i.PlatformUserID,
 		&i.PublicPayload,
 		&i.PrivatePayload,
+		&i.RewardsSnapshot,
 		&i.Status,
 		&i.IssuedAt,
 		&i.StartedAt,
@@ -2866,9 +2878,94 @@ func (q *Queries) GetPartnerIssueByIDForUpdate(ctx context.Context, arg GetPartn
 	return i, err
 }
 
-const getPartnerIssueByPrivatePayloadUser = `-- name: GetPartnerIssueByPrivatePayloadUser :one
+const getPartnerIssuesByExternalUser = `-- name: GetPartnerIssuesByExternalUser :many
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
+       status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
+FROM task_partner_issue
+WHERE workspace_id = $1
+  AND provider = $2
+  AND group_key = $3
+  AND platform = $4
+  AND external_id = $5
+  AND platform_user_id = $6
+  AND ($7::bigint = 0 OR app_id = $7::bigint)
+  AND ($8::bigint = 0 OR platform_id = $8::bigint)
+ORDER BY issued_at DESC, id DESC
+LIMIT 2
+`
+
+type GetPartnerIssuesByExternalUserParams struct {
+	WorkspaceID    string `json:"workspace_id"`
+	Provider       string `json:"provider"`
+	GroupKey       string `json:"group_key"`
+	Platform       string `json:"platform"`
+	ExternalID     string `json:"external_id"`
+	PlatformUserID string `json:"platform_user_id"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
+}
+
+func (q *Queries) GetPartnerIssuesByExternalUser(ctx context.Context, arg GetPartnerIssuesByExternalUserParams) ([]TaskPartnerIssue, error) {
+	rows, err := q.query(ctx, q.getPartnerIssuesByExternalUserStmt, getPartnerIssuesByExternalUser,
+		arg.WorkspaceID,
+		arg.Provider,
+		arg.GroupKey,
+		arg.Platform,
+		arg.ExternalID,
+		arg.PlatformUserID,
+		arg.AppID,
+		arg.PlatformID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerIssue
+	for rows.Next() {
+		var i TaskPartnerIssue
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.Platform,
+			&i.ExternalID,
+			&i.ExternalType,
+			&i.ExternalClickID,
+			&i.StartMode,
+			&i.IssueKey,
+			&i.AppID,
+			&i.PlatformID,
+			&i.PlatformUserID,
+			&i.PublicPayload,
+			&i.PrivatePayload,
+			&i.RewardsSnapshot,
+			&i.Status,
+			&i.IssuedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ClaimedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPartnerIssuesByPrivatePayloadUser = `-- name: GetPartnerIssuesByPrivatePayloadUser :many
+SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1
@@ -2877,11 +2974,13 @@ WHERE workspace_id = $1
   AND platform = $4
   AND private_payload @> jsonb_build_object($6::text, $7::text)
   AND platform_user_id = $5
+  AND ($8::bigint = 0 OR app_id = $8::bigint)
+  AND ($9::bigint = 0 OR platform_id = $9::bigint)
 ORDER BY issued_at DESC, id DESC
-LIMIT 1
+LIMIT 2
 `
 
-type GetPartnerIssueByPrivatePayloadUserParams struct {
+type GetPartnerIssuesByPrivatePayloadUserParams struct {
 	WorkspaceID    string `json:"workspace_id"`
 	Provider       string `json:"provider"`
 	GroupKey       string `json:"group_key"`
@@ -2889,10 +2988,12 @@ type GetPartnerIssueByPrivatePayloadUserParams struct {
 	PlatformUserID string `json:"platform_user_id"`
 	LookupKey      string `json:"lookup_key"`
 	LookupValue    string `json:"lookup_value"`
+	AppID          int64  `json:"app_id"`
+	PlatformID     int64  `json:"platform_id"`
 }
 
-func (q *Queries) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, arg GetPartnerIssueByPrivatePayloadUserParams) (TaskPartnerIssue, error) {
-	row := q.queryRow(ctx, q.getPartnerIssueByPrivatePayloadUserStmt, getPartnerIssueByPrivatePayloadUser,
+func (q *Queries) GetPartnerIssuesByPrivatePayloadUser(ctx context.Context, arg GetPartnerIssuesByPrivatePayloadUserParams) ([]TaskPartnerIssue, error) {
+	rows, err := q.query(ctx, q.getPartnerIssuesByPrivatePayloadUserStmt, getPartnerIssuesByPrivatePayloadUser,
 		arg.WorkspaceID,
 		arg.Provider,
 		arg.GroupKey,
@@ -2900,34 +3001,53 @@ func (q *Queries) GetPartnerIssueByPrivatePayloadUser(ctx context.Context, arg G
 		arg.PlatformUserID,
 		arg.LookupKey,
 		arg.LookupValue,
+		arg.AppID,
+		arg.PlatformID,
 	)
-	var i TaskPartnerIssue
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Provider,
-		&i.GroupKey,
-		&i.Platform,
-		&i.ExternalID,
-		&i.ExternalType,
-		&i.ExternalClickID,
-		&i.StartMode,
-		&i.IssueKey,
-		&i.AppID,
-		&i.PlatformID,
-		&i.PlatformUserID,
-		&i.PublicPayload,
-		&i.PrivatePayload,
-		&i.Status,
-		&i.IssuedAt,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ClaimedAt,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskPartnerIssue
+	for rows.Next() {
+		var i TaskPartnerIssue
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.GroupKey,
+			&i.Platform,
+			&i.ExternalID,
+			&i.ExternalType,
+			&i.ExternalClickID,
+			&i.StartMode,
+			&i.IssueKey,
+			&i.AppID,
+			&i.PlatformID,
+			&i.PlatformUserID,
+			&i.PublicPayload,
+			&i.PrivatePayload,
+			&i.RewardsSnapshot,
+			&i.Status,
+			&i.IssuedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ClaimedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPartnerRewardGrantByIssue = `-- name: GetPartnerRewardGrantByIssue :one
@@ -3139,6 +3259,28 @@ func (q *Queries) GetStartTaskByKey(ctx context.Context, arg GetStartTaskByKeyPa
 		&i.EndAt,
 	)
 	return i, err
+}
+
+const hasActivePartnerIssueStartLease = `-- name: HasActivePartnerIssueStartLease :one
+SELECT EXISTS (
+    SELECT 1
+    FROM task_partner_issue_start_lease
+    WHERE workspace_id = $1
+      AND issue_id = $2
+      AND lease_until > now()
+)
+`
+
+type HasActivePartnerIssueStartLeaseParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	IssueID     int64  `json:"issue_id"`
+}
+
+func (q *Queries) HasActivePartnerIssueStartLease(ctx context.Context, arg HasActivePartnerIssueStartLeaseParams) (bool, error) {
+	row := q.queryRow(ctx, q.hasActivePartnerIssueStartLeaseStmt, hasActivePartnerIssueStartLease, arg.WorkspaceID, arg.IssueID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const incrementPartnerStatsDaily = `-- name: IncrementPartnerStatsDaily :exec
@@ -3387,6 +3529,7 @@ JOIN task_definition child
  AND child.is_active = true
  AND child.deleted_at IS NULL
 WHERE c.workspace_id = $1
+  AND c.is_required = true
 ORDER BY c.parent_task_id, c.position, c.condition_task_id
 `
 
@@ -3894,7 +4037,7 @@ func (q *Queries) ListCurrentProgressForUserForUpdate(ctx context.Context, arg L
 
 const listPartnerIssuesForUser = `-- name: ListPartnerIssuesForUser :many
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1
@@ -3905,7 +4048,7 @@ WHERE workspace_id = $1
   AND platform_id = $6
   AND platform_user_id = $7
   AND status IN ('issued', 'completed')
-  AND (expires_at IS NULL OR expires_at > $8)
+  AND (status = 'completed' OR expires_at IS NULL OR expires_at > $8)
 ORDER BY issued_at DESC, id DESC
 `
 
@@ -3954,6 +4097,7 @@ func (q *Queries) ListPartnerIssuesForUser(ctx context.Context, arg ListPartnerI
 			&i.PlatformUserID,
 			&i.PublicPayload,
 			&i.PrivatePayload,
+			&i.RewardsSnapshot,
 			&i.Status,
 			&i.IssuedAt,
 			&i.StartedAt,
@@ -4042,10 +4186,31 @@ func (q *Queries) ListPartnerRewardRules(ctx context.Context, arg ListPartnerRew
 const listRecordCatalog = `-- name: ListRecordCatalog :many
 SELECT t.id, t.workspace_id, t.key, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
-       t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at
+       t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at,
+       COALESCE(
+           (
+               SELECT jsonb_agg(
+                   jsonb_strip_nulls(
+                       jsonb_build_object(
+                           'key', reward.reward_key,
+                           'type', reward.reward_type,
+                           'quantity', reward.quantity,
+                           'scale', reward.scale,
+                           'unit', reward.duration_unit
+                       )
+                   )
+                   ORDER BY reward.position, reward.id
+               )
+               FROM task_reward AS reward
+               WHERE reward.workspace_id = t.workspace_id
+                 AND reward.task_id = t.id
+           ),
+           '[]'::jsonb
+       )::text AS rewards
 FROM task_definition t 
 WHERE t.workspace_id = $1
   AND t.action_key = $2
+  AND t.action_kind IN ('app_action', 'amount_action', 'advertisement_view')
   AND t.is_active = true
   AND t.deleted_at IS NULL
 ORDER BY t.branch_sort_key, t.sequence_position, t.position, t.id
@@ -4076,6 +4241,7 @@ type ListRecordCatalogRow struct {
 	Position         int32                 `json:"position"`
 	StartAt          sql.NullTime          `json:"start_at"`
 	EndAt            sql.NullTime          `json:"end_at"`
+	Rewards          string                `json:"rewards"`
 }
 
 func (q *Queries) ListRecordCatalog(ctx context.Context, arg ListRecordCatalogParams) ([]ListRecordCatalogRow, error) {
@@ -4107,6 +4273,7 @@ func (q *Queries) ListRecordCatalog(ctx context.Context, arg ListRecordCatalogPa
 			&i.Position,
 			&i.StartAt,
 			&i.EndAt,
+			&i.Rewards,
 		); err != nil {
 			return nil, err
 		}
@@ -4569,6 +4736,90 @@ func (q *Queries) RefreshTaskDailyStats(ctx context.Context, arg RefreshTaskDail
 	return err
 }
 
+const releasePartnerIssueStartLease = `-- name: ReleasePartnerIssueStartLease :execrows
+DELETE FROM task_partner_issue_start_lease
+WHERE workspace_id = $1
+  AND issue_id = $2
+  AND lease_token = $3
+`
+
+type ReleasePartnerIssueStartLeaseParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	IssueID     int64  `json:"issue_id"`
+	LeaseToken  string `json:"lease_token"`
+}
+
+func (q *Queries) ReleasePartnerIssueStartLease(ctx context.Context, arg ReleasePartnerIssueStartLeaseParams) (int64, error) {
+	result, err := q.exec(ctx, q.releasePartnerIssueStartLeaseStmt, releasePartnerIssueStartLease, arg.WorkspaceID, arg.IssueID, arg.LeaseToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const renewPartnerIssueStartLease = `-- name: RenewPartnerIssueStartLease :execrows
+UPDATE task_partner_issue_start_lease
+SET lease_until = now() + (
+        $1::bigint * INTERVAL '1 millisecond'
+    ),
+    updated_at = now()
+WHERE workspace_id = $2::varchar
+  AND issue_id = $3::bigint
+  AND lease_token = $4::varchar
+  AND lease_until > now()
+`
+
+type RenewPartnerIssueStartLeaseParams struct {
+	LeaseDurationMilliseconds int64  `json:"lease_duration_milliseconds"`
+	WorkspaceID               string `json:"workspace_id"`
+	IssueID                   int64  `json:"issue_id"`
+	LeaseToken                string `json:"lease_token"`
+}
+
+func (q *Queries) RenewPartnerIssueStartLease(ctx context.Context, arg RenewPartnerIssueStartLeaseParams) (int64, error) {
+	result, err := q.exec(ctx, q.renewPartnerIssueStartLeaseStmt, renewPartnerIssueStartLease,
+		arg.LeaseDurationMilliseconds,
+		arg.WorkspaceID,
+		arg.IssueID,
+		arg.LeaseToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const reserveRewardOperation = `-- name: ReserveRewardOperation :execrows
+INSERT INTO task_reward_operation (
+    workspace_id,
+    operation_id,
+    source_kind,
+    source_id
+)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (workspace_id, operation_id) DO NOTHING
+`
+
+type ReserveRewardOperationParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	OperationID string `json:"operation_id"`
+	SourceKind  string `json:"source_kind"`
+	SourceID    int64  `json:"source_id"`
+}
+
+func (q *Queries) ReserveRewardOperation(ctx context.Context, arg ReserveRewardOperationParams) (int64, error) {
+	result, err := q.exec(ctx, q.reserveRewardOperationStmt, reserveRewardOperation,
+		arg.WorkspaceID,
+		arg.OperationID,
+		arg.SourceKind,
+		arg.SourceID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokePartnerIssue = `-- name: RevokePartnerIssue :execrows
 UPDATE task_partner_issue
 SET status = CASE
@@ -4595,30 +4846,46 @@ func (q *Queries) RevokePartnerIssue(ctx context.Context, arg RevokePartnerIssue
 }
 
 const updatePartnerIssueStart = `-- name: UpdatePartnerIssueStart :execrows
-UPDATE task_partner_issue
-SET external_click_id = COALESCE(NULLIF($1, ''), external_click_id),
-    started_at = COALESCE(started_at, now()),
-    public_payload = $2,
-    private_payload = $3,
+UPDATE task_partner_issue AS issue
+SET external_click_id = COALESCE(
+        NULLIF($1::varchar, ''),
+        issue.external_click_id
+    ),
+    started_at = now(),
+    public_payload = $2::jsonb,
+    private_payload = $3::jsonb,
     updated_at = now()
-WHERE workspace_id = $4 AND id = $5 AND status = 'issued'
+WHERE issue.workspace_id = $4::varchar
+  AND issue.id = $5::bigint
+  AND issue.status IN ('issued', 'completed')
+  AND issue.started_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM task_partner_issue_start_lease AS lease
+      WHERE lease.workspace_id = $4::varchar
+        AND lease.issue_id = $5::bigint
+        AND lease.lease_token = $6::varchar
+        AND lease.lease_until > now()
+  )
 `
 
 type UpdatePartnerIssueStartParams struct {
-	Column1        interface{}           `json:"column_1"`
-	PublicPayload  pqtype.NullRawMessage `json:"public_payload"`
-	PrivatePayload pqtype.NullRawMessage `json:"private_payload"`
-	WorkspaceID    string                `json:"workspace_id"`
-	ID             int64                 `json:"id"`
+	ExternalClickID string          `json:"external_click_id"`
+	PublicPayload   json.RawMessage `json:"public_payload"`
+	PrivatePayload  json.RawMessage `json:"private_payload"`
+	WorkspaceID     string          `json:"workspace_id"`
+	IssueID         int64           `json:"issue_id"`
+	LeaseToken      string          `json:"lease_token"`
 }
 
 func (q *Queries) UpdatePartnerIssueStart(ctx context.Context, arg UpdatePartnerIssueStartParams) (int64, error) {
 	result, err := q.exec(ctx, q.updatePartnerIssueStartStmt, updatePartnerIssueStart,
-		arg.Column1,
+		arg.ExternalClickID,
 		arg.PublicPayload,
 		arg.PrivatePayload,
 		arg.WorkspaceID,
-		arg.ID,
+		arg.IssueID,
+		arg.LeaseToken,
 	)
 	if err != nil {
 		return 0, err
@@ -4662,27 +4929,29 @@ func (q *Queries) UpdateProgress(ctx context.Context, arg UpdateProgressParams) 
 const upsertProgress = `-- name: UpsertProgress :execrows
 INSERT INTO task_progress (
     workspace_id, task_id, app_id, platform_id, platform_user_id,
-    period_start_at, period_end_at, progress, status, ready_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    period_start_at, period_end_at, progress, status, ready_at, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET
     period_end_at = EXCLUDED.period_end_at,
     progress = EXCLUDED.progress,
     status = EXCLUDED.status,
     ready_at = EXCLUDED.ready_at,
+    rewards_snapshot = COALESCE(task_progress.rewards_snapshot, EXCLUDED.rewards_snapshot),
     updated_at = now()
 `
 
 type UpsertProgressParams struct {
-	WorkspaceID    string       `json:"workspace_id"`
-	TaskID         int64        `json:"task_id"`
-	AppID          int64        `json:"app_id"`
-	PlatformID     int64        `json:"platform_id"`
-	PlatformUserID string       `json:"platform_user_id"`
-	PeriodStartAt  time.Time    `json:"period_start_at"`
-	PeriodEndAt    time.Time    `json:"period_end_at"`
-	Progress       int64        `json:"progress"`
-	Status         string       `json:"status"`
-	ReadyAt        sql.NullTime `json:"ready_at"`
+	WorkspaceID     string                `json:"workspace_id"`
+	TaskID          int64                 `json:"task_id"`
+	AppID           int64                 `json:"app_id"`
+	PlatformID      int64                 `json:"platform_id"`
+	PlatformUserID  string                `json:"platform_user_id"`
+	PeriodStartAt   time.Time             `json:"period_start_at"`
+	PeriodEndAt     time.Time             `json:"period_end_at"`
+	Progress        int64                 `json:"progress"`
+	Status          string                `json:"status"`
+	ReadyAt         sql.NullTime          `json:"ready_at"`
+	RewardsSnapshot pqtype.NullRawMessage `json:"rewards_snapshot"`
 }
 
 func (q *Queries) UpsertProgress(ctx context.Context, arg UpsertProgressParams) (int64, error) {
@@ -4697,6 +4966,7 @@ func (q *Queries) UpsertProgress(ctx context.Context, arg UpsertProgressParams) 
 		arg.Progress,
 		arg.Status,
 		arg.ReadyAt,
+		arg.RewardsSnapshot,
 	)
 	if err != nil {
 		return 0, err

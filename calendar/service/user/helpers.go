@@ -51,6 +51,21 @@ func mapRecord(value repository.RecordResult) RecordResult {
 	return result
 }
 
+func hideFutureRewardSteps(result *RecordResult) {
+	if result == nil || !result.Calendar.HideFutureRewards {
+		return
+	}
+
+	maxPosition := result.Progress.CurrentPosition + 1
+	filtered := result.Calendar.Steps[:0]
+	for _, step := range result.Calendar.Steps {
+		if step.Position <= maxPosition {
+			filtered = append(filtered, step)
+		}
+	}
+	result.Calendar.Steps = filtered
+}
+
 func repositoryIdentity(value Identity) repository.Identity {
 	return repository.Identity{
 		WorkspaceID: value.WorkspaceID, AppID: value.AppID,

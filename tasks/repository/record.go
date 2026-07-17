@@ -2,18 +2,48 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	json "github.com/goccy/go-json"
+	"math"
+	"strings"
 	"time"
 
+	json "github.com/goccy/go-json"
+
+	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+var ErrRecordAmountOverflow = serviceerrors.New(
+	serviceerrors.CodeInvalidFields,
+	"tasks record amount exceeds BIGINT",
+)
+
+var (
+	ErrOperationIDRequired = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"tasks operation id is required",
+	)
+	ErrOperationIDInvalid = serviceerrors.New(
+		serviceerrors.CodeInvalidFields,
+		"tasks operation id is invalid",
+	)
+	ErrOperationIDConflict = serviceerrors.New(
+		serviceerrors.CodeConflict,
+		"tasks operation id is already used",
+	)
+)
+
 func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordResult, error) {
+	if err := params.Identity.Validate(); err != nil {
+		return RecordResult{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -21,6 +51,9 @@ func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordRes
 	amount := params.Amount
 	if amount == 0 {
 		amount = 1
+	}
+	if amount > math.MaxInt64 {
+		return RecordResult{}, ErrRecordAmountOverflow
 	}
 	for attempt := 0; attempt < 3; attempt++ {
 		result := RecordResult{Status: RecordStatusNoTasks, Remaining: amount}
@@ -188,15 +221,24 @@ func (r *Repository) recordInTx(
 					progress.Status = StatusReady
 					progress.ReadyAt = &now
 					progressUpserts = append(progressUpserts, recordProgressUpsert{
-						taskID: task.ID, periodStartAt: periodStart, periodEndAt: periodEnd,
-						progress: progress.Progress, status: progress.Status, readyAt: progress.ReadyAt,
+						taskID:        task.ID,
+						periodStartAt: periodStart,
+						periodEndAt:   periodEnd,
+						delta:         consume,
+						status:        progress.Status,
+						readyAt:       progress.ReadyAt,
+						rewards:       task.Rewards,
 					})
 					changedTaskIDs = append(changedTaskIDs, task.ID)
 				}
 			} else {
 				progressUpserts = append(progressUpserts, recordProgressUpsert{
-					taskID: task.ID, periodStartAt: periodStart, periodEndAt: periodEnd,
-					progress: progress.Progress, status: StatusOpen,
+					taskID:        task.ID,
+					periodStartAt: periodStart,
+					periodEndAt:   periodEnd,
+					delta:         consume,
+					status:        StatusOpen,
+					rewards:       task.Rewards,
 				})
 			}
 			result.Status = RecordStatusRecorded
@@ -298,12 +340,22 @@ func catalogHasSequenceTasks(catalog []Task) bool {
 }
 
 func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult, error) {
+	if err := params.Identity.Validate(); err != nil {
+		return ClaimResult{}, err
+	}
+
+	operationID, err := validateOperationID(params.OperationID)
+	if err != nil {
+		return ClaimResult{}, err
+	}
+	params.OperationID = operationID
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	result := ClaimResult{Status: ClaimStatusNotFound}
-	err := r.WithTx(ctx, func(txRepo *Repository) error {
+	err = r.WithTx(ctx, func(txRepo *Repository) error {
 		id, key := taskRef(params.TaskRef)
 		var task Task
 		var err error
@@ -348,6 +400,11 @@ func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult
 		}
 		switch task.Progress.Status {
 		case StatusClaimed:
+			if task.Progress.OperationID == nil ||
+				*task.Progress.OperationID != params.OperationID {
+				return ErrOperationIDConflict
+			}
+
 			result.Status = ClaimStatusAlreadyDone
 			return nil
 		case StatusReady:
@@ -366,6 +423,10 @@ func (r *Repository) Claim(ctx context.Context, params ClaimParams) (ClaimResult
 }
 
 func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (StartTaskResult, error) {
+	if err := params.Identity.Validate(); err != nil {
+		return StartTaskResult{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -417,6 +478,12 @@ func (r *Repository) StartTask(ctx context.Context, params StartTaskParams) (Sta
 			if !isNoRows(err) {
 				return err
 			}
+
+			task.Rewards, err = txRepo.rewards(ctx, task.WorkspaceID, task.ID)
+			if err != nil {
+				return err
+			}
+
 			progress, err = txRepo.ensureProgress(ctx, params.Identity, task, periodStart, periodEnd)
 			if err != nil {
 				return err
@@ -485,9 +552,16 @@ func (r *Repository) ensureProgress(
 ) (Progress, error) {
 	id, err := repositoryValue[int64](ctx, r, func(ctx context.Context) (int64, error) {
 		return r.q.EnsureProgress(ctx, tasksqlc.EnsureProgressParams{
-			WorkspaceID: identity.WorkspaceID, TaskID: int64(task.ID), AppID: identity.AppID,
-			PlatformID: identity.PlatformID, PlatformUserID: identity.PlatformUserID,
-			PeriodStartAt: start, PeriodEndAt: end,
+			WorkspaceID:    identity.WorkspaceID,
+			TaskID:         int64(task.ID),
+			AppID:          identity.AppID,
+			PlatformID:     identity.PlatformID,
+			PlatformUserID: identity.PlatformUserID,
+			PeriodStartAt:  start,
+			PeriodEndAt:    end,
+			RewardsSnapshot: rawMessageParam(
+				rewardsSnapshot(task.Rewards),
+			),
 		})
 	})
 	if err != nil {
@@ -495,7 +569,7 @@ func (r *Repository) ensureProgress(
 	}
 	return Progress{
 		ID: uint64(id), Progress: 0, Status: StatusOpen,
-		PeriodStartAt: start, PeriodEndAt: end, Rewards: make([]Reward, 0),
+		PeriodStartAt: start, PeriodEndAt: end, Rewards: task.Rewards,
 	}, nil
 }
 
@@ -521,7 +595,23 @@ func (r *Repository) claimProgress(
 	operationID string,
 	now time.Time,
 ) error {
-	rewards := task.Rewards
+	reserved, err := r.q.ReserveRewardOperation(ctx, tasksqlc.ReserveRewardOperationParams{
+		WorkspaceID: identity.WorkspaceID,
+		OperationID: operationID,
+		SourceKind:  "task_progress",
+		SourceID:    int64(progress.ID),
+	})
+	if err != nil {
+		return err
+	}
+	if reserved != 1 {
+		return ErrOperationIDConflict
+	}
+
+	rewards := progress.Rewards
+	if rewards == nil {
+		rewards = task.Rewards
+	}
 	if rewards == nil {
 		var err error
 		rewards, err = r.rewards(ctx, task.WorkspaceID, task.ID)
@@ -563,6 +653,20 @@ func (r *Repository) claimProgress(
 	return err
 }
 
+func validateOperationID(value string) (string, error) {
+
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ErrOperationIDRequired
+	}
+	if len(value) > 128 {
+		return "", ErrOperationIDInvalid
+	}
+
+	return value, nil
+
+}
+
 func (r *Repository) advanceSequenceState(ctx context.Context, identity Identity, task *Task) error {
 	if task.SequenceKey == nil || task.SequencePosition == nil {
 		return nil
@@ -601,7 +705,9 @@ func rewardsSnapshot(rewards []Reward) json.RawMessage {
 
 func autoOperationID(eventKey string, taskID uint64) string {
 	if eventKey != "" {
-		return eventKey
+		digest := sha256.Sum256([]byte(eventKey))
+
+		return fmt.Sprintf("auto:%d:%s", taskID, hex.EncodeToString(digest[:16]))
 	}
 	return fmt.Sprintf("auto-%d-%d", taskID, time.Now().UnixNano())
 }

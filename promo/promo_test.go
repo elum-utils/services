@@ -37,6 +37,53 @@ func TestIsReady(t *testing.T) {
 	}
 }
 
+func TestPromoRunBlocksUntilContextCanceled(t *testing.T) {
+	newPromoTestService(t)
+	service := New(DatabaseParams{
+		User:     promoTestPGUser,
+		Password: promoTestPGPassword,
+		Database: promoTestDB,
+		Host:     promoTestPGHost,
+		Port:     promoTestPGPort,
+		Options:  promoTestOptions(),
+	})
+	runCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- service.Run(runCtx)
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !service.IsReady() {
+		select {
+		case err := <-done:
+			cancel()
+			t.Fatalf("Run returned before readiness: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("promo service did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := service.Run(context.Background()); !errors.Is(err, ErrServiceRunning) {
+		cancel()
+		t.Fatalf("second Run error = %v, want ErrServiceRunning", err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("promo Run did not stop after cancellation")
+	}
+}
+
 func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 	cache := testsupport.NewCache()
 	options := promoTestOptions()
@@ -55,7 +102,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 	t.Cleanup(func() { _ = nodeB.Close() })
 
 	promoID, err := nodeA.Admin.CreatePromo(context.Background(), admin.SavePromoParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		Code:        "CACHE",
 		Payload:     json.RawMessage(`{"version":1}`),
 		IsActive:    true,
@@ -64,7 +111,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 		t.Fatalf("create cached promo: %v", err)
 	}
 	if err := nodeA.Admin.UpsertLocalization(context.Background(), admin.SaveLocalizationParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		PromoID:     promoID,
 		Locale:      "ru",
 		Title:       "Old title",
@@ -72,7 +119,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 		t.Fatalf("create cached promo localization: %v", err)
 	}
 	if err := nodeA.Admin.UpsertReward(context.Background(), admin.SaveRewardParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		PromoID:     promoID,
 		Key:         "stars",
 		Quantity:    1,
@@ -83,7 +130,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 
 	if _, err := nodeA.Admin.UpdatePromo(context.Background(), admin.SavePromoParams{
 		ID:          promoID,
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		Code:        "CACHE",
 		Payload:     json.RawMessage(`{"version":2}`),
 		IsActive:    true,
@@ -91,7 +138,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 		t.Fatalf("update cached promo: %v", err)
 	}
 	if err := nodeA.Admin.UpsertLocalization(context.Background(), admin.SaveLocalizationParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		PromoID:     promoID,
 		Locale:      "ru",
 		Title:       "New title",
@@ -99,7 +146,7 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 		t.Fatalf("update cached promo localization: %v", err)
 	}
 	if err := nodeA.Admin.UpsertReward(context.Background(), admin.SaveRewardParams{
-		WorkspaceID: "cache-workspace",
+		WorkspaceID: testsupport.WorkspaceID("cache-workspace"),
 		PromoID:     promoID,
 		Key:         "stars",
 		Quantity:    2,
@@ -110,10 +157,12 @@ func TestPromoCacheVersionInvalidatesOtherNode(t *testing.T) {
 }
 
 func TestPromoImportBatchesMoreThanPostgresParameterLimit(t *testing.T) {
-	service := newPromoTestService(t)
+	options := promoTestOptions()
+	options.QueryTimeout = 30 * time.Second
+	service := newPromoTestServiceWithOptions(t, options)
 	const promoCount = 6667
 	promos := make([]repository.ExportPromo, 0, promoCount)
-	for index := 0; index < promoCount; index++ {
+	for index := range promoCount {
 		promos = append(promos, repository.ExportPromo{
 			Code:     fmt.Sprintf("LARGE%05d", index),
 			Payload:  json.RawMessage(`{}`),
@@ -121,7 +170,7 @@ func TestPromoImportBatchesMoreThanPostgresParameterLimit(t *testing.T) {
 		})
 	}
 
-	result, err := service.Admin.Import(context.Background(), "large-workspace", admin.ImportRequest{
+	result, err := service.Admin.Import(context.Background(), testsupport.WorkspaceID("large-workspace"), admin.ImportRequest{
 		Package: admin.ExportPackage{
 			Format:  repository.ExportFormat,
 			Service: "promo",
@@ -145,7 +194,7 @@ func TestPromoImportSerializesWithAdminWrite(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
-	workspaceID := "concurrent-workspace"
+	workspaceID := testsupport.WorkspaceID("concurrent-workspace")
 
 	transaction, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -231,7 +280,7 @@ WHERE datname = current_database()
 
 func assertPromoCacheRead(t *testing.T, service *Promo, promoID uint64, title string, quantity int64) {
 	t.Helper()
-	value, err := service.Admin.GetPromo(context.Background(), "cache-workspace", promoID)
+	value, err := service.Admin.GetPromo(context.Background(), testsupport.WorkspaceID("cache-workspace"), promoID)
 	if err != nil || len(value.Localizations) != 1 || value.Localizations[0].Title != title ||
 		len(value.Rewards) != 1 || value.Rewards[0].Quantity != quantity {
 		t.Fatalf("promo node returned stale catalog: promo=%+v err=%v", value, err)
@@ -250,29 +299,29 @@ func TestPromoApplyLifecycleAndCallback(t *testing.T) {
 	service := newPromoTestService(t)
 	ctx := context.Background()
 	promoID, err := service.Admin.CreatePromo(ctx, admin.SavePromoParams{
-		WorkspaceID: "workspace-a", Code: "SUMMER2026",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), Code: "SUMMER2026",
 		Payload: json.RawMessage(`{"image":"summer.png"}`), MaxActivations: 10, IsActive: true,
 	})
 	if err != nil {
 		t.Fatalf("create promo: %v", err)
 	}
 	if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-		WorkspaceID: "workspace-a", PromoID: promoID, Locale: "ru",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), PromoID: promoID, Locale: "ru",
 		Title: "Летний промо", Description: "Описание",
 	}); err != nil {
 		t.Fatalf("upsert localization: %v", err)
 	}
 	if err := service.Admin.UpsertReward(ctx, admin.SaveRewardParams{
-		WorkspaceID: "workspace-a", PromoID: promoID, Key: "coin", Quantity: 100,
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), PromoID: promoID, Key: "coin", Quantity: 100,
 	}); err != nil {
 		t.Fatalf("upsert reward: %v", err)
 	}
-	reward, err := service.Admin.GetReward(ctx, "workspace-a", promoID, "coin")
+	reward, err := service.Admin.GetReward(ctx, testsupport.WorkspaceID("workspace-a"), promoID, "coin")
 	if err != nil || reward.Key != "coin" || reward.Quantity != 100 {
 		t.Fatalf("get reward: %+v, err=%v", reward, err)
 	}
 	identity := user.Identity{
-		WorkspaceID: "workspace-a", AppID: 1, PlatformID: 2, PlatformUserID: "player",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), AppID: 1, PlatformID: 2, PlatformUserID: "player",
 	}
 	first, err := service.User.Apply(ctx, user.ApplyParams{Identity: identity, Code: " summer2026 ", Locale: "ru"})
 	if err != nil {
@@ -290,26 +339,47 @@ func TestPromoApplyLifecycleAndCallback(t *testing.T) {
 		second.Redemption == nil || first.Redemption.ID != second.Redemption.ID {
 		t.Fatalf("unexpected repeated result: %+v", second)
 	}
+	if !first.Redemption.RedeemedAt.Equal(second.Redemption.RedeemedAt) {
+		t.Fatalf(
+			"redemption timestamp changed between apply calls: first=%s second=%s",
+			first.Redemption.RedeemedAt,
+			second.Redemption.RedeemedAt,
+		)
+	}
 	if err := service.Admin.UpsertReward(ctx, admin.SaveRewardParams{
-		WorkspaceID: "workspace-a", PromoID: promoID, Key: "coin", Quantity: 999,
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"), PromoID: promoID, Key: "coin", Quantity: 999,
 	}); err != nil {
 		t.Fatalf("update reward after redemption: %v", err)
+	}
+	afterRewardUpdate, err := service.User.Apply(ctx, user.ApplyParams{
+		Identity: identity,
+		Code:     "SUMMER2026",
+		Locale:   "ru",
+	})
+	if err != nil {
+		t.Fatalf("apply promo after reward update: %v", err)
+	}
+	if afterRewardUpdate.Status != repository.StatusAlreadyApplied ||
+		len(afterRewardUpdate.Promo.Rewards) != 1 ||
+		afterRewardUpdate.Promo.Rewards[0].Key != "coin" ||
+		afterRewardUpdate.Promo.Rewards[0].Quantity != 100 {
+		t.Fatalf("redemption reward snapshot changed: %+v", afterRewardUpdate)
 	}
 	redemption, err := service.Admin.GetUserRedemption(ctx, identity, promoID)
 	if err != nil || redemption == nil || redemption.ID != first.Redemption.ID {
 		t.Fatalf("get user redemption: %+v, err=%v", redemption, err)
 	}
-	if err := service.Admin.RefreshDailyStats(ctx, "workspace-a", time.Now().Add(-time.Hour), time.Now().Add(time.Hour)); err != nil {
+	if err := service.Admin.RefreshDailyStats(ctx, testsupport.WorkspaceID("workspace-a"), time.Now().Add(-time.Hour), time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("refresh daily stats: %v", err)
 	}
 	daily, err := service.Admin.ListDailyStats(
-		ctx, "workspace-a", promoID, time.Now().Add(-24*time.Hour), time.Now().Add(24*time.Hour),
+		ctx, testsupport.WorkspaceID("workspace-a"), promoID, time.Now().Add(-24*time.Hour), time.Now().Add(24*time.Hour),
 	)
 	if err != nil || len(daily) != 1 || daily[0].RedemptionCount != 1 || daily[0].UniqueUsers != 1 {
 		t.Fatalf("daily stats: %+v, err=%v", daily, err)
 	}
 	events, err := service.Admin.ListCallbackEvents(ctx, admin.CallbackEventListParams{
-		WorkspaceID: "workspace-a",
+		WorkspaceID: testsupport.WorkspaceID("workspace-a"),
 		Page:        admin.Page{Limit: 10},
 	})
 	if err != nil {
@@ -333,7 +403,12 @@ func TestPromoApplyLifecycleAndCallback(t *testing.T) {
 		}
 		cancel()
 		return nil
-	}, WithCallbackIdleDelay(10*time.Millisecond))
+	},
+		WithCallbackWorkerID("promo-test-worker"),
+		WithCallbackBatchSize(10),
+		WithCallbackLeaseTimeout(time.Second),
+		WithCallbackIdleDelay(10*time.Millisecond),
+	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("OnCallback error = %v", err)
 	}
@@ -343,33 +418,41 @@ func TestPromoImportExportCycle(t *testing.T) {
 	service := newPromoTestService(t)
 	ctx := context.Background()
 	promoID, err := service.Admin.CreatePromo(ctx, admin.SavePromoParams{
-		WorkspaceID: "workspace-export", Code: "EXPORT2026",
+		WorkspaceID: testsupport.WorkspaceID("workspace-export"), Code: "EXPORT2026",
 		Payload: json.RawMessage(`{"source":"export"}`), MaxActivations: 5, IsActive: true,
 	})
 	if err != nil {
 		t.Fatalf("create promo: %v", err)
 	}
 	if err := service.Admin.UpsertLocalization(ctx, admin.SaveLocalizationParams{
-		WorkspaceID: "workspace-export", PromoID: promoID, Locale: "ru",
+		WorkspaceID: testsupport.WorkspaceID("workspace-export"), PromoID: promoID, Locale: "ru",
 		Title: "Промо", Description: "Описание",
 	}); err != nil {
 		t.Fatalf("upsert localization: %v", err)
 	}
 	if err := service.Admin.UpsertReward(ctx, admin.SaveRewardParams{
-		WorkspaceID: "workspace-export", PromoID: promoID, Key: "stars", Quantity: 25, Scale: 2,
+		WorkspaceID: testsupport.WorkspaceID("workspace-export"), PromoID: promoID, Key: "stars", Quantity: 25, Scale: 2,
 	}); err != nil {
 		t.Fatalf("upsert reward: %v", err)
 	}
-	pkg, err := service.Admin.Export(ctx, "workspace-export", admin.ExportRequest{})
+	pkg, err := service.Admin.Export(ctx, testsupport.WorkspaceID("workspace-export"), admin.ExportRequest{})
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	if _, err := service.Admin.Import(ctx, "workspace-import", admin.ImportRequest{
+	preview, err := service.Admin.PreviewImport(
+		ctx,
+		testsupport.WorkspaceID("workspace-import"),
+		pkg,
+	)
+	if err != nil || preview.Counts.Promos != 1 || len(preview.Conflicts) != 0 {
+		t.Fatalf("preview import: value=%+v err=%v", preview, err)
+	}
+	if _, err := service.Admin.Import(ctx, testsupport.WorkspaceID("workspace-import"), admin.ImportRequest{
 		Package: pkg, ConflictStrategy: repository.ImportConflictUpdate,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	imported, err := service.Admin.Export(ctx, "workspace-import", admin.ExportRequest{})
+	imported, err := service.Admin.Export(ctx, testsupport.WorkspaceID("workspace-import"), admin.ExportRequest{})
 	if err != nil {
 		t.Fatalf("export imported: %v", err)
 	}
@@ -377,12 +460,59 @@ func TestPromoImportExportCycle(t *testing.T) {
 		len(imported.Promos[0].Rewards) != 1 || imported.Promos[0].Rewards[0].Scale != 2 {
 		t.Fatalf("unexpected imported package: %+v", imported)
 	}
+	importIdentity := user.Identity{
+		WorkspaceID:    testsupport.WorkspaceID("workspace-import"),
+		AppID:          7,
+		PlatformID:     8,
+		PlatformUserID: "import-history",
+	}
+	beforeReplace, err := service.User.Apply(ctx, user.ApplyParams{
+		Identity: importIdentity,
+		Code:     "EXPORT2026",
+		Locale:   "ru",
+	})
+	if err != nil || beforeReplace.Status != repository.StatusSuccess {
+		t.Fatalf("apply imported promo before replacement: result=%+v err=%v", beforeReplace, err)
+	}
+
+	pkg.Promos[0].Localization = nil
+	pkg.Promos[0].Rewards = nil
+	if _, err := service.Admin.Import(ctx, testsupport.WorkspaceID("workspace-import"), admin.ImportRequest{
+		Package:          pkg,
+		ConflictStrategy: repository.ImportConflictUpdate,
+	}); err != nil {
+		t.Fatalf("replace imported promo: %v", err)
+	}
+	replaced, err := service.Admin.Export(
+		ctx,
+		testsupport.WorkspaceID("workspace-import"),
+		admin.ExportRequest{},
+	)
+	if err != nil {
+		t.Fatalf("export replaced promo: %v", err)
+	}
+	if len(replaced.Promos) != 1 ||
+		len(replaced.Promos[0].Localization) != 0 ||
+		len(replaced.Promos[0].Rewards) != 0 {
+		t.Fatalf("update_existing kept removed promo children: %+v", replaced.Promos)
+	}
+	afterReplace, err := service.User.Apply(ctx, user.ApplyParams{
+		Identity: importIdentity,
+		Code:     "EXPORT2026",
+		Locale:   "ru",
+	})
+	if err != nil ||
+		afterReplace.Status != repository.StatusAlreadyApplied ||
+		len(afterReplace.Promo.Rewards) != 1 ||
+		afterReplace.Promo.Rewards[0].Key != "stars" {
+		t.Fatalf("replace changed redemption snapshot: result=%+v err=%v", afterReplace, err)
+	}
 }
 
 func TestPromoStatusesAndAdminCRUD(t *testing.T) {
 	service := newPromoTestService(t)
 	ctx := context.Background()
-	identity := user.Identity{WorkspaceID: "workspace-s", AppID: 1, PlatformID: 1, PlatformUserID: "user"}
+	identity := user.Identity{WorkspaceID: testsupport.WorkspaceID("workspace-s"), AppID: 1, PlatformID: 1, PlatformUserID: "user"}
 
 	assertStatus := func(code string, expected string) {
 		t.Helper()
@@ -440,10 +570,18 @@ func TestPromoStatusesAndAdminCRUD(t *testing.T) {
 	if _, err := service.Admin.GetLocalization(ctx, identity.WorkspaceID, promoID, "ru"); err != nil {
 		t.Fatalf("get localization: %v", err)
 	}
+	localizations, err := service.Admin.ListLocalizations(ctx, identity.WorkspaceID, promoID)
+	if err != nil || len(localizations) != 1 || localizations[0].Title != "Title" {
+		t.Fatalf("list localizations: values=%+v err=%v", localizations, err)
+	}
 	if err := service.Admin.UpsertReward(ctx, admin.SaveRewardParams{
 		WorkspaceID: identity.WorkspaceID, PromoID: promoID, Key: "gem", Quantity: 5,
 	}); err != nil {
 		t.Fatalf("upsert reward: %v", err)
+	}
+	rewards, err := service.Admin.ListRewards(ctx, identity.WorkspaceID, promoID)
+	if err != nil || len(rewards) != 1 || rewards[0].Key != "gem" {
+		t.Fatalf("list rewards: values=%+v err=%v", rewards, err)
 	}
 	if _, err := service.Admin.GetPromo(ctx, identity.WorkspaceID, promoID); err != nil {
 		t.Fatalf("get promo: %v", err)
@@ -467,11 +605,94 @@ func TestPromoStatusesAndAdminCRUD(t *testing.T) {
 	assertStatus("crud", repository.StatusNotFound)
 }
 
+func TestPromoAdminCallbackControls(t *testing.T) {
+
+	service := newPromoTestService(t)
+	ctx := context.Background()
+	workspaceID := testsupport.WorkspaceID("callback-controls")
+	promoID, err := service.Admin.CreatePromo(ctx, admin.SavePromoParams{
+		WorkspaceID:    workspaceID,
+		Code:           "CALLBACK-CONTROLS",
+		Payload:        json.RawMessage(`{}`),
+		MaxActivations: 10,
+		IsActive:       true,
+	})
+	if err != nil {
+		t.Fatalf("create promo: %v", err)
+	}
+	if err := service.Admin.UpsertReward(ctx, admin.SaveRewardParams{
+		WorkspaceID: workspaceID,
+		PromoID:     promoID,
+		Key:         "coin",
+		Quantity:    1,
+	}); err != nil {
+		t.Fatalf("create promo reward: %v", err)
+	}
+
+	for index := 0; index < 3; index++ {
+		result, err := service.User.Apply(ctx, user.ApplyParams{
+			Identity: user.Identity{
+				WorkspaceID:    workspaceID,
+				AppID:          1,
+				PlatformID:     1,
+				PlatformUserID: fmt.Sprintf("callback-user-%d", index),
+			},
+			Code: "CALLBACK-CONTROLS",
+		})
+		if err != nil || result.Status != repository.StatusSuccess {
+			t.Fatalf("apply promo %d: result=%+v err=%v", index, result, err)
+		}
+	}
+
+	events, err := service.Admin.ListCallbackEvents(ctx, admin.CallbackEventListParams{
+		WorkspaceID: workspaceID,
+		Page:        admin.Page{Limit: 10},
+	})
+	if err != nil || len(events) != 3 {
+		t.Fatalf("list callback events: values=%+v err=%v", events, err)
+	}
+	loaded, err := service.Admin.GetCallbackEvent(ctx, workspaceID, events[0].ID)
+	if err != nil || loaded.ID != events[0].ID {
+		t.Fatalf("get callback event: value=%+v err=%v", loaded, err)
+	}
+	if changed, err := service.Admin.RetryCallbackEventNow(ctx, workspaceID, events[0].ID); err != nil || changed != 1 {
+		t.Fatalf("retry callback: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.MarkCallbackEventOK(ctx, workspaceID, events[0].ID); err != nil || changed != 1 {
+		t.Fatalf("mark callback ok: changed=%d err=%v", changed, err)
+	}
+	if changed, err := service.Admin.MarkCallbackEventReject(
+		ctx,
+		workspaceID,
+		events[1].ID,
+		"manual reject",
+	); err != nil || changed != 1 {
+		t.Fatalf("mark callback reject: changed=%d err=%v", changed, err)
+	}
+
+	db, err := openPromoPostgres(promoTestDB)
+	if err != nil {
+		t.Fatalf("open promo callback database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.ExecContext(ctx, `
+		UPDATE promo_clb_event
+		SET status = 'processing', locked_until = now() - interval '1 minute'
+		WHERE id = $1
+	`, events[2].ID); err != nil {
+		t.Fatalf("expire callback lease: %v", err)
+	}
+	if changed, err := service.Admin.ResetExpiredCallbackProcessing(ctx, workspaceID); err != nil || changed != 1 {
+		t.Fatalf("reset callback processing: changed=%d err=%v", changed, err)
+	}
+
+}
+
 func TestPromoConcurrentLifetimeLimit(t *testing.T) {
 	service := newPromoTestService(t)
 	ctx := context.Background()
 	promoID, err := service.Admin.CreatePromo(ctx, admin.SavePromoParams{
-		WorkspaceID: "workspace-limit", Code: "LIMITED", Payload: json.RawMessage(`{}`),
+		WorkspaceID: testsupport.WorkspaceID("workspace-limit"), Code: "LIMITED", Payload: json.RawMessage(`{}`),
 		MaxActivations: 3, IsActive: true,
 	})
 	if err != nil {
@@ -488,7 +709,7 @@ func TestPromoConcurrentLifetimeLimit(t *testing.T) {
 			defer wait.Done()
 			result, err := service.User.Apply(ctx, user.ApplyParams{
 				Identity: user.Identity{
-					WorkspaceID: "workspace-limit", AppID: 1, PlatformID: 1,
+					WorkspaceID: testsupport.WorkspaceID("workspace-limit"), AppID: 1, PlatformID: 1,
 					PlatformUserID: fmt.Sprintf("user-%d", index),
 				},
 				Code: "limited",
@@ -516,14 +737,14 @@ func TestPromoConcurrentLifetimeLimit(t *testing.T) {
 	if success != 3 {
 		t.Fatalf("successful activations = %d, want 3", success)
 	}
-	stats, err := service.Admin.GetStats(ctx, "workspace-limit", promoID)
+	stats, err := service.Admin.GetStats(ctx, testsupport.WorkspaceID("workspace-limit"), promoID)
 	if err != nil {
 		t.Fatalf("get stats: %v", err)
 	}
 	if stats.ActivationCount != 3 || stats.RemainingActivations == nil || *stats.RemainingActivations != 0 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
-	redemptions, err := service.Admin.ListRedemptions(ctx, "workspace-limit", promoID, admin.Page{Limit: 20})
+	redemptions, err := service.Admin.ListRedemptions(ctx, testsupport.WorkspaceID("workspace-limit"), promoID, admin.Page{Limit: 20})
 	if err != nil || len(redemptions) != 3 {
 		t.Fatalf("redemptions = %d, err=%v", len(redemptions), err)
 	}

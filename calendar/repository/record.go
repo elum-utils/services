@@ -12,6 +12,10 @@ import (
 )
 
 func (r *Repository) Record(ctx context.Context, params RecordParams) (RecordResult, error) {
+	if err := params.Identity.Validate(); err != nil {
+		return RecordResult{}, err
+	}
+
 	now := params.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -305,7 +309,7 @@ func calculatePosition(calendar Calendar, progress Progress, now time.Time) (uin
 		if err != nil {
 			return 0, nil, false, "", err
 		}
-		position, status := applyEndBehavior(uint32(index), calendar)
+		position, status := positionAtOrdinal(index, calendar)
 		return position, &next, false, status, nil
 	}
 	if progress.IsCompleted && calendar.EndBehavior == EndStop {
@@ -320,31 +324,39 @@ func calculatePosition(calendar Calendar, progress Progress, now time.Time) (uin
 			return 0, &next, false, StatusNotAvailable, nil
 		}
 		reset := false
-		position := progress.CurrentPosition + 1
+		position, status := nextStepPosition(progress.CurrentPosition, calendar)
 		if calendar.Mode == ModeSequentialReset {
 			resetAt := next
 			for range calendar.ResetAfterIntervals {
 				resetAt = addInterval(resetAt, calendar.IntervalUnit, calendar.IntervalCount)
 			}
 			if !now.Before(resetAt) {
-				position = 1
+				position, status = positionAtOrdinal(1, calendar)
 				reset = true
 			}
 		}
-		position, status := applyEndBehavior(position, calendar)
 		following, err := nextAvailableAt(calendar, now)
 		return position, &following, reset, status, err
 	}
-	position, status := applyEndBehavior(1, calendar)
+	position, status := positionAtOrdinal(1, calendar)
 	next, err := nextAvailableAt(calendar, now)
 	return position, &next, false, status, err
 }
 
-func applyEndBehavior(position uint32, calendar Calendar) (uint32, string) {
-	last := calendar.Steps[len(calendar.Steps)-1].Position
-	if position <= last {
-		return position, ""
+func nextStepPosition(current uint32, calendar Calendar) (uint32, string) {
+	for index, step := range calendar.Steps {
+		if step.Position == current {
+			return positionAtOrdinal(uint64(index+2), calendar)
+		}
 	}
+	return 0, StatusCompleted
+}
+
+func positionAtOrdinal(ordinal uint64, calendar Calendar) (uint32, string) {
+	if ordinal > 0 && ordinal <= uint64(len(calendar.Steps)) {
+		return calendar.Steps[ordinal-1].Position, ""
+	}
+	last := calendar.Steps[len(calendar.Steps)-1].Position
 	switch calendar.EndBehavior {
 	case EndRestart:
 		return calendar.Steps[0].Position, ""

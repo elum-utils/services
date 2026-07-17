@@ -12,6 +12,7 @@ func (a *Checkout) CompleteAttempt(ctx context.Context, params CompleteAttemptPa
 	ctx = mergedCtx
 
 	result, err := a.repository.CompleteAttempt(ctx, repository.CompleteAttemptParams{
+		WorkspaceID:       params.WorkspaceID,
 		AttemptID:         params.AttemptID,
 		ProviderCode:      params.ProviderCode,
 		ProviderPaymentID: params.ProviderPaymentID,

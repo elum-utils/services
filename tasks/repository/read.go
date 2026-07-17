@@ -16,6 +16,10 @@ func (r *Repository) ListActive(
 	locale, groupKey string,
 	now time.Time,
 ) ([]ActiveTask, error) {
+	if err := identity.Validate(); err != nil {
+		return nil, err
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}

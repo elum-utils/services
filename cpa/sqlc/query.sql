@@ -22,7 +22,7 @@ FROM cpa_offer
 WHERE workspace_id = $1 AND id = $2
 LIMIT 1;
 
--- name: GetActiveOfferForUpdate :one
+-- name: GetActiveOffer :one
 SELECT *
 FROM cpa_offer
 WHERE workspace_id = $1
@@ -30,15 +30,7 @@ WHERE workspace_id = $1
   AND is_active = TRUE
   AND (start_at IS NULL OR start_at <= now())
   AND (end_at IS NULL OR end_at > now())
-LIMIT 1
-FOR UPDATE;
-
--- name: AdminListOffers :many
-SELECT *
-FROM cpa_offer
-WHERE workspace_id = $1
-ORDER BY created_at DESC, id
-LIMIT $2 OFFSET $3;
+LIMIT 1;
 
 -- name: AdminListOfferIDs :many
 SELECT id
@@ -235,8 +227,8 @@ FOR UPDATE;
 -- name: CreateAssignment :one
 INSERT INTO cpa_assignment (
     workspace_id, cpa_id, app_id, platform_id, platform_user_id,
-    code_id, code, code_mode
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    code_id, code, code_mode, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id;
 
 -- name: GetAssignmentByID :one
@@ -359,7 +351,7 @@ INSERT INTO cpa_stats_daily (
 SELECT
     e.workspace_id,
     e.cpa_id,
-    e.occurred_at::date,
+    (e.occurred_at AT TIME ZONE 'UTC')::date,
     SUM((e.event_type = 'issued')::int)::bigint,
     SUM((e.event_type = 'completed')::int)::bigint,
     COUNT(DISTINCT e.assignment_id)::bigint
@@ -367,7 +359,7 @@ FROM cpa_assignment_event e
 WHERE e.workspace_id = sqlc.arg(refresh_workspace_id)
   AND e.occurred_at >= $1
   AND e.occurred_at < $2
-GROUP BY e.workspace_id, e.cpa_id, e.occurred_at::date
+GROUP BY e.workspace_id, e.cpa_id, (e.occurred_at AT TIME ZONE 'UTC')::date
 ON CONFLICT (workspace_id, cpa_id, stats_date) DO UPDATE SET
     issued_count = EXCLUDED.issued_count,
     completed_count = EXCLUDED.completed_count,

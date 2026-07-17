@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/calendar/repository"
 	"github.com/elum-utils/services/calendar/service/user"
 )
@@ -54,7 +55,10 @@ func (a *Admin) UpdateReward(ctx context.Context, params SaveRewardParams) (int6
 func (a *Admin) GetReward(ctx context.Context, workspaceID, calendarID string, id uint64) (user.RewardModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || calendarID == "" || id == 0 || id > math.MaxInt64 {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return user.RewardModel{}, err
+	}
+	if calendarID == "" || id == 0 || id > math.MaxInt64 {
 		return user.RewardModel{}, ErrCalendarNumberOutOfRange
 	}
 
@@ -70,7 +74,10 @@ func (a *Admin) GetReward(ctx context.Context, workspaceID, calendarID string, i
 func (a *Admin) DeleteReward(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || calendarID == "" || id == 0 || id > math.MaxInt64 {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if calendarID == "" || id == 0 || id > math.MaxInt64 {
 		return 0, ErrCalendarNumberOutOfRange
 	}
 
@@ -78,7 +85,10 @@ func (a *Admin) DeleteReward(ctx context.Context, workspaceID, calendarID string
 }
 
 func validateReward(params SaveRewardParams) error {
-	if params.WorkspaceID == "" || params.CalendarID == "" || params.StepID == 0 ||
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return err
+	}
+	if params.CalendarID == "" || params.StepID == 0 ||
 		params.Key == "" || params.Quantity <= 0 || params.Position == 0 {
 		return ErrRewardRequired
 	}

@@ -69,7 +69,10 @@ func (r *Repository) ListDailyStats(ctx context.Context, workspaceID, cpaID stri
 }
 
 func (r *Repository) RefreshDailyStats(ctx context.Context, workspaceID string, from, until time.Time) error {
-	if workspaceID == "" || from.IsZero() || until.IsZero() || from.After(until) {
+	if err := requireWorkspace(workspaceID); err != nil {
+		return err
+	}
+	if from.IsZero() || until.IsZero() || from.After(until) {
 		return ErrInvalidDateRange
 	}
 

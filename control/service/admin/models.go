@@ -16,7 +16,6 @@ type AccountModel struct {
 
 type IdentityModel struct {
 	AccountID, Provider, Subject string
-	Payload                      json.RawMessage
 	CreatedAt, UpdatedAt         time.Time
 }
 
@@ -64,11 +63,6 @@ type InviteModel struct {
 	ExpiresAt, RevokedAt       *time.Time
 	CreatedAt                  time.Time
 	RoleIDs                    []string
-}
-
-type AuditEventParams struct {
-	WorkspaceID, ActorID, MethodKey, TargetType, TargetID, Result, RequestID string
-	BeforeData, AfterData                                                    json.RawMessage
 }
 
 type AuditEventModel struct {

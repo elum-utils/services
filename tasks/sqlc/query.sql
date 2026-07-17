@@ -254,6 +254,7 @@ JOIN task_definition child
  AND child.is_active = true
  AND child.deleted_at IS NULL
 WHERE c.workspace_id = $1
+  AND c.is_required = true
 ORDER BY c.parent_task_id, c.position, c.condition_task_id;
 
 -- name: ListRecordTasks :many
@@ -310,10 +311,31 @@ ORDER BY branch_sort_key, sequence_position, position, id;
 -- name: ListRecordCatalog :many
 SELECT t.id, t.workspace_id, t.key, t.group_key, t.sequence_key, t.sequence_position,
        t.task_kind, t.action_key, t.action_kind, t.claim_mode, t.start_mode, t.target_count, t.reset_unit,
-       t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at
+       t.reset_every, t.payload, t.target, t.position, t.start_at, t.end_at,
+       COALESCE(
+           (
+               SELECT jsonb_agg(
+                   jsonb_strip_nulls(
+                       jsonb_build_object(
+                           'key', reward.reward_key,
+                           'type', reward.reward_type,
+                           'quantity', reward.quantity,
+                           'scale', reward.scale,
+                           'unit', reward.duration_unit
+                       )
+                   )
+                   ORDER BY reward.position, reward.id
+               )
+               FROM task_reward AS reward
+               WHERE reward.workspace_id = t.workspace_id
+                 AND reward.task_id = t.id
+           ),
+           '[]'::jsonb
+       )::text AS rewards
 FROM task_definition t 
 WHERE t.workspace_id = $1
   AND t.action_key = $2
+  AND t.action_kind IN ('app_action', 'amount_action', 'advertisement_view')
   AND t.is_active = true
   AND t.deleted_at IS NULL
 ORDER BY t.branch_sort_key, t.sequence_position, t.position, t.id;
@@ -400,8 +422,8 @@ WHERE workspace_id = $1
 -- name: EnsureProgress :one
 INSERT INTO task_progress (
     workspace_id, task_id, app_id, platform_id, platform_user_id,
-    period_start_at, period_end_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    period_start_at, period_end_at, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET
     period_end_at = EXCLUDED.period_end_at,
     updated_at = now()
@@ -428,13 +450,14 @@ LIMIT 1;
 -- name: UpsertProgress :execrows
 INSERT INTO task_progress (
     workspace_id, task_id, app_id, platform_id, platform_user_id,
-    period_start_at, period_end_at, progress, status, ready_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    period_start_at, period_end_at, progress, status, ready_at, rewards_snapshot
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (workspace_id, task_id, app_id, platform_id, platform_user_id, period_start_at) DO UPDATE SET
     period_end_at = EXCLUDED.period_end_at,
     progress = EXCLUDED.progress,
     status = EXCLUDED.status,
     ready_at = EXCLUDED.ready_at,
+    rewards_snapshot = COALESCE(task_progress.rewards_snapshot, EXCLUDED.rewards_snapshot),
     updated_at = now();
 
 -- name: UpdateProgress :execrows
@@ -998,8 +1021,9 @@ ORDER BY CASE WHEN external_type = $5 THEN 0 ELSE 1 END, position, reward_key;
 -- name: CreatePartnerIssue :one
 INSERT INTO task_partner_issue (
     workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-    app_id, platform_id, platform_user_id, public_payload, private_payload, status, issued_at, started_at, expires_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'issued', $15, NULL, $16)
+    app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
+    status, issued_at, started_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'issued', $16, NULL, $17)
 ON CONFLICT (workspace_id, issue_key) DO UPDATE SET
     public_payload = EXCLUDED.public_payload,
     private_payload = EXCLUDED.private_payload,
@@ -1009,7 +1033,7 @@ RETURNING id;
 
 -- name: GetPartnerIssueByID :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND id = $2
@@ -1017,7 +1041,7 @@ LIMIT 1;
 
 -- name: GetPartnerIssueByIDForUpdate :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND id = $2
@@ -1026,7 +1050,7 @@ FOR UPDATE;
 
 -- name: ListPartnerIssuesForUser :many
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1
@@ -1037,20 +1061,20 @@ WHERE workspace_id = $1
   AND platform_id = $6
   AND platform_user_id = $7
   AND status IN ('issued', 'completed')
-  AND (expires_at IS NULL OR expires_at > $8)
+  AND (status = 'completed' OR expires_at IS NULL OR expires_at > $8)
 ORDER BY issued_at DESC, id DESC;
 
 -- name: GetPartnerIssueByExternalClickID :one
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1 AND provider = $2 AND external_click_id = $3
 LIMIT 1;
 
--- name: GetPartnerIssueByExternalUser :one
+-- name: GetPartnerIssuesByExternalUser :many
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1
@@ -1059,12 +1083,14 @@ WHERE workspace_id = $1
   AND platform = $4
   AND external_id = $5
   AND platform_user_id = $6
+  AND (sqlc.arg(app_id)::bigint = 0 OR app_id = sqlc.arg(app_id)::bigint)
+  AND (sqlc.arg(platform_id)::bigint = 0 OR platform_id = sqlc.arg(platform_id)::bigint)
 ORDER BY issued_at DESC, id DESC
-LIMIT 1;
+LIMIT 2;
 
--- name: GetPartnerIssueByPrivatePayloadUser :one
+-- name: GetPartnerIssuesByPrivatePayloadUser :many
 SELECT id, workspace_id, provider, group_key, platform, external_id, external_type, external_click_id, start_mode, issue_key,
-       app_id, platform_id, platform_user_id, public_payload, private_payload,
+       app_id, platform_id, platform_user_id, public_payload, private_payload, rewards_snapshot,
        status, issued_at, started_at, completed_at, claimed_at, expires_at, created_at, updated_at
 FROM task_partner_issue
 WHERE workspace_id = $1
@@ -1073,22 +1099,96 @@ WHERE workspace_id = $1
   AND platform = $4
   AND private_payload @> jsonb_build_object(sqlc.arg(lookup_key)::text, sqlc.arg(lookup_value)::text)
   AND platform_user_id = $5
+  AND (sqlc.arg(app_id)::bigint = 0 OR app_id = sqlc.arg(app_id)::bigint)
+  AND (sqlc.arg(platform_id)::bigint = 0 OR platform_id = sqlc.arg(platform_id)::bigint)
 ORDER BY issued_at DESC, id DESC
-LIMIT 1;
+LIMIT 2;
+
+-- name: AcquirePartnerIssueStartLease :one
+INSERT INTO task_partner_issue_start_lease (
+    workspace_id,
+    issue_id,
+    lease_token,
+    lease_until
+)
+SELECT
+    sqlc.arg(workspace_id)::varchar,
+    sqlc.arg(issue_id)::bigint,
+    sqlc.arg(lease_token)::varchar,
+    now() + (
+        sqlc.arg(lease_duration_milliseconds)::bigint * INTERVAL '1 millisecond'
+    )
+FROM task_partner_issue AS issue
+WHERE issue.workspace_id = sqlc.arg(workspace_id)::varchar
+  AND issue.id = sqlc.arg(issue_id)::bigint
+  AND issue.status = 'issued'
+  AND issue.started_at IS NULL
+FOR UPDATE OF issue
+ON CONFLICT (workspace_id, issue_id) DO UPDATE SET
+    lease_token = EXCLUDED.lease_token,
+    lease_until = EXCLUDED.lease_until,
+    updated_at = now()
+WHERE task_partner_issue_start_lease.lease_until <= now()
+RETURNING lease_token;
+
+-- name: RenewPartnerIssueStartLease :execrows
+UPDATE task_partner_issue_start_lease
+SET lease_until = now() + (
+        sqlc.arg(lease_duration_milliseconds)::bigint * INTERVAL '1 millisecond'
+    ),
+    updated_at = now()
+WHERE workspace_id = sqlc.arg(workspace_id)::varchar
+  AND issue_id = sqlc.arg(issue_id)::bigint
+  AND lease_token = sqlc.arg(lease_token)::varchar
+  AND lease_until > now();
+
+-- name: HasActivePartnerIssueStartLease :one
+SELECT EXISTS (
+    SELECT 1
+    FROM task_partner_issue_start_lease
+    WHERE workspace_id = $1
+      AND issue_id = $2
+      AND lease_until > now()
+);
+
+-- name: ReleasePartnerIssueStartLease :execrows
+DELETE FROM task_partner_issue_start_lease
+WHERE workspace_id = $1
+  AND issue_id = $2
+  AND lease_token = $3;
 
 -- name: UpdatePartnerIssueStart :execrows
-UPDATE task_partner_issue
-SET external_click_id = COALESCE(NULLIF($1, ''), external_click_id),
-    started_at = COALESCE(started_at, now()),
-    public_payload = $2,
-    private_payload = $3,
+UPDATE task_partner_issue AS issue
+SET external_click_id = COALESCE(
+        NULLIF(sqlc.arg(external_click_id)::varchar, ''),
+        issue.external_click_id
+    ),
+    started_at = now(),
+    public_payload = sqlc.arg(public_payload)::jsonb,
+    private_payload = sqlc.arg(private_payload)::jsonb,
     updated_at = now()
-WHERE workspace_id = $4 AND id = $5 AND status = 'issued';
+WHERE issue.workspace_id = sqlc.arg(workspace_id)::varchar
+  AND issue.id = sqlc.arg(issue_id)::bigint
+  AND issue.status IN ('issued', 'completed')
+  AND issue.started_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM task_partner_issue_start_lease AS lease
+      WHERE lease.workspace_id = sqlc.arg(workspace_id)::varchar
+        AND lease.issue_id = sqlc.arg(issue_id)::bigint
+        AND lease.lease_token = sqlc.arg(lease_token)::varchar
+        AND lease.lease_until > now()
+  );
 
 -- name: CompletePartnerIssue :execrows
 UPDATE task_partner_issue
 SET status = 'completed', completed_at = $1, updated_at = now()
 WHERE workspace_id = $2 AND id = $3 AND status = 'issued';
+
+-- name: ExpirePartnerIssue :execrows
+UPDATE task_partner_issue
+SET status = 'expired', updated_at = now()
+WHERE workspace_id = $1 AND id = $2 AND status IN ('issued', 'completed');
 
 -- name: ClaimPartnerIssue :execrows
 UPDATE task_partner_issue
@@ -1112,6 +1212,16 @@ INSERT INTO task_partner_reward_grant (
     app_id, platform_id, platform_user_id, operation_id, reward_snapshot, claimed_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (workspace_id, issue_id) DO NOTHING;
+
+-- name: ReserveRewardOperation :execrows
+INSERT INTO task_reward_operation (
+    workspace_id,
+    operation_id,
+    source_kind,
+    source_id
+)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (workspace_id, operation_id) DO NOTHING;
 
 -- name: GetPartnerRewardGrantByIssue :one
 SELECT id, workspace_id, issue_id, provider, group_key, external_type,

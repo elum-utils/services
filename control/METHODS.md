@@ -42,5 +42,4 @@
 | `Admin.ListMethods(ctx)` | Нет параметров. | Возвращает все зарегистрированные методы для административного интерфейса. |
 | `Admin.GetMethod(ctx, methodKey)` | `methodKey`. | Возвращает публичные метаданные зарегистрированного метода. |
 | `Admin.ListAccess(ctx, locale)` | `locale`. | Возвращает локализованный каталог access: сервисы, группы и access-keys в правильном порядке для UI управления ролями. |
-| `Admin.AppendAudit(ctx, params)` | `AuditEventParams{WorkspaceID, ActorID, MethodKey, TargetType, TargetID, BeforeData, AfterData, Result, RequestID}`. | Добавляет событие аудита после административного действия. |
 | `Admin.ListAudit(ctx, workspaceID, page)` | `workspaceID`, `Page{Limit, Offset}`. | Возвращает аудит workspace с пагинацией. |

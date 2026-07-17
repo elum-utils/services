@@ -58,6 +58,8 @@ type Client struct {
 	merchantID string
 	secret     string
 	rest       *resty.Client
+	httpClient *http.Client
+	apiBaseURL string
 }
 
 func NewClient(credentials Credentials) *Client {
@@ -67,8 +69,10 @@ func NewClient(credentials Credentials) *Client {
 	}
 
 	restClient := resty.New()
+	httpClient := http.DefaultClient
 	if credentials.HTTPClient != nil {
 		restClient = resty.NewWithClient(credentials.HTTPClient)
+		httpClient = credentials.HTTPClient
 	}
 	restClient.SetBaseURL(apiBaseURL)
 	restClient.SetHeader("Accept", "application/json")
@@ -79,6 +83,8 @@ func NewClient(credentials Credentials) *Client {
 		merchantID: credentials.MerchantID,
 		secret:     credentials.Secret,
 		rest:       restClient,
+		httpClient: httpClient,
+		apiBaseURL: apiBaseURL,
 	}
 }
 

@@ -54,6 +54,12 @@ type WebhookResult struct {
 	FulfilledID *uint64 `json:"fulfillment_id,omitempty"`
 }
 
+type WebhookRequest struct {
+	WorkspaceID    string
+	Raw            []byte
+	SignatureValid bool
+}
+
 type RefundParams struct {
 	Credentials    Credentials
 	PaymentID      string
@@ -65,6 +71,7 @@ type RefundParams struct {
 
 type SyncPaymentParams struct {
 	Credentials Credentials
+	WorkspaceID string
 	PaymentID   string
 }
 

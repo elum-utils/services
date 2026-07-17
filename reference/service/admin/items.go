@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	services "github.com/elum-utils/services"
 	"github.com/elum-utils/services/reference/repository"
 )
 
@@ -25,7 +26,10 @@ func (a *Admin) UpdateItem(ctx context.Context, params UpdateItemParams) (int64,
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
 	params.Key = normalizeKey(params.Key)
-	if strings.TrimSpace(params.WorkspaceID) == "" || !itemKeyPattern.MatchString(params.Key) {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+	if !itemKeyPattern.MatchString(params.Key) {
 		return 0, ErrItemScopeInvalid
 	}
 	if len(params.Payload) == 0 || !json.Valid(params.Payload) {
@@ -59,7 +63,7 @@ func (a *Admin) DangerousChangeType(ctx context.Context, params DangerousChangeT
 func (a *Admin) GetItem(ctx context.Context, workspaceID, key string) (ItemModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	item, err := a.repository.AdminGetItem(mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key))
+	item, err := a.repository.AdminGetItem(mergedCtx, workspaceID, normalizeKey(key))
 	if err != nil {
 		return ItemModel{}, err
 	}
@@ -74,7 +78,7 @@ func (a *Admin) ListItems(ctx context.Context, params ItemListParams) ([]ItemMod
 	}
 	limit, offset := normalizePage(params.Page)
 	items, err := a.repository.AdminListItems(mergedCtx, repository.ListItemsParams{
-		WorkspaceID: strings.TrimSpace(params.WorkspaceID), Type: params.Type,
+		WorkspaceID: params.WorkspaceID, Type: params.Type,
 		OnlyNotDeleted: params.OnlyNotDeleted, Limit: limit, Offset: offset,
 	})
 	if err != nil {
@@ -90,13 +94,13 @@ func (a *Admin) ListItems(ctx context.Context, params ItemListParams) ([]ItemMod
 func (a *Admin) SoftDeleteItem(ctx context.Context, workspaceID, key string) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.SoftDeleteItem(mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key))
+	return a.repository.SoftDeleteItem(mergedCtx, workspaceID, normalizeKey(key))
 }
 
 func (a *Admin) RestoreItem(ctx context.Context, workspaceID, key string, active bool) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	return a.repository.RestoreItem(mergedCtx, strings.TrimSpace(workspaceID), normalizeKey(key), active)
+	return a.repository.RestoreItem(mergedCtx, workspaceID, normalizeKey(key), active)
 }
 
 func validateItem(workspaceID, key, itemType string, payload json.RawMessage) error {
@@ -110,7 +114,10 @@ func validateItem(workspaceID, key, itemType string, payload json.RawMessage) er
 }
 
 func validateIdentity(workspaceID, key, itemType string) error {
-	if strings.TrimSpace(workspaceID) == "" || !itemKeyPattern.MatchString(key) {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+	if !itemKeyPattern.MatchString(key) {
 		return ErrItemScopeInvalid
 	}
 	if !validType(itemType) {

@@ -201,6 +201,25 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) erro
 	return err
 }
 
+const createInviteAcceptance = `-- name: CreateInviteAcceptance :execrows
+INSERT INTO control_workspace_invite_acceptance (invite_id, account_id)
+VALUES ($1, $2)
+ON CONFLICT (invite_id, account_id) DO NOTHING
+`
+
+type CreateInviteAcceptanceParams struct {
+	InviteID  string `json:"invite_id"`
+	AccountID string `json:"account_id"`
+}
+
+func (q *Queries) CreateInviteAcceptance(ctx context.Context, arg CreateInviteAcceptanceParams) (int64, error) {
+	result, err := q.exec(ctx, q.createInviteAcceptanceStmt, createInviteAcceptance, arg.InviteID, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const createRole = `-- name: CreateRole :exec
 INSERT INTO control_role (id, workspace_id, code, title, description, position, is_owner)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -258,18 +277,28 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const createTwoFactorChallenge = `-- name: CreateTwoFactorChallenge :exec
-INSERT INTO control_two_factor_challenge (id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO control_two_factor_challenge (
+    id,
+    account_id,
+    token_hash,
+    ip,
+    user_agent,
+    bind_to_ip,
+    expires_at,
+    session_expires_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type CreateTwoFactorChallengeParams struct {
-	ID        string    `json:"id"`
-	AccountID string    `json:"account_id"`
-	TokenHash string    `json:"token_hash"`
-	Ip        string    `json:"ip"`
-	UserAgent string    `json:"user_agent"`
-	BindToIp  bool      `json:"bind_to_ip"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	TokenHash        string    `json:"token_hash"`
+	Ip               string    `json:"ip"`
+	UserAgent        string    `json:"user_agent"`
+	BindToIp         bool      `json:"bind_to_ip"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	SessionExpiresAt time.Time `json:"session_expires_at"`
 }
 
 func (q *Queries) CreateTwoFactorChallenge(ctx context.Context, arg CreateTwoFactorChallengeParams) error {
@@ -281,6 +310,7 @@ func (q *Queries) CreateTwoFactorChallenge(ctx context.Context, arg CreateTwoFac
 		arg.UserAgent,
 		arg.BindToIp,
 		arg.ExpiresAt,
+		arg.SessionExpiresAt,
 	)
 	return err
 }
@@ -451,31 +481,6 @@ func (q *Queries) GetAccountPosition(ctx context.Context, arg GetAccountPosition
 	return position, err
 }
 
-const getActiveInviteByHashForUpdate = `-- name: GetActiveInviteByHashForUpdate :one
-SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
-FROM control_workspace_invite
-WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
-  AND (max_uses IS NULL OR used_count < max_uses)
-LIMIT 1 FOR UPDATE
-`
-
-func (q *Queries) GetActiveInviteByHashForUpdate(ctx context.Context, tokenHash string) (ControlWorkspaceInvite, error) {
-	row := q.queryRow(ctx, q.getActiveInviteByHashForUpdateStmt, getActiveInviteByHashForUpdate, tokenHash)
-	var i ControlWorkspaceInvite
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.CreatedBy,
-		&i.TokenHash,
-		&i.MaxUses,
-		&i.UsedCount,
-		&i.ExpiresAt,
-		&i.RevokedAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const getActiveSessionByHash = `-- name: GetActiveSessionByHash :one
 SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, revoked_at, last_used_at, created_at
 FROM control_session
@@ -496,6 +501,30 @@ func (q *Queries) GetActiveSessionByHash(ctx context.Context, tokenHash string) 
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getInviteByHashForUpdate = `-- name: GetInviteByHashForUpdate :one
+SELECT id, workspace_id, created_by, token_hash, max_uses, used_count, expires_at, revoked_at, created_at
+FROM control_workspace_invite
+WHERE token_hash = $1
+LIMIT 1 FOR UPDATE
+`
+
+func (q *Queries) GetInviteByHashForUpdate(ctx context.Context, tokenHash string) (ControlWorkspaceInvite, error) {
+	row := q.queryRow(ctx, q.getInviteByHashForUpdateStmt, getInviteByHashForUpdate, tokenHash)
+	var i ControlWorkspaceInvite
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CreatedBy,
+		&i.TokenHash,
+		&i.MaxUses,
+		&i.UsedCount,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -568,7 +597,8 @@ func (q *Queries) GetTwoFactor(ctx context.Context, accountID string) (ControlTw
 }
 
 const getTwoFactorChallengeForUpdate = `-- name: GetTwoFactorChallengeForUpdate :one
-SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at, created_at
+SELECT id, account_id, token_hash, ip, user_agent, bind_to_ip, expires_at,
+       session_expires_at, created_at
 FROM control_two_factor_challenge
 WHERE token_hash = $1 AND expires_at > now()
 LIMIT 1 FOR UPDATE
@@ -585,13 +615,15 @@ func (q *Queries) GetTwoFactorChallengeForUpdate(ctx context.Context, tokenHash 
 		&i.UserAgent,
 		&i.BindToIp,
 		&i.ExpiresAt,
+		&i.SessionExpiresAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getTwoFactorChallengeWithFactorForUpdate = `-- name: GetTwoFactorChallengeWithFactorForUpdate :one
-SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip, c.expires_at,
+SELECT c.id AS challenge_id, c.account_id, c.ip, c.user_agent, c.bind_to_ip,
+       c.expires_at, c.session_expires_at,
        f.secret, f.backup_hashes, f.activated_at
 FROM control_two_factor_challenge c
 JOIN control_two_factor f ON f.account_id = c.account_id
@@ -600,15 +632,16 @@ LIMIT 1 FOR UPDATE
 `
 
 type GetTwoFactorChallengeWithFactorForUpdateRow struct {
-	ChallengeID  string          `json:"challenge_id"`
-	AccountID    string          `json:"account_id"`
-	Ip           string          `json:"ip"`
-	UserAgent    string          `json:"user_agent"`
-	BindToIp     bool            `json:"bind_to_ip"`
-	ExpiresAt    time.Time       `json:"expires_at"`
-	Secret       string          `json:"secret"`
-	BackupHashes json.RawMessage `json:"backup_hashes"`
-	ActivatedAt  sql.NullTime    `json:"activated_at"`
+	ChallengeID      string          `json:"challenge_id"`
+	AccountID        string          `json:"account_id"`
+	Ip               string          `json:"ip"`
+	UserAgent        string          `json:"user_agent"`
+	BindToIp         bool            `json:"bind_to_ip"`
+	ExpiresAt        time.Time       `json:"expires_at"`
+	SessionExpiresAt time.Time       `json:"session_expires_at"`
+	Secret           string          `json:"secret"`
+	BackupHashes     json.RawMessage `json:"backup_hashes"`
+	ActivatedAt      sql.NullTime    `json:"activated_at"`
 }
 
 func (q *Queries) GetTwoFactorChallengeWithFactorForUpdate(ctx context.Context, tokenHash string) (GetTwoFactorChallengeWithFactorForUpdateRow, error) {
@@ -621,6 +654,7 @@ func (q *Queries) GetTwoFactorChallengeWithFactorForUpdate(ctx context.Context, 
 		&i.UserAgent,
 		&i.BindToIp,
 		&i.ExpiresAt,
+		&i.SessionExpiresAt,
 		&i.Secret,
 		&i.BackupHashes,
 		&i.ActivatedAt,
@@ -682,7 +716,10 @@ func (q *Queries) HasActiveTwoFactor(ctx context.Context, accountID string) (boo
 
 const incrementInviteUse = `-- name: IncrementInviteUse :execrows
 UPDATE control_workspace_invite SET used_count = used_count + 1
-WHERE id = $1 AND revoked_at IS NULL AND (max_uses IS NULL OR used_count < max_uses)
+WHERE id = $1
+  AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > now())
+  AND (max_uses IS NULL OR used_count < max_uses)
 `
 
 func (q *Queries) IncrementInviteUse(ctx context.Context, id string) (int64, error) {
@@ -986,24 +1023,31 @@ func (q *Queries) ListAuthorizedMethods(ctx context.Context, arg ListAuthorizedM
 }
 
 const listIdentities = `-- name: ListIdentities :many
-SELECT account_id, provider, provider_subject, COALESCE(payload, '{}'::jsonb) AS payload, created_at, updated_at
+SELECT account_id, provider, provider_subject, created_at, updated_at
 FROM control_identity WHERE account_id = $1 ORDER BY provider
 `
 
-func (q *Queries) ListIdentities(ctx context.Context, accountID string) ([]ControlIdentity, error) {
+type ListIdentitiesRow struct {
+	AccountID       string    `json:"account_id"`
+	Provider        string    `json:"provider"`
+	ProviderSubject string    `json:"provider_subject"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+func (q *Queries) ListIdentities(ctx context.Context, accountID string) ([]ListIdentitiesRow, error) {
 	rows, err := q.query(ctx, q.listIdentitiesStmt, listIdentities, accountID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ControlIdentity
+	var items []ListIdentitiesRow
 	for rows.Next() {
-		var i ControlIdentity
+		var i ListIdentitiesRow
 		if err := rows.Scan(
 			&i.AccountID,
 			&i.Provider,
 			&i.ProviderSubject,
-			&i.Payload,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1406,6 +1450,15 @@ SELECT pg_advisory_xact_lock(hashtextextended('control:method-registry', 0))
 
 func (q *Queries) LockMethodRegistry(ctx context.Context) error {
 	_, err := q.exec(ctx, q.lockMethodRegistryStmt, lockMethodRegistry)
+	return err
+}
+
+const lockWorkspaceAuthorization = `-- name: LockWorkspaceAuthorization :exec
+SELECT pg_advisory_xact_lock(hashtextextended('control:authorization:' || $1::text, 0))
+`
+
+func (q *Queries) LockWorkspaceAuthorization(ctx context.Context, dollar_1 string) error {
+	_, err := q.exec(ctx, q.lockWorkspaceAuthorizationStmt, lockWorkspaceAuthorization, dollar_1)
 	return err
 }
 

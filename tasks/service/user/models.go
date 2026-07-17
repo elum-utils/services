@@ -120,6 +120,7 @@ type PartnerExternalTask struct {
 	PrivatePayload json.RawMessage
 	ExpiresAt      *time.Time
 	StartMode      string
+	WindowKey      string
 }
 
 type PartnerCheckResult struct {

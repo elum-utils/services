@@ -45,14 +45,14 @@ func (r *Repository) Resolve(ctx context.Context, workspaceID string, keys []str
 	cacheKeys := append([]string(nil), keys...)
 	sort.Strings(cacheKeys)
 	cacheKey := r.referenceCacheKey(referenceCacheResolve, workspaceID, locale, strings.Join(cacheKeys, "\x1f"))
-	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+	items, err := sqlwrap.Query(ctx, r.db, sqlwrap.Params{
 		Key: cacheKey, Timeout: r.timeout, CacheVersionScope: referenceCacheScope(referenceCacheResolve, workspaceID),
 		CacheL1Delay: r.cacheL1, CacheL2Delay: r.cacheL2,
 	}, func(ctx context.Context) ([]Item, error) {
 		rows, err := r.q.ResolveItemBundles(ctx, refsqlc.ResolveItemBundlesParams{
 			Locale:      locale,
 			WorkspaceID: workspaceID,
-			Column3:     keys,
+			Column3:     cacheKeys,
 		})
 		if err != nil {
 			return nil, err
@@ -63,6 +63,20 @@ func (r *Repository) Resolve(ctx context.Context, workspaceID string, keys []str
 		}
 		return result, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	byKey := make(map[string]Item, len(items))
+	for _, item := range items {
+		byKey[item.Key] = item
+	}
+	ordered := make([]Item, 0, len(items))
+	for _, key := range keys {
+		if item, found := byKey[key]; found {
+			ordered = append(ordered, item)
+		}
+	}
+	return ordered, nil
 }
 
 func (r *Repository) List(ctx context.Context, workspaceID, locale string, limit, offset int32) ([]Item, error) {

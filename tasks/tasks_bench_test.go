@@ -3,6 +3,8 @@ package tasks
 import (
 	"context"
 	"fmt"
+
+	"github.com/elum-utils/services/internal/testsupport"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	"github.com/elum-utils/services/tasks/repository"
 	"github.com/elum-utils/services/tasks/service/admin"
@@ -33,7 +35,11 @@ func BenchmarkTasksExampleDumpImport(b *testing.B) {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		b.Fatalf("unmarshal daily example request: %v", err)
 	}
-	preview, err := service.Admin.PreviewImport(ctx, "daily-import-preview", req.Package)
+	preview, err := service.Admin.PreviewImport(
+		ctx,
+		testsupport.WorkspaceID("daily-import-preview"),
+		req.Package,
+	)
 	if err != nil {
 		b.Fatalf("preview daily example: %v", err)
 	}
@@ -67,11 +73,15 @@ func BenchmarkTasksExampleDumpExport(b *testing.B) {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		b.Fatalf("unmarshal daily example request: %v", err)
 	}
-	preview, err := service.Admin.PreviewImport(ctx, "daily-export-preview", req.Package)
+	preview, err := service.Admin.PreviewImport(
+		ctx,
+		testsupport.WorkspaceID("daily-export-preview"),
+		req.Package,
+	)
 	if err != nil {
 		b.Fatalf("preview daily example: %v", err)
 	}
-	workspaceID := "daily-export-benchmark"
+	workspaceID := testsupport.WorkspaceID("daily-export-benchmark")
 	if _, err := service.Admin.Import(ctx, workspaceID, admin.ImportRequest{
 		Package:          req.Package,
 		ConflictStrategy: repository.ImportConflictFail,
@@ -103,11 +113,21 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 	ctx := context.Background()
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	createEarnChain(b, service, "bench-manual", repository.ClaimModeManual)
-	createEarnChain(b, service, "bench-auto", repository.ClaimModeAuto)
+	createEarnChain(
+		b,
+		service,
+		testsupport.WorkspaceID("bench-manual"),
+		repository.ClaimModeManual,
+	)
+	createEarnChain(
+		b,
+		service,
+		testsupport.WorkspaceID("bench-auto"),
+		repository.ClaimModeAuto,
+	)
 
 	idempotentIdentity := internalapi.Identity{
-		WorkspaceID: "bench-auto", AppID: 1, PlatformID: 1, PlatformUserID: "same",
+		WorkspaceID: testsupport.WorkspaceID("bench-auto"), AppID: 1, PlatformID: 1, PlatformUserID: "same",
 	}
 	if _, err := service.Internal.Record(ctx, internalapi.RecordParams{
 		Identity: idempotentIdentity, ActionKey: "earn_coin", Amount: 1500,
@@ -116,7 +136,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 		b.Fatal(err)
 	}
 	manualList, err := service.User.ListActive(ctx, user.ListActiveParams{Identity: user.Identity{
-		WorkspaceID: "bench-manual", AppID: 1, PlatformID: 1, PlatformUserID: "claim-seed",
+		WorkspaceID: testsupport.WorkspaceID("bench-manual"), AppID: 1, PlatformID: 1, PlatformUserID: "claim-seed",
 	}, Locale: "ru", Now: now})
 	if err != nil {
 		b.Fatal(err)
@@ -138,7 +158,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 			id := tasksBenchmarkUserID.Add(1)
 			_, err := service.Internal.Record(ctx, internalapi.RecordParams{
 				Identity: internalapi.Identity{
-					WorkspaceID: "bench-manual", AppID: 1, PlatformID: 1,
+					WorkspaceID: testsupport.WorkspaceID("bench-manual"), AppID: 1, PlatformID: 1,
 					PlatformUserID: "manual-" + strconv.FormatUint(id, 10),
 				},
 				ActionKey: "earn_coin", Amount: 1500,
@@ -152,7 +172,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 			id := tasksBenchmarkUserID.Add(1)
 			_, err := service.Internal.Record(ctx, internalapi.RecordParams{
 				Identity: internalapi.Identity{
-					WorkspaceID: "bench-auto", AppID: 1, PlatformID: 1,
+					WorkspaceID: testsupport.WorkspaceID("bench-auto"), AppID: 1, PlatformID: 1,
 					PlatformUserID: "auto-" + strconv.FormatUint(id, 10),
 				},
 				ActionKey: "earn_coin", Amount: 1500,
@@ -165,7 +185,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 		for range b.N {
 			id := tasksBenchmarkUserID.Add(1)
 			identity := user.Identity{
-				WorkspaceID: "bench-manual", AppID: 1, PlatformID: 1,
+				WorkspaceID: testsupport.WorkspaceID("bench-manual"), AppID: 1, PlatformID: 1,
 				PlatformUserID: "claim-" + strconv.FormatUint(id, 10),
 			}
 			b.StopTimer()
@@ -183,7 +203,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 		}
 	})
 	b.Run("User.Claim/idempotent", func(b *testing.B) {
-		identity := user.Identity{WorkspaceID: "bench-manual", AppID: 1, PlatformID: 1, PlatformUserID: "claimed"}
+		identity := user.Identity{WorkspaceID: testsupport.WorkspaceID("bench-manual"), AppID: 1, PlatformID: 1, PlatformUserID: "claimed"}
 		_, err := service.Internal.Record(ctx, internalapi.RecordParams{
 			Identity: internalapi.Identity(identity), ActionKey: "earn_coin", Amount: 1000,
 			Source: "bench", ExternalEventKey: "claimed-ready", Now: now,
@@ -202,7 +222,7 @@ func BenchmarkTasksServiceMethods(b *testing.B) {
 		}
 	})
 	b.Run("User.ListActive", func(b *testing.B) {
-		identity := user.Identity{WorkspaceID: "bench-manual", AppID: 1, PlatformID: 1, PlatformUserID: "list"}
+		identity := user.Identity{WorkspaceID: testsupport.WorkspaceID("bench-manual"), AppID: 1, PlatformID: 1, PlatformUserID: "list"}
 		for range b.N {
 			_, err := service.User.ListActive(ctx, user.ListActiveParams{Identity: identity, Locale: "ru", Now: now})
 			benchError(b, err)
@@ -221,7 +241,7 @@ func BenchmarkTasksIntegration(b *testing.B) {
 	ctx := context.Background()
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	taskID := createIntegrationTask(b, service, integrationTaskSeed{
-		WorkspaceID: "bench-integration",
+		WorkspaceID: testsupport.WorkspaceID("bench-integration"),
 		Key:         "external_claim",
 		TaskKind:    repository.TaskKindExternalCheck,
 		ActionKey:   "external:bench",
@@ -232,7 +252,7 @@ func BenchmarkTasksIntegration(b *testing.B) {
 
 	b.ReportAllocs()
 	b.Run("User.ListActive/integration_task", func(b *testing.B) {
-		identity := user.Identity{WorkspaceID: "bench-integration", AppID: 1, PlatformID: 1, PlatformUserID: "list"}
+		identity := user.Identity{WorkspaceID: testsupport.WorkspaceID("bench-integration"), AppID: 1, PlatformID: 1, PlatformUserID: "list"}
 		for range b.N {
 			_, err := service.User.ListActive(ctx, user.ListActiveParams{Identity: identity, Locale: "ru", Now: now})
 			benchError(b, err)
@@ -244,7 +264,7 @@ func BenchmarkTasksIntegration(b *testing.B) {
 			_, err := service.Integration.CheckExternal(ctx, integration.CheckExternalParams{
 				TaskRefParams: integration.TaskRefParams{
 					Identity: integration.Identity{
-						WorkspaceID: "bench-integration", AppID: 1, PlatformID: 1,
+						WorkspaceID: testsupport.WorkspaceID("bench-integration"), AppID: 1, PlatformID: 1,
 						PlatformUserID: "check-" + strconv.FormatUint(id, 10),
 					},
 					TaskRef: taskRef,
@@ -258,7 +278,7 @@ func BenchmarkTasksIntegration(b *testing.B) {
 		for range b.N {
 			id := tasksBenchmarkUserID.Add(1)
 			identity := integration.Identity{
-				WorkspaceID: "bench-integration", AppID: 1, PlatformID: 1,
+				WorkspaceID: testsupport.WorkspaceID("bench-integration"), AppID: 1, PlatformID: 1,
 				PlatformUserID: "claim-" + strconv.FormatUint(id, 10),
 			}
 			b.StopTimer()
@@ -280,7 +300,11 @@ func BenchmarkTasksLargeWorkspace(b *testing.B) {
 	service := newTasksTestService(b)
 	ctx := context.Background()
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	seed := seedLargeTasksBenchmark(b, service, "bench-large")
+	seed := seedLargeTasksBenchmark(
+		b,
+		service,
+		testsupport.WorkspaceID("bench-large"),
+	)
 
 	b.ReportAllocs()
 	b.ReportMetric(float64(seed.totalTasks), "tasks")
@@ -293,7 +317,7 @@ func BenchmarkTasksLargeWorkspace(b *testing.B) {
 			id := tasksBenchmarkUserID.Add(1)
 			_, err := service.Internal.Record(ctx, internalapi.RecordParams{
 				Identity: internalapi.Identity{
-					WorkspaceID: "bench-large", AppID: 1, PlatformID: 1,
+					WorkspaceID: testsupport.WorkspaceID("bench-large"), AppID: 1, PlatformID: 1,
 					PlatformUserID: "scan-" + strconv.FormatUint(id, 10),
 				},
 				ActionKey: "missing_action", Amount: 1, Now: now,
@@ -307,7 +331,7 @@ func BenchmarkTasksLargeWorkspace(b *testing.B) {
 			id := tasksBenchmarkUserID.Add(1)
 			_, err := service.Internal.Record(ctx, internalapi.RecordParams{
 				Identity: internalapi.Identity{
-					WorkspaceID: "bench-large", AppID: 1, PlatformID: 1,
+					WorkspaceID: testsupport.WorkspaceID("bench-large"), AppID: 1, PlatformID: 1,
 					PlatformUserID: "target-" + strconv.FormatUint(id, 10),
 				},
 				ActionKey: "target_action", Amount: 1000,
@@ -318,7 +342,7 @@ func BenchmarkTasksLargeWorkspace(b *testing.B) {
 	})
 
 	b.Run("User.ListActive/large_workspace", func(b *testing.B) {
-		identity := user.Identity{WorkspaceID: "bench-large", AppID: 1, PlatformID: 1, PlatformUserID: "list-large"}
+		identity := user.Identity{WorkspaceID: testsupport.WorkspaceID("bench-large"), AppID: 1, PlatformID: 1, PlatformUserID: "list-large"}
 		for range b.N {
 			_, err := service.User.ListActive(ctx, user.ListActiveParams{Identity: identity, Locale: "ru", Now: now})
 			benchError(b, err)
@@ -329,7 +353,7 @@ func BenchmarkTasksLargeWorkspace(b *testing.B) {
 		for range b.N {
 			id := tasksBenchmarkUserID.Add(1)
 			identity := user.Identity{
-				WorkspaceID: "bench-large", AppID: 1, PlatformID: 1,
+				WorkspaceID: testsupport.WorkspaceID("bench-large"), AppID: 1, PlatformID: 1,
 				PlatformUserID: "claim-large-" + strconv.FormatUint(id, 10),
 			}
 			b.StopTimer()
@@ -449,14 +473,14 @@ func readDailyExampleDump(tb testing.TB) []byte {
 }
 
 func benchmarkWorkspace(prefix string, iteration int) string {
-	return prefix + "-" + strconv.Itoa(iteration)
+	return testsupport.WorkspaceID(prefix + "-" + strconv.Itoa(iteration))
 }
 
 func BenchmarkTasksComplex(b *testing.B) {
 	service := newTasksTestService(b)
 	ctx := context.Background()
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
-	workspaceID := "bench-complex"
+	workspaceID := testsupport.WorkspaceID("bench-complex")
 	ids := createComplexTaskSet(b, service, workspaceID, complexTaskOptions{
 		ParentKey: "bench.combo",
 		Conditions: []complexConditionSeed{

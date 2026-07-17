@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	services "github.com/elum-utils/services"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
@@ -156,9 +157,12 @@ func subscriberParamsFromWallet(row paymentsqlc.PaymentTonWallet) (SubscriberPar
 	if err != nil {
 		return SubscriberParams{}, false, err
 	}
-	workspaceID := strings.TrimSpace(row.WorkspaceID)
+	workspaceID := row.WorkspaceID
 	walletAddress := strings.TrimSpace(row.WalletAddress)
-	if workspaceID == "" || walletAddress == "" {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return SubscriberParams{}, false, err
+	}
+	if walletAddress == "" {
 		return SubscriberParams{}, false, nil
 	}
 	walletAddress, err = NormalizeWalletAddress(walletAddress, network)
@@ -181,13 +185,13 @@ func subscriberParamsFromWallet(row paymentsqlc.PaymentTonWallet) (SubscriberPar
 }
 
 func managedSubscriberKey(params SubscriberParams) string {
-	return strings.TrimSpace(params.WorkspaceID) + "\x00" +
+	return params.WorkspaceID + "\x00" +
 		normalizeNetwork(params.Network) + "\x00" +
 		strings.TrimSpace(params.WalletAddress)
 }
 
 func sameSubscriberParams(left, right SubscriberParams) bool {
-	return strings.TrimSpace(left.WorkspaceID) == strings.TrimSpace(right.WorkspaceID) &&
+	return left.WorkspaceID == right.WorkspaceID &&
 		normalizeNetwork(left.Network) == normalizeNetwork(right.Network) &&
 		strings.TrimSpace(left.WalletAddress) == strings.TrimSpace(right.WalletAddress) &&
 		strings.TrimSpace(left.NetworkConfigURL) == strings.TrimSpace(right.NetworkConfigURL)

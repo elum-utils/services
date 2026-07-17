@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	services "github.com/elum-utils/services"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
@@ -25,6 +26,10 @@ type Repository struct {
 
 const DefaultQueryTimeout = time.Second
 const bootstrapQueryTimeout = 30 * time.Second
+
+func requireWorkspaceID(workspaceID string) error {
+	return services.ValidateWorkspaceID(workspaceID)
+}
 
 type Options struct {
 	QueryTimeout             time.Duration
@@ -117,6 +122,10 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 }
 
 func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
 	_, err := r.executor.ExecContext(
 		ctx,
 		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",

@@ -8,18 +8,55 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	utils "github.com/elum-utils/services/internal/utils"
+	json "github.com/goccy/go-json"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func rubMajorFromMinor(amountMinor uint64) float64 {
-	return float64(amountMinor) / 100
+func rubMajorFromMinor(amountMinor uint64) json.Number {
+	return json.Number(fmt.Sprintf("%d.%02d", amountMinor/100, amountMinor%100))
 }
 
-func rubMinorFromMajor(amount float64) uint64 {
-	return uint64(math.Round(amount * 100))
+func rubMinorFromMajor(amount json.Number) (uint64, error) {
+	value := strings.TrimSpace(amount.String())
+	if value == "" || strings.HasPrefix(value, "-") || strings.ContainsAny(value, "eE+") {
+		return 0, ErrAmountInvalid
+	}
+
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 || parts[0] == "" {
+		return 0, ErrAmountInvalid
+	}
+	whole, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return 0, ErrAmountInvalid
+	}
+
+	fraction := uint64(0)
+	if len(parts) == 2 {
+		if len(parts[1]) == 0 || len(parts[1]) > 2 {
+			return 0, ErrAmountInvalid
+		}
+		fractionValue := parts[1]
+		if len(fractionValue) == 1 {
+			fractionValue += "0"
+		}
+		fraction, err = strconv.ParseUint(fractionValue, 10, 64)
+		if err != nil {
+			return 0, ErrAmountInvalid
+		}
+	}
+
+	maxMinor := uint64(math.MaxInt64)
+	if whole > maxMinor/100 ||
+		(whole == maxMinor/100 && fraction > maxMinor%100) {
+		return 0, ErrAmountInvalid
+	}
+
+	return whole*100 + fraction, nil
 }
 
 func normalizeLocale(locale string) string {

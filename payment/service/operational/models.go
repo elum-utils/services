@@ -6,7 +6,6 @@ import (
 	"github.com/elum-utils/services/payment/repository"
 	"github.com/elum-utils/services/payment/service/asset"
 	"github.com/elum-utils/services/payment/service/checkout"
-	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
 const AssetRateSourceDexScreener = repository.AssetRateSourceDexScreener
@@ -20,7 +19,7 @@ type ProviderAssetUpsertParams = asset.ProviderUpsertParams
 type ProviderUpsertParams struct {
 	Code             string
 	Title            string
-	ProviderKind     paymentsqlc.PaymentProviderProviderKind
+	ProviderKind     string
 	SupportsCreate   bool
 	SupportsRedirect bool
 	SupportsWebhook  bool

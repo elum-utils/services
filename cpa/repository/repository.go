@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	services "github.com/elum-utils/services"
 	cpasqlc "github.com/elum-utils/services/cpa/sqlc"
 	serviceerrors "github.com/elum-utils/services/errors"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
@@ -17,7 +18,6 @@ import (
 )
 
 var (
-	ErrWorkspaceRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa workspace id is required")
 	ErrOfferRequired     = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa offer id is required")
 	ErrLocaleRequired    = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa locale is required")
 	ErrRewardKeyRequired = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa reward key is required")
@@ -25,6 +25,8 @@ var (
 	ErrInvalidDateRange  = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa date range is invalid")
 	ErrNoCodesAvailable  = serviceerrors.New(serviceerrors.CodeUnavailable, "cpa personal codes are not available")
 	ErrInvalidCodeConfig = serviceerrors.New(serviceerrors.CodeInvalidFields, "cpa generated code configuration is invalid")
+	ErrCodeUploadMode    = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "cpa codes can only be uploaded to personal pool offers")
+	ErrOfferInUse        = serviceerrors.New(serviceerrors.CodeFailedPrecondition, "cpa offer has assignments and cannot be deleted")
 )
 
 type Repository struct {
@@ -115,6 +117,19 @@ func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) err
 	return err
 }
 
+func (r *Repository) WithReadOnlySnapshot(ctx context.Context, fn func(*Repository) error) error {
+	return r.WithTx(ctx, func(txRepo *Repository) error {
+		if _, err := txRepo.executor.ExecContext(
+			ctx,
+			"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+		); err != nil {
+			return err
+		}
+
+		return fn(txRepo)
+	})
+}
+
 func (r *Repository) Bootstrap(ctx context.Context) error {
 	if err := r.applySQL(ctx, cpasqlc.SchemaSQL, "schema"); err != nil {
 		return err
@@ -138,7 +153,41 @@ func (r *Repository) Bootstrap(ctx context.Context) error {
 }
 
 func (r *Repository) applySchemaUpgrades(ctx context.Context) error {
-	return nil
+	return r.applySQL(ctx, `
+ALTER TABLE cpa_assignment
+    ADD COLUMN IF NOT EXISTS rewards_snapshot JSONB;
+
+UPDATE cpa_assignment assignment
+SET rewards_snapshot = COALESCE((
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'key', reward.reward_key,
+            'type', reward.reward_type,
+            'quantity', reward.quantity,
+            'scale', reward.scale,
+            'unit', reward.duration_unit
+        )
+        ORDER BY reward.id
+    )
+    FROM cpa_reward reward
+    WHERE reward.workspace_id = assignment.workspace_id
+      AND reward.cpa_id = assignment.cpa_id
+), '[]'::jsonb)
+WHERE assignment.rewards_snapshot IS NULL;
+
+ALTER TABLE cpa_assignment
+    ALTER COLUMN rewards_snapshot SET DEFAULT '[]'::jsonb,
+    ALTER COLUMN rewards_snapshot SET NOT NULL;
+
+ALTER TABLE cpa_reward
+    ALTER COLUMN scale TYPE INTEGER;
+
+ALTER TABLE cpa_reward
+    DROP CONSTRAINT IF EXISTS cpa_reward_scale_chk;
+
+ALTER TABLE cpa_reward
+    ADD CONSTRAINT cpa_reward_scale_chk CHECK (scale BETWEEN 0 AND 65535);
+`, "upgrade")
 }
 
 func (r *Repository) applySQL(ctx context.Context, raw, source string) error {
@@ -182,29 +231,73 @@ func queryTimeout(value time.Duration) time.Duration {
 }
 
 func requireScope(workspaceID, cpaID string) error {
-	if workspaceID == "" {
-		return ErrWorkspaceRequired
+	if err := requireWorkspace(workspaceID); err != nil {
+		return err
 	}
-	if cpaID == "" {
+	if strings.TrimSpace(cpaID) == "" {
 		return ErrOfferRequired
 	}
-	return nil
+	return validateStoredString("cpa_id", cpaID, maxOfferIDLength)
+}
+
+func requireWorkspace(workspaceID string) error {
+	return services.ValidateWorkspaceID(workspaceID)
+}
+
+func (r *Repository) lockWorkspaceMutation(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		workspaceID,
+	)
+	return err
+}
+
+func (r *Repository) lockWorkspaceCatalogRead(ctx context.Context, workspaceID string) error {
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))",
+		workspaceID,
+	)
+	return err
+}
+
+func (r *Repository) lockIssueIdentity(ctx context.Context, scope UserScope) error {
+	key := fmt.Sprintf(
+		"cpa:issue:%s:%s:%d:%d:%s",
+		scope.WorkspaceID,
+		scope.CPAID,
+		scope.AppID,
+		scope.PlatformID,
+		scope.PlatformUserID,
+	)
+	_, err := r.executor.ExecContext(
+		ctx,
+		"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+		key,
+	)
+	return err
 }
 
 func requireLocale(locale string) error {
 	if strings.TrimSpace(locale) == "" {
 		return ErrLocaleRequired
 	}
-	return nil
+	return validateStoredString("locale", locale, maxLocaleLength)
 }
 
 func requireRewardKey(rewardKey string) error {
 	if strings.TrimSpace(rewardKey) == "" {
 		return ErrRewardKeyRequired
 	}
-	return nil
+	return validateStoredString("reward_key", rewardKey, maxRewardKeyLength)
 }
 
 func isNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
+}
+
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23001")
 }

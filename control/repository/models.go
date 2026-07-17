@@ -1,8 +1,9 @@
 package repository
 
 import (
-	json "github.com/goccy/go-json"
 	"time"
+
+	json "github.com/goccy/go-json"
 )
 
 type Account struct {
@@ -12,7 +13,6 @@ type Account struct {
 
 type Identity struct {
 	AccountID, Provider, ProviderSubject string
-	Payload                              json.RawMessage
 	CreatedAt, UpdatedAt                 time.Time
 }
 

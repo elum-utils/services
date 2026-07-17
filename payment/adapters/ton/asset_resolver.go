@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/elum-utils/services/payment/repository"
 	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 	"github.com/xssnick/tonutils-go/address"
 )
@@ -59,7 +60,7 @@ func (a *TON) ResolveJettonAsset(ctx context.Context, network string, masterAddr
 		}
 		masterRaw := master.StringRaw()
 		for _, asset := range assets {
-			if asset.AssetKind != paymentsqlc.PaymentAssetAssetKindCryptoJetton ||
+			if asset.AssetKind != string(paymentsqlc.PaymentAssetAssetKindCryptoJetton) ||
 				!asset.Chain.Valid || !strings.EqualFold(asset.Chain.String, "ton") ||
 				!asset.Network.Valid || normalizeNetwork(asset.Network.String) != network ||
 				!asset.ContractAddress.Valid {
@@ -75,7 +76,7 @@ func (a *TON) ResolveJettonAsset(ctx context.Context, network string, masterAddr
 	return JettonAsset{}, ErrJettonAssetNotFound
 }
 
-func jettonAssetFromRow(asset paymentsqlc.PaymentAsset) JettonAsset {
+func jettonAssetFromRow(asset repository.AdminAssetModel) JettonAsset {
 	return JettonAsset{
 		Code:            asset.Code,
 		Decimals:        uint16(asset.Scale),

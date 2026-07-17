@@ -30,20 +30,21 @@ type Codec interface {
 }
 
 type Options struct {
-	MaxConnections           int
-	QueryTimeout             time.Duration
-	CacheL1Delay             time.Duration
-	CacheL2Delay             time.Duration
-	Cache                    Storage
-	CacheEnabled             bool
-	CacheSize                int
-	CacheTTLCheck            time.Duration
-	Codec                    Codec
-	Mutex                    Mutex
-	OnCacheInvalidationError func(error)
-	Integration              integration.Options
-	Runtime                  taskruntime.Options
-	PartnerProviders         map[string]user.PartnerProvider
+	MaxConnections            int
+	QueryTimeout              time.Duration
+	CacheL1Delay              time.Duration
+	CacheL2Delay              time.Duration
+	Cache                     Storage
+	CacheEnabled              bool
+	CacheSize                 int
+	CacheTTLCheck             time.Duration
+	Codec                     Codec
+	Mutex                     Mutex
+	OnCacheInvalidationError  func(error)
+	Integration               integration.Options
+	Runtime                   taskruntime.Options
+	PartnerProviders          map[string]user.PartnerProvider
+	PartnerStartLeaseDuration time.Duration
 }
 
 type DatabaseParams struct {

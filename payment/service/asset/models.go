@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/elum-utils/services/payment/repository"
-	paymentsqlc "github.com/elum-utils/services/payment/sqlc"
 )
 
 const USDTAssetCode = repository.USDTAssetCode
@@ -12,13 +11,16 @@ const USDTAssetCode = repository.USDTAssetCode
 type UpsertParams struct {
 	Code            string
 	Title           string
-	AssetKind       paymentsqlc.PaymentAssetAssetKind
+	AssetKind       string
 	Scale           uint16
 	Chain           *string
 	Network         *string
 	ContractAddress *string
 	IsActive        bool
 }
+
+type Model = repository.AdminAssetModel
+type ProviderModel = repository.AdminProviderAssetModel
 
 type ProviderUpsertParams struct {
 	ProviderCode    string

@@ -71,6 +71,7 @@ type Assignment struct {
 	CodeID         *uint64
 	Code           string
 	CodeMode       string
+	Rewards        []Reward
 	Status         model.AssignmentStatus
 	IssuedAt       time.Time
 	CompletedAt    *time.Time

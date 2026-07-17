@@ -7,10 +7,15 @@ import (
 	"fmt"
 	"time"
 
+	services "github.com/elum-utils/services"
 	calendarsqlc "github.com/elum-utils/services/calendar/sqlc"
 	callbackutil "github.com/elum-utils/services/internal/utils/callback"
 	sqlwrap "github.com/elum-utils/services/internal/utils/sql"
 )
+
+func requireWorkspaceID(workspaceID string) error {
+	return services.ValidateWorkspaceID(workspaceID)
+}
 
 type Repository struct {
 	db                       *sqlwrap.Client

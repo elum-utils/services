@@ -1,14 +1,11 @@
 package admin
 
-import (
-	"context"
-	"strings"
-)
+import "context"
 
 func (a *Admin) GetStats(ctx context.Context, workspaceID string) (StatsModel, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	value, err := a.repository.GetStats(mergedCtx, strings.TrimSpace(workspaceID))
+	value, err := a.repository.GetStats(mergedCtx, workspaceID)
 	if err != nil {
 		return StatsModel{}, err
 	}

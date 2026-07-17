@@ -193,7 +193,7 @@ func mapRecordCatalogTask(row tasksqlc.ListRecordCatalogRow) Task {
 		ResetEvery: uint32(
 			row.ResetEvery,
 		), Position: row.Position, Payload: nullRawMessage(row.Payload), Target: nullRawMessage(row.Target),
-		StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt),
+		StartAt: ptrTime(row.StartAt), EndAt: ptrTime(row.EndAt), Rewards: decodeRewards([]byte(row.Rewards)),
 	}
 }
 

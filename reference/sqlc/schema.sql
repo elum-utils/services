@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS reference_item (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     key VARCHAR(128) NOT NULL,
     item_type VARCHAR(32) NOT NULL,
     payload JSONB NOT NULL,
@@ -15,7 +15,7 @@ CREATE INDEX IF NOT EXISTS reference_item_list_idx
     ON reference_item (workspace_id, deleted_at, is_active, item_type, key);
 
 CREATE TABLE IF NOT EXISTS reference_localization (
-    workspace_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(36) NOT NULL,
     item_key VARCHAR(128) NOT NULL,
     locale VARCHAR(16) NOT NULL,
     title VARCHAR(255) NOT NULL,

@@ -3,6 +3,8 @@ package admin
 import (
 	"context"
 	"math"
+
+	services "github.com/elum-utils/services"
 )
 
 type SaveStepParams struct {
@@ -15,7 +17,10 @@ type SaveStepParams struct {
 func (a *Admin) CreateStep(ctx context.Context, params SaveStepParams) (uint64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if params.WorkspaceID == "" || params.CalendarID == "" || params.Position == 0 {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+	if params.CalendarID == "" || params.Position == 0 {
 		return 0, ErrStepCreateInvalid
 	}
 	if params.Position > math.MaxInt32 {
@@ -28,7 +33,10 @@ func (a *Admin) CreateStep(ctx context.Context, params SaveStepParams) (uint64, 
 func (a *Admin) UpdateStep(ctx context.Context, params SaveStepParams) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if params.WorkspaceID == "" || params.CalendarID == "" || params.ID == 0 || params.Position == 0 {
+	if err := services.ValidateWorkspaceID(params.WorkspaceID); err != nil {
+		return 0, err
+	}
+	if params.CalendarID == "" || params.ID == 0 || params.Position == 0 {
 		return 0, ErrStepUpdateInvalid
 	}
 	if params.ID > math.MaxInt64 || params.Position > math.MaxInt32 {
@@ -43,7 +51,10 @@ func (a *Admin) UpdateStep(ctx context.Context, params SaveStepParams) (int64, e
 func (a *Admin) DeleteStep(ctx context.Context, workspaceID, calendarID string, id uint64) (int64, error) {
 	mergedCtx, cancel := a.withContext(ctx)
 	defer cancel()
-	if workspaceID == "" || calendarID == "" || id == 0 {
+	if err := services.ValidateWorkspaceID(workspaceID); err != nil {
+		return 0, err
+	}
+	if calendarID == "" || id == 0 {
 		return 0, ErrStepUpdateInvalid
 	}
 	if id > math.MaxInt64 {

@@ -109,7 +109,19 @@
 
 ### 6. Refund
 
-`payment_refund` хранит возвраты и chargeback. Возврат не удаляет платеж и не затирает выдачу, а создает отдельную запись и переводит order/fulfillment в обратимый статус.
+`payment_refund` хранит инициированные возвраты и внешний `idempotency_key`.
+Один ключ всегда соответствует одной операции и одному provider idempotency
+key; неоднозначная ошибка провайдера сохраняет `pending` для безопасного retry.
+Возврат не удаляет платеж и не
+затирает выдачу, а создаёт отдельную запись и переводит order/fulfillment в
+обратимый статус. Provider chargeback хранится как raw provider event и
+`chargebacked`-состояние order/attempt; для внешнего владельца награды создаётся
+идемпотентный callback `payment.order.chargebacked` со снимком выдачи.
+
+`payment_subscription_renewal` хранит каждый подтверждённый оплаченный период
+подписки. Renewal использует snapshot исходного fulfillment, продлевает одну
+provider subscription и создаёт `payment.subscription.renewed`; исходный order
+и fulfillment при этом не создаются повторно.
 
 ## Статусы
 

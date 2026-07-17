@@ -7,8 +7,6 @@ import (
 	tasksqlc "github.com/elum-utils/services/tasks/sqlc"
 )
 
-const maxComplexRefreshDepth = 8
-
 type complexRefreshResult struct {
 	changed  bool
 	progress *Progress
@@ -24,8 +22,7 @@ func (r *Repository) refreshComplexParentsForChangedTasks(
 		return nil
 	}
 	queue := uniqueUint64(changedTaskIDs)
-	seen := make(map[uint64]struct{}, len(queue))
-	for depth := 0; depth < maxComplexRefreshDepth && len(queue) > 0; depth++ {
+	for len(queue) > 0 {
 		parentIDs, err := repositoryValue(ctx, r, func(ctx context.Context) ([]uint64, error) {
 			ids, err := r.q.ListComplexParentIDsForConditionTasks(
 				ctx,
@@ -44,10 +41,6 @@ func (r *Repository) refreshComplexParentsForChangedTasks(
 		}
 		next := make([]uint64, 0, len(parentIDs))
 		for _, parentID := range parentIDs {
-			if _, ok := seen[parentID]; ok {
-				continue
-			}
-			seen[parentID] = struct{}{}
 			refreshed, err := r.refreshComplexParent(ctx, identity, parentID, now)
 			if err != nil {
 				return err
@@ -132,6 +125,13 @@ func (r *Repository) refreshComplexParent(
 	if existingProgress && !changed {
 		return complexRefreshResult{progress: &progress}, nil
 	}
+	if !existingProgress {
+		progress.Rewards, err = r.rewards(ctx, parent.WorkspaceID, parent.ID)
+		if err != nil {
+			return complexRefreshResult{}, err
+		}
+	}
+
 	if err := r.saveOrCreateComplexProgress(ctx, identity, parent, progress); err != nil {
 		return complexRefreshResult{}, err
 	}
@@ -175,6 +175,9 @@ func (r *Repository) saveOrCreateComplexProgress(
 		Progress:       int64(progress.Progress),
 		Status:         progress.Status,
 		ReadyAt:        nullTime(readyAt),
+		RewardsSnapshot: rawMessageParam(
+			rewardsSnapshot(progress.Rewards),
+		),
 	})
 	return err
 }
