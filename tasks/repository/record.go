@@ -595,19 +595,6 @@ func (r *Repository) claimProgress(
 	operationID string,
 	now time.Time,
 ) error {
-	reserved, err := r.q.ReserveRewardOperation(ctx, tasksqlc.ReserveRewardOperationParams{
-		WorkspaceID: identity.WorkspaceID,
-		OperationID: operationID,
-		SourceKind:  "task_progress",
-		SourceID:    int64(progress.ID),
-	})
-	if err != nil {
-		return err
-	}
-	if reserved != 1 {
-		return ErrOperationIDConflict
-	}
-
 	rewards := progress.Rewards
 	if rewards == nil {
 		rewards = task.Rewards
@@ -619,13 +606,26 @@ func (r *Repository) claimProgress(
 			return err
 		}
 	}
+	claimed, err := r.q.ClaimProgressWithOperation(ctx, tasksqlc.ClaimProgressWithOperationParams{
+		WorkspaceID:     identity.WorkspaceID,
+		OperationID:     operationID,
+		ProgressID:      int64(progress.ID),
+		Progress:        int64(progress.Progress),
+		ReadyAt:         nullTime(progress.ReadyAt),
+		ClaimedAt:       now,
+		RewardsSnapshot: rewardsSnapshot(rewards),
+	})
+	if err != nil {
+		return err
+	}
+	if claimed != 1 {
+		return ErrOperationIDConflict
+	}
+
 	progress.Status = StatusClaimed
 	progress.ClaimedAt = &now
 	progress.OperationID = &operationID
 	progress.Rewards = rewards
-	if err := r.saveProgress(ctx, *progress); err != nil {
-		return err
-	}
 	if err := r.advanceSequenceState(ctx, identity, task); err != nil {
 		return err
 	}

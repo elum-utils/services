@@ -683,9 +683,14 @@ func (q *Queries) AdminListOfferIDs(ctx context.Context, workspaceID string) ([]
 }
 
 const adminUpsertLocalization = `-- name: AdminUpsertLocalization :exec
+WITH workspace_lock AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+)
 INSERT INTO cpa_localization (
     workspace_id, cpa_id, locale, title, description
-) VALUES ($1, $2, $3, $4, $5)
+)
+SELECT $1, $2, $3, $4, $5
+FROM workspace_lock
 ON CONFLICT (workspace_id, cpa_id, locale) DO UPDATE SET
     title = EXCLUDED.title,
     description = EXCLUDED.description,
@@ -764,9 +769,14 @@ func (q *Queries) AdminUpsertOffer(ctx context.Context, arg AdminUpsertOfferPara
 }
 
 const adminUpsertReward = `-- name: AdminUpsertReward :exec
+WITH workspace_lock AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
+)
 INSERT INTO cpa_reward (
     workspace_id, cpa_id, reward_key, reward_type, quantity, scale, duration_unit
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+)
+SELECT $1, $2, $3, $4, $5, $6, $7
+FROM workspace_lock
 ON CONFLICT (workspace_id, cpa_id, reward_key) DO UPDATE SET
     reward_type = EXCLUDED.reward_type,
     quantity = EXCLUDED.quantity,

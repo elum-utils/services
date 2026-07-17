@@ -1786,6 +1786,62 @@ func (q *Queries) ClaimPartnerIssue(ctx context.Context, arg ClaimPartnerIssuePa
 	return result.RowsAffected()
 }
 
+const claimProgressWithOperation = `-- name: ClaimProgressWithOperation :execrows
+WITH reserved_operation AS (
+    INSERT INTO task_reward_operation (
+        workspace_id,
+        operation_id,
+        source_kind,
+        source_id
+    ) VALUES (
+        $7::varchar,
+        $4::varchar,
+        'task_progress',
+        $6::bigint
+    )
+    ON CONFLICT (workspace_id, operation_id) DO NOTHING
+    RETURNING 1
+)
+UPDATE task_progress
+SET progress = $1::bigint,
+    status = 'claimed',
+    ready_at = $2::timestamptz,
+    claimed_at = $3::timestamptz,
+    operation_id = $4::varchar,
+    rewards_snapshot = $5::jsonb,
+    updated_at = now()
+WHERE id = $6::bigint
+  AND workspace_id = $7::varchar
+  AND status IN ('open', 'ready')
+  AND EXISTS (SELECT 1 FROM reserved_operation)
+`
+
+type ClaimProgressWithOperationParams struct {
+	Progress        int64           `json:"progress"`
+	ReadyAt         sql.NullTime    `json:"ready_at"`
+	ClaimedAt       time.Time       `json:"claimed_at"`
+	OperationID     string          `json:"operation_id"`
+	RewardsSnapshot json.RawMessage `json:"rewards_snapshot"`
+	ProgressID      int64           `json:"progress_id"`
+	WorkspaceID     string          `json:"workspace_id"`
+}
+
+func (q *Queries) ClaimProgressWithOperation(ctx context.Context, arg ClaimProgressWithOperationParams) (int64, error) {
+	result, err := q.exec(ctx, q.claimProgressWithOperationStmt, claimProgressWithOperation,
+		arg.Progress,
+		arg.ReadyAt,
+		arg.ClaimedAt,
+		arg.OperationID,
+		arg.RewardsSnapshot,
+		arg.ProgressID,
+		arg.WorkspaceID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const completePartnerIssue = `-- name: CompletePartnerIssue :execrows
 UPDATE task_partner_issue
 SET status = 'completed', completed_at = $1, updated_at = now()

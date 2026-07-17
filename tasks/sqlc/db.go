@@ -135,6 +135,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.claimPartnerIssueStmt, err = db.PrepareContext(ctx, claimPartnerIssue); err != nil {
 		return nil, fmt.Errorf("error preparing query ClaimPartnerIssue: %w", err)
 	}
+	if q.claimProgressWithOperationStmt, err = db.PrepareContext(ctx, claimProgressWithOperation); err != nil {
+		return nil, fmt.Errorf("error preparing query ClaimProgressWithOperation: %w", err)
+	}
 	if q.completePartnerIssueStmt, err = db.PrepareContext(ctx, completePartnerIssue); err != nil {
 		return nil, fmt.Errorf("error preparing query CompletePartnerIssue: %w", err)
 	}
@@ -490,6 +493,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing claimPartnerIssueStmt: %w", cerr)
 		}
 	}
+	if q.claimProgressWithOperationStmt != nil {
+		if cerr := q.claimProgressWithOperationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing claimProgressWithOperationStmt: %w", cerr)
+		}
+	}
 	if q.completePartnerIssueStmt != nil {
 		if cerr := q.completePartnerIssueStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing completePartnerIssueStmt: %w", cerr)
@@ -841,6 +849,7 @@ type Queries struct {
 	adminUpsertSequenceStmt                   *sql.Stmt
 	adminUpsertTaskLocalizationStmt           *sql.Stmt
 	claimPartnerIssueStmt                     *sql.Stmt
+	claimProgressWithOperationStmt            *sql.Stmt
 	completePartnerIssueStmt                  *sql.Stmt
 	countProgressEventsByExternalKeyStmt      *sql.Stmt
 	createPartnerIssueStmt                    *sql.Stmt
@@ -939,6 +948,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		adminUpsertSequenceStmt:                   q.adminUpsertSequenceStmt,
 		adminUpsertTaskLocalizationStmt:           q.adminUpsertTaskLocalizationStmt,
 		claimPartnerIssueStmt:                     q.claimPartnerIssueStmt,
+		claimProgressWithOperationStmt:            q.claimProgressWithOperationStmt,
 		completePartnerIssueStmt:                  q.completePartnerIssueStmt,
 		countProgressEventsByExternalKeyStmt:      q.countProgressEventsByExternalKeyStmt,
 		createPartnerIssueStmt:                    q.createPartnerIssueStmt,

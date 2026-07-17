@@ -66,14 +66,13 @@ func (r *Repository) Resolve(ctx context.Context, workspaceID string, keys []str
 	if err != nil {
 		return nil, err
 	}
-	byKey := make(map[string]Item, len(items))
-	for _, item := range items {
-		byKey[item.Key] = item
-	}
-	ordered := make([]Item, 0, len(items))
+	ordered := make([]Item, 0, len(keys))
 	for _, key := range keys {
-		if item, found := byKey[key]; found {
-			ordered = append(ordered, item)
+		index := sort.Search(len(items), func(index int) bool {
+			return items[index].Key >= key
+		})
+		if index < len(items) && items[index].Key == key {
+			ordered = append(ordered, items[index])
 		}
 	}
 	return ordered, nil

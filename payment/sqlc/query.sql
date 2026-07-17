@@ -1792,7 +1792,7 @@ JOIN payment_provider_asset ppa
 WHERE po.id = sqlc.arg(order_id)
   AND po.status IN ('draft', 'pending_payment')
   AND (po.expires_at IS NULL OR po.expires_at > now())
-RETURNING id, asset_code, amount_minor;
+RETURNING id, workspace_id, asset_code, amount_minor;
 
 -- name: CreatePaymentAttemptFromOwnedOrder :one
 INSERT INTO payment_attempt (
@@ -1848,7 +1848,7 @@ WHERE po.id = sqlc.arg(order_id)
   )
   AND po.status IN ('draft', 'pending_payment')
   AND (po.expires_at IS NULL OR po.expires_at > now())
-RETURNING id, asset_code, amount_minor;
+RETURNING id, workspace_id, asset_code, amount_minor;
 
 -- name: LockPaymentProviderIdempotency :exec
 SELECT pg_advisory_xact_lock(
@@ -2426,14 +2426,11 @@ SELECT
     pa.asset_code,
     pa.amount_minor
 FROM payment_attempt pa
-JOIN payment_order po
-  ON po.id = pa.order_id
 JOIN payment_fulfillment pf
-  ON pf.order_id = po.id
+  ON pf.attempt_id = pa.id
 WHERE pa.id = $1
   AND pa.workspace_id = $2
-  AND po.workspace_id = $2
-  AND po.status = 'fulfilled'
+  AND pf.status IN ('succeeded', 'revoked')
 LIMIT 1;
 
 -- name: SumReservedRefundAmountForAttempt :one

@@ -316,9 +316,12 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 		if err := validateOrderItemSnapshots(product.Items, quantity); err != nil {
 			return err
 		}
-		reservationNow, err := txRepo.databaseNow(ctx)
-		if err != nil {
-			return err
+		var reservationNow time.Time
+		if limitRuleNeedsWindow(product.Limit.Global) || limitRuleNeedsWindow(product.Limit.User) {
+			reservationNow, err = txRepo.databaseNow(ctx)
+			if err != nil {
+				return err
+			}
 		}
 		globalLimit := newOrderLimitSnapshot(product.Limit.Global, reservationNow)
 		userLimit := newOrderLimitSnapshot(product.Limit.User, reservationNow)
@@ -421,6 +424,10 @@ func (r *PaymentRepository) CreateOrder(ctx context.Context, params OrderCreateP
 		return nil
 	})
 	return order, err
+}
+
+func limitRuleNeedsWindow(rule ProductLimitRule) bool {
+	return rule.Limit > 0 && rule.Interval != "UNLIMITED"
 }
 
 func newOrderLimitSnapshot(rule ProductLimitRule, now time.Time) orderLimitSnapshot {
@@ -1139,6 +1146,7 @@ func (r *PaymentRepository) createAttempt(
 		}
 
 		var createdID int64
+		var createdWorkspaceID string
 		var createdAssetCode string
 		var createdAmountMinor int64
 		var err error
@@ -1146,6 +1154,7 @@ func (r *PaymentRepository) createAttempt(
 			created, createErr := txRepo.q.CreatePaymentAttemptFromOrder(ctx, createParams)
 			err = createErr
 			createdID = created.ID
+			createdWorkspaceID = created.WorkspaceID
 			createdAssetCode = created.AssetCode
 			createdAmountMinor = created.AmountMinor
 		} else {
@@ -1172,6 +1181,7 @@ func (r *PaymentRepository) createAttempt(
 			)
 			err = createErr
 			createdID = created.ID
+			createdWorkspaceID = created.WorkspaceID
 			createdAssetCode = created.AssetCode
 			createdAmountMinor = created.AmountMinor
 		}
@@ -1211,7 +1221,7 @@ func (r *PaymentRepository) createAttempt(
 
 		attempt = Attempt{
 			ID:                 uint64(createdID),
-			WorkspaceID:        "",
+			WorkspaceID:        createdWorkspaceID,
 			OrderID:            params.OrderID,
 			ProviderCode:       params.ProviderCode,
 			AssetCode:          createdAssetCode,
@@ -1224,11 +1234,6 @@ func (r *PaymentRepository) createAttempt(
 			ReturnURL:          params.ReturnURL,
 			ExpiresAt:          params.ExpiresAt,
 		}
-		order, orderErr := txRepo.q.GetPaymentOrder(ctx, int64(params.OrderID))
-		if orderErr != nil {
-			return orderErr
-		}
-		attempt.WorkspaceID = order.WorkspaceID
 		return nil
 	})
 
@@ -1340,10 +1345,7 @@ func (r *PaymentRepository) CompleteAttempt(
 		return CompleteAttemptResult{}, ErrAttemptFieldsInvalid
 	}
 
-	fulfilled, err := r.q.GetFulfilledAttemptResult(ctx, sqlc.GetFulfilledAttemptResultParams{
-		ID:          int64(params.AttemptID),
-		WorkspaceID: workspaceID,
-	})
+	fulfilled, err := r.getFulfilledAttemptResult(ctx, workspaceID, params.AttemptID)
 	if err == nil {
 		if fulfilled.ProviderCode != params.ProviderCode ||
 			fulfilled.AssetCode != params.AssetCode ||
@@ -1460,6 +1462,24 @@ func (r *PaymentRepository) CompleteAttempt(
 		return nil
 	})
 	return result, err
+}
+
+func (r *PaymentRepository) getFulfilledAttemptResult(
+	ctx context.Context,
+	workspaceID string,
+	attemptID uint64,
+) (sqlc.GetFulfilledAttemptResultRow, error) {
+	return sqlwrap.Query(ctx, r.db, sqlwrap.Params{
+		Key:          paymentCacheKey("fulfilled_attempt", workspaceID, attemptID),
+		Timeout:      r.timeout,
+		CacheL1Delay: r.cacheL1,
+		CacheL2Delay: r.cacheL2,
+	}, func(ctx context.Context) (sqlc.GetFulfilledAttemptResultRow, error) {
+		return r.q.GetFulfilledAttemptResult(ctx, sqlc.GetFulfilledAttemptResultParams{
+			ID:          int64(attemptID),
+			WorkspaceID: workspaceID,
+		})
+	})
 }
 
 func (r *PaymentRepository) enqueuePaymentFulfilledCallback(

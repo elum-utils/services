@@ -180,8 +180,26 @@ func (r *Repository) Issue(ctx context.Context, scope UserScope) (IssueResult, e
 	if err := requireUserScope(scope, true); err != nil {
 		return IssueResult{}, err
 	}
+
+	existing, err := r.q.GetAssignment(ctx, assignmentParams(scope))
+	if err == nil {
+		assignment, err := mapAssignment(existing)
+		if err != nil {
+			return IssueResult{}, err
+		}
+
+		return IssueResult{
+			Assignment:    assignment,
+			Rewards:       assignment.Rewards,
+			AlreadyIssued: true,
+		}, nil
+	}
+	if !isNoRows(err) {
+		return IssueResult{}, err
+	}
+
 	var result IssueResult
-	err := r.WithTx(ctx, func(txRepo *Repository) error {
+	err = r.WithTx(ctx, func(txRepo *Repository) error {
 		if err := txRepo.lockWorkspaceCatalogRead(ctx, scope.WorkspaceID); err != nil {
 			return err
 		}

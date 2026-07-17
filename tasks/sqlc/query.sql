@@ -466,6 +466,35 @@ SET progress = $1, status = $2, ready_at = $3, claimed_at = $4,
     operation_id = $5, rewards_snapshot = $6
 WHERE id = $7;
 
+-- name: ClaimProgressWithOperation :execrows
+WITH reserved_operation AS (
+    INSERT INTO task_reward_operation (
+        workspace_id,
+        operation_id,
+        source_kind,
+        source_id
+    ) VALUES (
+        sqlc.arg(workspace_id)::varchar,
+        sqlc.arg(operation_id)::varchar,
+        'task_progress',
+        sqlc.arg(progress_id)::bigint
+    )
+    ON CONFLICT (workspace_id, operation_id) DO NOTHING
+    RETURNING 1
+)
+UPDATE task_progress
+SET progress = sqlc.arg(progress)::bigint,
+    status = 'claimed',
+    ready_at = sqlc.narg(ready_at)::timestamptz,
+    claimed_at = sqlc.arg(claimed_at)::timestamptz,
+    operation_id = sqlc.arg(operation_id)::varchar,
+    rewards_snapshot = sqlc.arg(rewards_snapshot)::jsonb,
+    updated_at = now()
+WHERE id = sqlc.arg(progress_id)::bigint
+  AND workspace_id = sqlc.arg(workspace_id)::varchar
+  AND status IN ('open', 'ready')
+  AND EXISTS (SELECT 1 FROM reserved_operation);
+
 -- name: InsertProgressEvent :execrows
 INSERT INTO task_progress_event (
     workspace_id, app_id, platform_id, platform_user_id,

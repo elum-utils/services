@@ -4085,7 +4085,7 @@ JOIN payment_provider_asset ppa
 WHERE po.id = $12
   AND po.status IN ('draft', 'pending_payment')
   AND (po.expires_at IS NULL OR po.expires_at > now())
-RETURNING id, asset_code, amount_minor
+RETURNING id, workspace_id, asset_code, amount_minor
 `
 
 type CreatePaymentAttemptFromOrderParams struct {
@@ -4105,6 +4105,7 @@ type CreatePaymentAttemptFromOrderParams struct {
 
 type CreatePaymentAttemptFromOrderRow struct {
 	ID          int64  `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
 	AssetCode   string `json:"asset_code"`
 	AmountMinor int64  `json:"amount_minor"`
 }
@@ -4125,7 +4126,12 @@ func (q *Queries) CreatePaymentAttemptFromOrder(ctx context.Context, arg CreateP
 		arg.OrderID,
 	)
 	var i CreatePaymentAttemptFromOrderRow
-	err := row.Scan(&i.ID, &i.AssetCode, &i.AmountMinor)
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AssetCode,
+		&i.AmountMinor,
+	)
 	return i, err
 }
 
@@ -4183,7 +4189,7 @@ WHERE po.id = $12
   )
   AND po.status IN ('draft', 'pending_payment')
   AND (po.expires_at IS NULL OR po.expires_at > now())
-RETURNING id, asset_code, amount_minor
+RETURNING id, workspace_id, asset_code, amount_minor
 `
 
 type CreatePaymentAttemptFromOwnedOrderParams struct {
@@ -4207,6 +4213,7 @@ type CreatePaymentAttemptFromOwnedOrderParams struct {
 
 type CreatePaymentAttemptFromOwnedOrderRow struct {
 	ID          int64  `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
 	AssetCode   string `json:"asset_code"`
 	AmountMinor int64  `json:"amount_minor"`
 }
@@ -4231,7 +4238,12 @@ func (q *Queries) CreatePaymentAttemptFromOwnedOrder(ctx context.Context, arg Cr
 		arg.PlatformUserID,
 	)
 	var i CreatePaymentAttemptFromOwnedOrderRow
-	err := row.Scan(&i.ID, &i.AssetCode, &i.AmountMinor)
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AssetCode,
+		&i.AmountMinor,
+	)
 	return i, err
 }
 
@@ -5688,14 +5700,11 @@ SELECT
     pa.asset_code,
     pa.amount_minor
 FROM payment_attempt pa
-JOIN payment_order po
-  ON po.id = pa.order_id
 JOIN payment_fulfillment pf
-  ON pf.order_id = po.id
+  ON pf.attempt_id = pa.id
 WHERE pa.id = $1
   AND pa.workspace_id = $2
-  AND po.workspace_id = $2
-  AND po.status = 'fulfilled'
+  AND pf.status IN ('succeeded', 'revoked')
 LIMIT 1
 `
 
